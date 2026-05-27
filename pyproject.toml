@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "total-recall"
+version = "0.7.2"
+description = "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 8 supported CLI clients; surfaces operator identity / decisions / bans / corrections via MCP."
+readme = "README.md"
+license = "LicenseRef-FSL-1.1-ALv2"
+license-files = ["LICENSE.md"]
+requires-python = ">=3.10"
+authors = [
+    {name = "88plug", email = "claude@cryptoandcoffee.com"},
+]
+keywords = [
+    "claude-code",
+    "memory",
+    "recall",
+    "session-logs",
+    "cross-session",
+    "mcp",
+    "hooks",
+    "data-mining",
+    "ai-coding",
+    "operator-profile",
+    "opencode",
+    "gemini-cli",
+    "codex",
+    "cursor",
+    "continue",
+    "cline",
+    "aider",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Environment :: Console",
+    "Environment :: Plugins",
+]
+dependencies = [
+    "mcp>=1.0",
+    "click>=8",
+]
+
+[project.optional-dependencies]
+vec = [
+    "fastembed>=0.4",
+    "sqlite-vec>=0.1.6",
+]
+dev = [
+    "pytest>=8",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "build>=1.0",
+    "twine>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/88plug/total-recall"
+Documentation = "https://github.com/88plug/total-recall#readme"
+Repository = "https://github.com/88plug/total-recall"
+Issues = "https://github.com/88plug/total-recall/issues"
+Changelog = "https://github.com/88plug/total-recall/blob/main/CHANGELOG.md"
+
+[project.scripts]
+total-recall = "total_recall.__main__:cli"
+total-recall-mcp = "total_recall.mcp_entry:main"
+
+[tool.setuptools.packages.find]
+include = ["total_recall*", "lib*", "extractors*", "index*", "vec*", "mcp_server*", "detector*"]
+exclude = ["tests*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true

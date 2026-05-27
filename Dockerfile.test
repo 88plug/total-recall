@@ -1,0 +1,18 @@
+FROM python:3.11-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        jq bash sqlite3 curl \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /plugin
+COPY pyproject.toml /plugin/
+COPY README.md /plugin/
+# Pre-warm deps before mounting the source (better layer caching)
+RUN pip install --no-cache-dir \
+        mcp click pytest pytest-cov ruff mypy \
+        fastembed sqlite-vec \
+    || echo "WARN: optional deps may not all install in slim image; tests should skip cleanly"
+# Source comes in via -v mount at run time so each agent sees current code.
+ENV PYTHONUNBUFFERED=1
+ENV CLAUDE_PLUGIN_DATA=/plugin/data
+ENV TOTAL_RECALL_DB_DIR=/plugin/data/total-recall
+WORKDIR /plugin
+CMD ["bash"]

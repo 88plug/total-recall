@@ -1,0 +1,86 @@
+name: ci
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python }}"
+
+      - name: install
+        run: pip install -e ".[dev]"
+
+      - name: lint
+        run: ruff check .
+
+      - name: unit tests
+        run: pytest -q --ignore=tests/integration
+
+      - name: smoke-install plugin
+        run: |
+          test -f .claude-plugin/plugin.json
+          test -f .mcp.json
+          test -f hooks/hooks.json
+          jq . .claude-plugin/plugin.json > /dev/null
+          jq . .mcp.json > /dev/null
+          jq . hooks/hooks.json > /dev/null
+
+      - name: command frontmatter parses
+        run: |
+          python - <<'PY'
+          import pathlib, sys
+          try:
+              import yaml
+          except ImportError:
+              import subprocess
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "pyyaml"])
+              import yaml
+          bad = []
+          for md in pathlib.Path("commands").glob("*.md"):
+              text = md.read_text()
+              if not text.startswith("---"):
+                  continue
+              _, fm, _ = text.split("---", 2)
+              try:
+                  yaml.safe_load(fm)
+              except Exception as e:
+                  bad.append(f"{md}: {e}")
+          if bad:
+              print("\n".join(bad))
+              sys.exit(1)
+          print("all command frontmatter parses")
+          PY
+
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install build tools
+        run: pip install build twine
+
+      - name: build sdist and wheel
+        run: python -m build
+
+      - name: twine check
+        run: twine check dist/*

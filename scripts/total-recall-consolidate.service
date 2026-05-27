@@ -1,0 +1,13 @@
+[Unit]
+Description=total-recall weekly consolidation
+Documentation=https://github.com/anthropics/total-recall
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env total-recall consolidate --json
+Nice=10
+IOSchedulingClass=idle
+# Don't fail if the data layer isn't built yet; the CLI already degrades
+# gracefully and the systemd journal captures the JSON report either way.
+SuccessExitStatus=0 1

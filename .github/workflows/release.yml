@@ -1,0 +1,129 @@
+name: release
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write  # for PyPI trusted publishing
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify tag matches pyproject version
+        run: |
+          tag_version=${GITHUB_REF#refs/tags/v}
+          pyproject_version=$(python - <<'PY'
+          import tomllib
+          d = tomllib.loads(open('pyproject.toml', 'rb').read().decode())
+          print(d['project']['version'])
+          PY
+          )
+          if [ "$tag_version" != "$pyproject_version" ]; then
+            echo "ERROR: tag $tag_version != pyproject $pyproject_version"
+            exit 1
+          fi
+
+      - name: validate plugin manifests
+        run: |
+          test -f .claude-plugin/plugin.json
+          jq . .claude-plugin/plugin.json > /dev/null
+          if [ -f .mcp.json ]; then jq . .mcp.json > /dev/null; fi
+          if [ -f hooks/hooks.json ]; then jq . hooks/hooks.json > /dev/null; fi
+
+      - name: install build tools
+        run: pip install build twine
+
+      - name: build sdist and wheel
+        run: python -m build
+
+      - name: twine check
+        run: twine check dist/*
+
+      - name: pack plugin zip
+        id: pack
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          case "$VERSION" in
+            *[!A-Za-z0-9._-]*)
+              echo "invalid tag name: $VERSION" >&2
+              exit 1
+              ;;
+          esac
+          NAME="total-recall-${VERSION}"
+          zip -r "dist/${NAME}.zip" . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "dist/*" \
+            -x "tests/*" \
+            -x "**/__pycache__/*" \
+            -x "**/*.pyc" \
+            -x ".ruff_cache/*" \
+            -x ".pytest_cache/*" \
+            -x ".mypy_cache/*"
+          echo "zip=dist/${NAME}.zip" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  pypi-publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/total-recall
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Uses trusted publishing — no PYPI_TOKEN needed.
+        # Configure the trusted publisher once at:
+        # https://pypi.org/manage/account/publishing/
+        # Manual fallback: set PYPI_API_TOKEN repo secret and add:
+        #   with:
+        #     password: ${{ secrets.PYPI_API_TOKEN }}
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Extract CHANGELOG section
+        id: changelog
+        run: |
+          version=${GITHUB_REF#refs/tags/v}
+          awk "/^## \\[$version\\]/,/^## \\[/" CHANGELOG.md | head -n -1 > release-notes.md
+          cat release-notes.md
+
+      - name: create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body_path: release-notes.md
+          draft: false
+          prerelease: false

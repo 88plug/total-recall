@@ -1,0 +1,9 @@
+include LICENSE.md
+include CHANGELOG.md
+include README.md
+recursive-include docs *
+recursive-include skills *
+recursive-include commands *
+recursive-include hooks *
+include .claude-plugin/plugin.json
+include .mcp.json

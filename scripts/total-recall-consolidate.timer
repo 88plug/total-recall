@@ -1,0 +1,14 @@
+[Unit]
+Description=Weekly total-recall consolidation
+Documentation=https://github.com/anthropics/total-recall
+
+[Timer]
+# Sunday 03:00 local time, with up to 10 minutes of jitter so a fleet of
+# machines doesn't all hit the same wall-clock instant.
+OnCalendar=Sun *-*-* 03:00:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=total-recall-consolidate.service
+
+[Install]
+WantedBy=timers.target

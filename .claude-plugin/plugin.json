@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "total-recall",
+  "displayName": "Total Recall",
+  "version": "0.7.2",
+  "description": "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 8 supported CLI clients. Surfaces operator identity / decisions / bans / corrections / goals / voice via 23 MCP tools, 5 hooks (SessionStart signpost + UserPromptSubmit retrieval + Stop/PostCompact re-index + PreCompact seed), 15 slash commands, and 2 skills. The operator becomes the source of truth; the model stops re-asking what they already told it.",
+  "author": {
+    "name": "88plug",
+    "email": "claude@cryptoandcoffee.com"
+  },
+  "license": "FSL-1.1-ALv2",
+  "homepage": "https://github.com/88plug/total-recall",
+  "repository": "https://github.com/88plug/total-recall.git",
+  "keywords": [
+    "claude-code",
+    "memory",
+    "recall",
+    "session-logs",
+    "cross-session",
+    "cross-cli",
+    "mcp",
+    "hooks",
+    "data-mining",
+    "operator-profile",
+    "opencode",
+    "codex",
+    "gemini-cli",
+    "cursor",
+    "continue",
+    "cline",
+    "aider"
+  ]
+}

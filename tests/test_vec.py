@@ -1,0 +1,380 @@
+"""Tests for the optional vector layer.
+
+These tests are written to pass cleanly even when neither `fastembed` nor
+`sqlite_vec` is installed — the integration test that exercises both is
+auto-skipped in that case.
+"""
+
+from __future__ import annotations
+
+import importlib
+import sqlite3
+import sys
+from pathlib import Path
+
+import pytest
+
+# Make the repo root importable without requiring an install.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+
+# ----------------------------------------------------------------------------
+# Optional-dep detection
+# ----------------------------------------------------------------------------
+
+
+def _have(modname: str) -> bool:
+    try:
+        importlib.import_module(modname)
+        return True
+    except Exception:
+        return False
+
+
+HAS_FASTEMBED = _have("fastembed")
+HAS_SQLITE_VEC = _have("sqlite_vec")
+
+
+# ----------------------------------------------------------------------------
+# RRF unit tests
+# ----------------------------------------------------------------------------
+
+
+class TestReciprocalRankFusion:
+    def test_empty_input(self) -> None:
+        from vec.rrf import reciprocal_rank_fusion
+
+        assert reciprocal_rank_fusion([]) == []
+
+    def test_single_ranking_is_passthrough_order(self) -> None:
+        from vec.rrf import reciprocal_rank_fusion
+
+        items = ["a", "b", "c"]
+        fused = reciprocal_rank_fusion([items], k=60)
+        assert [item for item, _ in fused] == items
+        # Scores strictly decreasing.
+        scores = [s for _, s in fused]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_two_rankings_share_top_item(self) -> None:
+        from vec.rrf import reciprocal_rank_fusion
+
+        # 'X' is rank 0 in both lists → must win.
+        r1 = ["X", "A", "B"]
+        r2 = ["X", "C", "D"]
+        fused = reciprocal_rank_fusion([r1, r2], k=60)
+        assert fused[0][0] == "X"
+
+        # Hand-verify the score for X: 1/(60+1) + 1/(60+1) = 2/61
+        expected_top = 2.0 / 61
+        assert fused[0][1] == pytest.approx(expected_top, rel=1e-12)
+
+    def test_dedup_across_rankings(self) -> None:
+        from vec.rrf import reciprocal_rank_fusion
+
+        r1 = ["A", "B", "C"]
+        r2 = ["C", "B", "A"]
+        fused = reciprocal_rank_fusion([r1, r2], k=60)
+        items = [item for item, _ in fused]
+        # All three items appear exactly once.
+        assert sorted(items) == ["A", "B", "C"]
+        # A: 1/61 + 1/63, B: 2/62, C: 1/63 + 1/61 → A and C tie above B.
+        # Verify the score relationships numerically.
+        score = dict(fused)
+        assert score["A"] == pytest.approx(score["C"], rel=1e-12)
+        assert score["A"] > score["B"]
+
+    def test_k_increases_dampening(self) -> None:
+        from vec.rrf import reciprocal_rank_fusion
+
+        # Use an *asymmetric* setup so the gap between A and B is non-zero.
+        # A is rank 0 in both lists, B is rank 1 in both lists.
+        r1 = ["A", "B"]
+        r2 = ["A", "B"]
+        fused_small_k = dict(reciprocal_rank_fusion([r1, r2], k=1))
+        fused_large_k = dict(reciprocal_rank_fusion([r1, r2], k=1000))
+
+        # With small k the rank-0 contribution (1/(k+1)) dominates rank-1
+        # (1/(k+2)) by a much larger relative margin than with large k.
+        gap_small = fused_small_k["A"] - fused_small_k["B"]
+        gap_large = fused_large_k["A"] - fused_large_k["B"]
+        assert gap_small > 0
+        assert gap_large > 0
+        assert gap_large < gap_small
+
+    def test_custom_key_function(self) -> None:
+        from vec.rrf import reciprocal_rank_fusion
+
+        r1 = [{"id": 1, "src": "fts"}, {"id": 2, "src": "fts"}]
+        r2 = [{"id": 2, "src": "vec"}, {"id": 1, "src": "vec"}]
+        fused = reciprocal_rank_fusion([r1, r2], k=60, key=lambda d: d["id"])
+        ids = [item["id"] for item, _ in fused]
+        assert sorted(ids) == [1, 2]
+        # id=2 appears at rank 1 then rank 0 → ties go to id=2 (slightly higher
+        # because rank-0 contribution is bigger than rank-1's).
+        # Verify the ordering by computed score:
+        score_by_id = {item["id"]: score for item, score in fused}
+        assert score_by_id[2] >= score_by_id[1]
+
+    def test_empty_inner_ranking_is_skipped(self) -> None:
+        from vec.rrf import reciprocal_rank_fusion
+
+        fused = reciprocal_rank_fusion([["a", "b"], []], k=60)
+        assert [item for item, _ in fused] == ["a", "b"]
+
+    def test_returns_canonical_best_item(self) -> None:
+        """When two rankings disagree on the *payload* for the same key, the
+        canonical (best-ranked) one is what gets returned."""
+        from vec.rrf import reciprocal_rank_fusion
+
+        r1 = [{"id": 1, "label": "from-fts"}]
+        r2 = [{"id": 1, "label": "from-vec"}]
+        # Same rank in both; the first ranking's item wins by tie-break.
+        fused = reciprocal_rank_fusion([r1, r2], k=60, key=lambda d: d["id"])
+        assert fused[0][0]["label"] == "from-fts"
+
+
+# ----------------------------------------------------------------------------
+# chunk_for_embedding tests
+# ----------------------------------------------------------------------------
+
+
+class TestChunkForEmbedding:
+    def test_empty_input(self) -> None:
+        from vec.embed import chunk_for_embedding
+
+        assert chunk_for_embedding("") == []
+        assert chunk_for_embedding("   \n  ") == []
+
+    def test_short_text_returns_one_chunk(self) -> None:
+        from vec.embed import chunk_for_embedding
+
+        chunks = chunk_for_embedding("Hello world. How are you?")
+        assert len(chunks) == 1
+        assert "Hello world" in chunks[0]
+        assert "How are you" in chunks[0]
+
+    def test_paragraph_boundary_split(self) -> None:
+        from vec.embed import chunk_for_embedding
+
+        # Force a split by using a tiny budget.
+        text = "First paragraph here.\n\nSecond paragraph here.\n\nThird here."
+        chunks = chunk_for_embedding(text, max_tokens=5, overlap=0)
+        assert len(chunks) >= 2
+
+    def test_hard_split_when_sentence_exceeds_budget(self) -> None:
+        from vec.embed import chunk_for_embedding
+
+        long_sentence = "a" * 1000  # no sentence terminator at all
+        chunks = chunk_for_embedding(long_sentence, max_tokens=50, overlap=0)
+        # 50 tokens * 4 chars/token = 200 chars/chunk → at least 5 chunks.
+        assert len(chunks) >= 5
+        # Reassembling must give back the original.
+        assert "".join(chunks) == long_sentence
+
+    def test_overlap_carries_tail_into_next_chunk(self) -> None:
+        from vec.embed import chunk_for_embedding
+
+        sentences = [f"Sentence number {i} ends here." for i in range(20)]
+        text = " ".join(sentences)
+        no_overlap = chunk_for_embedding(text, max_tokens=20, overlap=0)
+        with_overlap = chunk_for_embedding(text, max_tokens=20, overlap=10)
+
+        assert len(no_overlap) >= 2
+        assert len(with_overlap) >= 2
+        # Overlap should make total emitted characters >= no-overlap.
+        assert sum(len(c) for c in with_overlap) >= sum(len(c) for c in no_overlap)
+
+    def test_no_duplicate_consecutive_chunks(self) -> None:
+        from vec.embed import chunk_for_embedding
+
+        chunks = chunk_for_embedding("Short.", max_tokens=400, overlap=50)
+        # No back-to-back identical chunks even though the overlap window
+        # would otherwise replicate this short text.
+        for a, b in zip(chunks, chunks[1:]):
+            assert a != b
+
+
+# ----------------------------------------------------------------------------
+# Lazy-import test: importing vec / vec.embed must NOT pull fastembed.
+# ----------------------------------------------------------------------------
+
+
+class TestLazyImports:
+    def test_import_vec_does_not_load_fastembed(self) -> None:
+        # Drop any cached fastembed first.
+        for mod in list(sys.modules):
+            if mod == "fastembed" or mod.startswith("fastembed."):
+                del sys.modules[mod]
+        # Importing the package + the submodule must not pull fastembed.
+        importlib.import_module("vec")
+        importlib.import_module("vec.embed")
+        assert "fastembed" not in sys.modules
+
+    def test_constructing_embedder_does_not_load_fastembed(self) -> None:
+        for mod in list(sys.modules):
+            if mod == "fastembed" or mod.startswith("fastembed."):
+                del sys.modules[mod]
+        from vec.embed import Embedder
+
+        # __init__ must be lazy. .embed() is what actually triggers load.
+        _ = Embedder(model="BAAI/bge-small-en-v1.5")
+        assert "fastembed" not in sys.modules
+
+    def test_known_dim_available_without_loading_model(self) -> None:
+        from vec.embed import Embedder
+
+        emb = Embedder(model="BAAI/bge-small-en-v1.5")
+        # 384-dim is known a priori, so .dim() should not need to embed.
+        assert emb.dim() == 384
+
+    def test_embedder_without_fastembed_raises_clearly(self) -> None:
+        if HAS_FASTEMBED:
+            pytest.skip("fastembed is installed — error path not reachable here.")
+        from vec.embed import Embedder
+
+        emb = Embedder()
+        with pytest.raises(RuntimeError) as excinfo:
+            emb.embed(["hi"])
+        msg = str(excinfo.value).lower()
+        assert "fastembed" in msg
+        assert "vec" in msg  # mentions the extra
+
+
+# ----------------------------------------------------------------------------
+# Hybrid search degraded-mode test (no embedder / no sqlite_vec)
+# ----------------------------------------------------------------------------
+
+
+class TestHybridSearchFallback:
+    def test_no_embedder_falls_back_gracefully(self, tmp_path: Path) -> None:
+        from vec.rrf import hybrid_search
+
+        # An empty DB shouldn't crash hybrid_search.
+        conn = sqlite3.connect(":memory:")
+        result = hybrid_search(conn, "anything", embedder=None, limit=5)
+        assert result == []
+
+    def test_empty_query_returns_empty(self) -> None:
+        from vec.rrf import hybrid_search
+
+        conn = sqlite3.connect(":memory:")
+        assert hybrid_search(conn, "", embedder=None) == []
+        assert hybrid_search(conn, "   ", embedder=None) == []
+
+    def test_fts5_only_path_works_with_inline_fts(self) -> None:
+        """When WT-4's index.query isn't importable, the inline FTS fallback
+        should still serve results."""
+        from vec.rrf import hybrid_search
+
+        conn = sqlite3.connect(":memory:")
+        # Build the minimum schema the inline fallback expects.
+        conn.executescript(
+            """
+            CREATE TABLE extractions(
+                id INTEGER PRIMARY KEY,
+                content TEXT, cwd TEXT, ts TEXT, kind TEXT
+            );
+            CREATE VIRTUAL TABLE extractions_fts USING fts5(content);
+            """
+        )
+        conn.execute(
+            "INSERT INTO extractions(id, content, cwd, ts, kind) "
+            "VALUES (1, 'rate limiting nginx config', '/proj/a', '2025-01-01', 'decision')"
+        )
+        conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (1, 'rate limiting nginx config')")
+        conn.execute(
+            "INSERT INTO extractions(id, content, cwd, ts, kind) "
+            "VALUES (2, 'unrelated banana smoothie', '/proj/b', '2025-01-02', 'note')"
+        )
+        conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (2, 'unrelated banana smoothie')")
+        conn.commit()
+
+        hits = hybrid_search(conn, "nginx", embedder=None, limit=5)
+        assert len(hits) == 1
+        # Inline fallback returns dicts.
+        assert hits[0]["extraction_id"] == 1
+
+
+# ----------------------------------------------------------------------------
+# CLI smoke test
+# ----------------------------------------------------------------------------
+
+
+class TestCLI:
+    def test_parser_builds(self) -> None:
+        from vec.cli import build_parser
+
+        p = build_parser()
+        # All three subcommands exist.
+        args = p.parse_args(["backfill", "--batch", "32"])
+        assert args.cmd == "backfill"
+        assert args.batch == 32
+
+        args = p.parse_args(["search", "hello world", "--limit", "3"])
+        assert args.cmd == "search"
+        assert args.query == "hello world"
+        assert args.limit == 3
+
+        args = p.parse_args(["rebuild"])
+        assert args.cmd == "rebuild"
+
+
+# ----------------------------------------------------------------------------
+# Integration test (only runs if BOTH optional deps are installed)
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not (HAS_FASTEMBED and HAS_SQLITE_VEC),
+    reason="fastembed and sqlite_vec must both be installed",
+)
+class TestIntegration:
+    def test_backfill_then_hybrid_search_ranks_correctly(self, tmp_path: Path) -> None:
+        from vec.embed import Embedder
+        from vec.rrf import hybrid_search
+        from vec.store import apply_vec_schema, backfill_all, vec_search
+
+        db_path = tmp_path / "index.db"
+        conn = sqlite3.connect(str(db_path))
+        # Minimum WT-4-shaped schema.
+        conn.executescript(
+            """
+            CREATE TABLE extractions(
+                id INTEGER PRIMARY KEY,
+                content TEXT, cwd TEXT, ts TEXT, kind TEXT
+            );
+            CREATE VIRTUAL TABLE extractions_fts USING fts5(content);
+            """
+        )
+        rows = [
+            (1, "Configure nginx rate limiting with limit_req_zone directive.", "/proj/a", "2025-01-01", "decision"),
+            (2, "Best chocolate cake recipe with cocoa and butter.", "/proj/b", "2025-01-02", "note"),
+            (3, "Use PostgreSQL row-level security for tenant isolation.", "/proj/c", "2025-01-03", "decision"),
+        ]
+        for r in rows:
+            conn.execute("INSERT INTO extractions(id, content, cwd, ts, kind) VALUES (?,?,?,?,?)", r)
+            conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (?,?)", (r[0], r[1]))
+        conn.commit()
+
+        embedder = Embedder()
+        apply_vec_schema(conn, dim=embedder.dim())
+        report = backfill_all(conn, embedder=embedder, batch_size=4)
+        assert report.extractions_embedded == 3
+        assert report.chunks_written >= 3
+
+        # Pure vec query: "web server traffic shaping" should bring back the
+        # nginx row (id=1) even though the literal words don't overlap.
+        hits = vec_search(conn, "web server traffic shaping", embedder, limit=3)
+        assert hits, "vec_search returned no hits"
+        assert hits[0].extraction_id == 1
+
+        # Hybrid query should also rank id=1 first.
+        fused = hybrid_search(conn, "rate limiting", embedder=embedder, limit=3)
+        assert fused, "hybrid_search returned no hits"
+        # Item shape may be VecHit or dict — both expose extraction_id.
+        top = fused[0]
+        top_id = getattr(top, "extraction_id", None) or top["extraction_id"]
+        assert top_id == 1
