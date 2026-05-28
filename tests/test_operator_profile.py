@@ -16,6 +16,7 @@ import pytest
 
 from extractors.operator_profile import (
     OperatorProfile,
+    extract_incremental,
     extract_operator_profile,
     persist_profile,
 )
@@ -305,3 +306,166 @@ def test_persist_idempotent_update(seeded_corpus, fresh_conn):
         "SELECT COUNT(*) FROM operator_profile"
     ).fetchone()[0]
     assert n_before == n_after
+
+
+# ---------------------------------------------------------------------------
+# Regression guards: timezone garbage + handle corroboration + path parity
+# ---------------------------------------------------------------------------
+
+# Valid IANA region prefixes — any extracted timezone must start with one of
+# these (or be empty).  Anything else (e.g. "Jc/Jmin/Jmax") is garbage.
+_VALID_IANA_PREFIXES = (
+    "Africa/", "America/", "Antarctica/", "Arctic/", "Asia/", "Atlantic/",
+    "Australia/", "Europe/", "Indian/", "Pacific/", "US/", "Etc/", "GMT/",
+    "UTC",  # bare UTC is canonical
+)
+
+
+def _is_valid_iana_or_empty(tz: str) -> bool:
+    if not tz:
+        return True
+    return any(tz.startswith(p) for p in _VALID_IANA_PREFIXES)
+
+
+def test_timezone_rejects_non_iana_garbage(tmp_path):
+    """Extractor must never emit garbage tokens (e.g. code paths) as timezones.
+
+    Part 1: corpus that mentions only code-like ``Word/Word`` fragments and
+    NO real timezone → timezone must be empty (garbage rejected).
+    Part 2: corpus that mentions ``America/New_York`` → timezone must match
+    that valid IANA zone.
+    """
+    # --- Part 1: garbage-only corpus ---
+    garbage_records = [
+        _user("The result is in Jc/Jmin/Jmax format."),
+        _assistant("Yes, the ratio Pull/Request is tracked in src/utils."),
+        _user("See also lib/core and tests/unit for more."),
+        _assistant("Graph traversal: O(V/E) complexity. File at config/main."),
+        _user("Use Read/Write helpers from io/stream when needed."),
+    ]
+    garbage_path = tmp_path / "garbage.jsonl"
+    _write_jsonl(garbage_path, garbage_records)
+
+    garbage_profile = extract_operator_profile([garbage_path])
+
+    assert _is_valid_iana_or_empty(garbage_profile.timezone), (
+        f"Garbage timezone accepted: {garbage_profile.timezone!r} — "
+        "non-IANA code-path tokens must be rejected"
+    )
+    # Specifically: none of the garbage tokens should survive.
+    for garbage_token in ("Jc/Jmin/Jmax", "Pull/Request", "src/utils", "lib/core",
+                          "io/stream", "config/main", "tests/unit"):
+        assert garbage_profile.timezone != garbage_token, (
+            f"Garbage token {garbage_token!r} was accepted as timezone"
+        )
+
+    # --- Part 2: valid IANA zone in corpus ---
+    valid_records = [
+        _user("I'm based in America/New_York so please schedule meetings accordingly."),
+        _assistant("Got it — your timezone is America/New_York."),
+    ]
+    valid_path = tmp_path / "valid_tz.jsonl"
+    _write_jsonl(valid_path, valid_records)
+
+    valid_profile = extract_operator_profile([valid_path])
+
+    assert valid_profile.timezone == "America/New_York", (
+        f"Expected America/New_York, got {valid_profile.timezone!r}"
+    )
+    assert _is_valid_iana_or_empty(valid_profile.timezone)
+
+
+def test_handle_reinforced_by_email(tmp_path):
+    """Operator email local-part/domain must boost the corroborated handle
+    above a higher-frequency but unrelated token.
+
+    Scenario: ``github.com/opnsense`` appears 5×; operator email is
+    ``dana@novabox.io`` and ``github.com/dana`` appears 3×.  The resolved
+    handle must be ``dana`` (corroborated by email local-part), NOT
+    ``opnsense`` (unrelated noise).
+    """
+    records = [
+        # High-frequency unrelated token (5 occurrences)
+        _assistant("See the opnsense docs at github.com/opnsense for details."),
+        _assistant("Filed against github.com/opnsense — upstream issue."),
+        _assistant("Patch merged into github.com/opnsense/core."),
+        _assistant("Reference: github.com/opnsense/plugins is the source."),
+        _assistant("The github.com/opnsense repo is the canonical upstream."),
+        # Operator's own handle corroborated by their email (3 occurrences)
+        _user("My email is dana@novabox.io — use that for commits."),
+        _assistant("Got it — git config user.email dana@novabox.io."),
+        _user("Also my github.com/dana profile and github.com/dana/novactl repo."),
+        _assistant("Your primary contact is dana@novabox.io. github.com/dana is read-only."),
+    ]
+    path = tmp_path / "handle_email.jsonl"
+    _write_jsonl(path, records)
+
+    profile = extract_operator_profile([path])
+
+    # The handle must be corroborated by the email local-part ("dana")
+    # or the domain label ("novabox"), NOT the unrelated high-freq token.
+    email_local = "dana"
+    email_domain_label = "novabox"
+    resolved = (profile.handle or profile.github_user or "").lower()
+
+    assert resolved, "handle/github_user both empty after extraction"
+    assert resolved in (email_local, email_domain_label), (
+        f"Expected handle corroborated by email ('{email_local}' or '{email_domain_label}'), "
+        f"got {resolved!r} — unrelated high-freq token must not win"
+    )
+
+
+def test_full_and_incremental_agree(tmp_path):
+    """``extract_operator_profile`` and ``extract_incremental`` must produce
+    the same ``timezone`` and ``handle`` for the same synthetic corpus.
+
+    This is the regression guard for the path-divergence bug where the
+    incremental path emitted garbage timezones and wrong handles while
+    the file-based path was correct.
+    """
+    records = [
+        _user("My github is github.com/stellarops — use that for all PRs."),
+        _assistant("Noted: github.com/stellarops is your handle."),
+        _user("I'm in Europe/Berlin timezone — please keep that in mind."),
+        _assistant(
+            "Understood. git config user.name 'Felix Ortega' and "
+            "git config user.email felix@stellarops.dev should match."
+        ),
+        _user("Confirmed: felix@stellarops.dev is the primary email."),
+        _assistant("github.com/stellarops confirmed as the primary handle."),
+    ]
+
+    # Write to JSONL for the file-based path.
+    jsonl_path = tmp_path / "parity.jsonl"
+    _write_jsonl(jsonl_path, records)
+
+    # Path A: file-based extractor.
+    file_profile = extract_operator_profile([jsonl_path])
+
+    # Path B: incremental (in-memory records), starting from an empty base.
+    incr_profile = extract_incremental(records)
+
+    # Both paths must agree on timezone validity.
+    assert _is_valid_iana_or_empty(file_profile.timezone), (
+        f"file path produced garbage timezone: {file_profile.timezone!r}"
+    )
+    assert _is_valid_iana_or_empty(incr_profile.timezone), (
+        f"incremental path produced garbage timezone: {incr_profile.timezone!r}"
+    )
+
+    # Both must resolve the same timezone (if either resolved one).
+    if file_profile.timezone or incr_profile.timezone:
+        assert file_profile.timezone == incr_profile.timezone, (
+            f"Path divergence on timezone: "
+            f"file={file_profile.timezone!r}, incremental={incr_profile.timezone!r}"
+        )
+
+    # Both must resolve the same handle family (allow minor case differences).
+    file_handle = (file_profile.handle or file_profile.github_user or "").lower()
+    incr_handle = (incr_profile.handle or incr_profile.github_user or "").lower()
+
+    if file_handle or incr_handle:
+        assert file_handle == incr_handle, (
+            f"Path divergence on handle: "
+            f"file={file_handle!r}, incremental={incr_handle!r}"
+        )

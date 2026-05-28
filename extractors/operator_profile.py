@@ -254,10 +254,21 @@ _ORG_FIELD_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Timezone: any IANA zone or common abbreviation.
-_TIMEZONE_IANA_RE = re.compile(
-    r"\b([A-Z][a-z]+/[A-Z][a-z_]+(?:/[A-Z][a-z_]+)?)\b"
+# Timezone: anchored IANA zone — must start with a known geographic region
+# prefix so that code paths like ``Jc/Jmin/Jmax`` and prose like
+# ``Pull/Request`` are never mistaken for timezone values.
+_IANA_REGION_PREFIX = (
+    r"(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia"
+    r"|Europe|Indian|Pacific|US|Etc|GMT)"
 )
+_TIMEZONE_IANA_RE = re.compile(
+    r"\b(" + _IANA_REGION_PREFIX + r"/[A-Za-z_]+(?:/[A-Za-z_]+)?)\b"
+)
+# Fast set of valid IANA region prefixes for the post-extraction filter.
+_IANA_VALID_REGIONS: frozenset[str] = frozenset({
+    "Africa", "America", "Antarctica", "Arctic", "Asia", "Atlantic",
+    "Australia", "Europe", "Indian", "Pacific", "US", "Etc", "GMT",
+})
 # Common abbreviation → IANA mapping (generic, not Eastern-biased).
 _TZ_ABBREV: dict[str, str] = {
     "EST": "America/New_York",
@@ -612,12 +623,11 @@ def _extract_from_text_stream(
             _cite("gitlab_host", source, line_no)
 
         # Timezone: IANA zones + abbreviations, all mapped generically.
+        # The regex already anchors to known region prefixes; no extra
+        # check needed here — just count what matched.
         for tz in _TIMEZONE_IANA_RE.findall(text):
-            # Accept only if it looks like a valid IANA zone (Region/City).
-            parts = tz.split("/")
-            if len(parts) >= 2 and all(p[0].isupper() for p in parts):
-                timezones[tz] += 1
-                _cite("timezone", source, line_no)
+            timezones[tz] += 1
+            _cite("timezone", source, line_no)
         for abbr in _TZ_ABBREV_RE.findall(text):
             iana = _TZ_ABBREV.get(abbr, abbr)
             timezones[iana] += 1
@@ -684,8 +694,36 @@ def _extract_from_text_stream(
             profile.name = local_main.capitalize()
             profile.confidence["name"] = 0.45
     if handles:
-        profile.handle, n = handles.most_common(1)[0]
-        profile.confidence["handle"] = min(1.0, 0.5 + 0.1 * n)
+        # Reinforce candidates that corroborate the operator's own identity:
+        # a handle matching the email local-part, the email SLD (second-level
+        # domain label), or a name token gets a strong frequency boost so it
+        # beats unrelated high-frequency tokens (e.g. a frequently-mentioned
+        # project like ``opnsense`` can't outrank ``andrew`` when the email is
+        # ``andrew@example.com``).
+        identity_tokens: set[str] = set()
+        if profile.email_primary and "@" in profile.email_primary:
+            local, domain = profile.email_primary.split("@", 1)
+            # Local part and each dot/dash component (e.g. "andrew.m" → "andrew").
+            identity_tokens.add(local.lower())
+            for tok in re.split(r"[._+\-]", local):
+                if tok:
+                    identity_tokens.add(tok.lower())
+            # Second-level domain label (e.g. "88plug.com" → "88plug").
+            domain_parts = domain.rstrip(".").split(".")
+            if len(domain_parts) >= 2:
+                identity_tokens.add(domain_parts[-2].lower())
+        if profile.name:
+            for tok in profile.name.lower().split():
+                if len(tok) >= 2:
+                    identity_tokens.add(tok)
+        # Apply a 10x frequency boost for identity-corroborating candidates.
+        IDENTITY_BOOST = 10
+        boosted: Counter[str] = Counter()
+        for cand, cnt in handles.items():
+            boosted[cand] = cnt * IDENTITY_BOOST if cand in identity_tokens else cnt
+        best_handle, raw_count = boosted.most_common(1)[0]
+        profile.handle = best_handle
+        profile.confidence["handle"] = min(1.0, 0.5 + 0.1 * handles[best_handle])
     if orgs:
         profile.org, n = orgs.most_common(1)[0]
         profile.confidence["org"] = min(1.0, 0.5 + 0.1 * n)
@@ -700,8 +738,22 @@ def _extract_from_text_stream(
         profile.gitlab_host, n = gitlab_hosts.most_common(1)[0]
         profile.confidence["gitlab_host"] = min(1.0, 0.5 + 0.1 * n)
     if timezones:
-        profile.timezone, n = timezones.most_common(1)[0]
-        profile.confidence["timezone"] = min(1.0, 0.5 + 0.1 * n)
+        # Only accept a timezone that matches the anchored IANA pattern or is
+        # a valid abbreviation-mapped zone. The counter may have accumulated
+        # values from abbreviation mapping (e.g. "UTC", "America/New_York")
+        # that are safe; anything else that slipped through is rejected so we
+        # leave timezone empty rather than returning garbage.
+        _tz_iana_check = re.compile(
+            r"^(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia"
+            r"|Europe|Indian|Pacific|US|Etc|GMT)/[A-Za-z_]+(?:/[A-Za-z_]+)?$"
+        )
+        _valid_abbrev_zones = set(_TZ_ABBREV.values())
+        for tz_cand, n in timezones.most_common():
+            if tz_cand in _valid_abbrev_zones or _tz_iana_check.match(tz_cand):
+                profile.timezone = tz_cand
+                profile.confidence["timezone"] = min(1.0, 0.5 + 0.1 * n)
+                break
+        # If nothing valid found, timezone stays empty (better than garbage).
     if billing:
         profile.billing_rail, n = billing.most_common(1)[0]
         profile.confidence["billing_rail"] = min(1.0, 0.5 + 0.1 * n)

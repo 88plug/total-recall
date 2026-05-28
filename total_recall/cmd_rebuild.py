@@ -88,6 +88,42 @@ def rebuild_cmd(
         projects_root=Path(projects_root).expanduser() if projects_root else None,
         dry_run=False,
     )
+    # Consolidation pass (cold path). The per-file incremental merge that
+    # runs during ingest can freeze an early, non-global winner for
+    # frequency-ranked identity scalars (e.g. a handle decided by one file
+    # resists later correction via append-supersede). On a full rebuild we
+    # have the whole corpus, so re-derive the operator profile in ONE pass
+    # over every session and persist the globally-correct values. This is
+    # the cold-path reconcile the incremental hot path defers to.
+    try:
+        from extractors.operator_profile import (  # type: ignore[import-not-found]
+            extract_operator_profile,
+            persist_profile,
+        )
+
+        root = (
+            Path(projects_root).expanduser()
+            if projects_root
+            else Path("~/.claude/projects").expanduser()
+        )
+        all_jsonl = sorted(root.glob("*/*.jsonl"))
+        if all_jsonl:
+            full_profile = extract_operator_profile(all_jsonl)
+            conn = connect(db_path)
+            try:
+                persist_profile(conn, full_profile)
+                conn.commit()
+            finally:
+                conn.close()
+            if verbose:
+                click.echo(
+                    f"[rebuild] consolidated operator profile from "
+                    f"{len(all_jsonl)} sessions (single full pass)",
+                    err=True,
+                )
+    except Exception as exc:  # noqa: BLE001 — best-effort, never fail the rebuild
+        click.echo(f"total-recall: profile consolidation skipped ({exc})", err=True)
+
     elapsed = time.monotonic() - started
 
     files = _result_get(result, "files", 0)

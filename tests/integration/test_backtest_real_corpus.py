@@ -21,6 +21,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import sqlite3
+import tempfile
 import time
 from pathlib import Path
 
@@ -243,4 +246,164 @@ def test_scope_detect_resolves_real_cwds():
             misses.append(cwd)
     assert not misses, (
         f"{len(misses)}/{len(mapping)} cwds failed scope-substring check"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Layer 5 — incremental path parity (regression guard for path divergence)
+# --------------------------------------------------------------------------- #
+
+# Valid IANA region prefixes that any extracted timezone must start with.
+# Bare "UTC" is also canonical. Anything else (e.g. "Jc/Jmin/Jmax") is
+# garbage produced by a broken regex that was not anchored to IANA regions.
+_IANA_PREFIX_RE = re.compile(
+    r"^(Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia"
+    r"|Europe|Indian|Pacific|US|Etc|GMT)/|^UTC$"
+)
+
+
+def _valid_iana_or_empty(tz: str) -> bool:
+    """Return True when ``tz`` is empty or matches a valid IANA shape."""
+    if not tz:
+        return True
+    return bool(_IANA_PREFIX_RE.match(tz))
+
+
+def _stream_records(paths: list[Path]):
+    """Yield raw JSONL dicts from a list of JSONL paths."""
+    for p in paths:
+        with p.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+
+@pytest.fixture(scope="module")
+def incremental_profile():
+    """Run ``extract_incremental`` over the full real corpus and return the
+    merged profile.  This exercises the Stop-hook code path that differs from
+    ``extract_operator_profile`` and was the source of the timezone-garbage
+    and wrong-handle bugs.
+    """
+    from extractors.operator_profile import extract_incremental, OperatorProfile
+
+    paths = _all_jsonl_paths()
+    t0 = time.time()
+    merged = extract_incremental(list(_stream_records(paths)), existing_profile=None)
+    elapsed = time.time() - t0
+    print(
+        f"\n[incremental_profile] extraction time: {elapsed:.1f}s, "
+        f"timezone={merged.timezone!r}, handle={merged.handle!r}"
+    )
+    return merged
+
+
+def test_incremental_timezone_not_garbage(incremental_profile):
+    """The incremental path must never emit a garbage timezone like
+    ``Jc/Jmin/Jmax``.  The resolved timezone must either be empty or
+    match a valid IANA ``Region/City`` shape.
+    """
+    tz = incremental_profile.timezone
+    assert _valid_iana_or_empty(tz), (
+        f"Incremental path produced invalid timezone: {tz!r}. "
+        "Only valid IANA zones (e.g. America/New_York, Europe/Berlin) "
+        "or empty string are acceptable."
+    )
+
+
+def test_incremental_handle_in_ground_truth(incremental_profile):
+    """The incremental path must resolve a handle in the ground-truth
+    ``github_handles`` candidate set — it must not surface an unrelated
+    high-frequency token from the corpus.
+    """
+    candidates = {h.lower() for h in GT["profile"]["github_handles"]}
+    resolved = (
+        incremental_profile.handle or incremental_profile.github_user or ""
+    ).lower()
+
+    assert resolved, (
+        "incremental path: handle/github_user both empty — "
+        "operator identity not recovered via incremental extractor"
+    )
+    assert resolved in candidates, (
+        f"incremental path: handle/github_user not in "
+        f"top-{len(candidates)} ground-truth candidates "
+        f"(got handle count: 1, expected one of {len(candidates)} candidates)"
+    )
+
+
+@pytest.fixture(scope="module")
+def incremental_persisted_profile(tmp_path_factory):
+    """Ingest the real corpus into a temp SQLite DB via the full
+    ingest+persist pipeline (the path the Stop hook actually takes),
+    then read back the ``operator_profile`` table rows.
+
+    This validates the end-to-end persisted path, not just the in-memory
+    extraction result.
+    """
+    from extractors.operator_profile import (
+        extract_incremental,
+        persist_incremental_profile,
+        OperatorProfile,
+    )
+    from index.operator import OPERATOR_PROFILE_SCHEMA, ensure_schema, get_profile
+
+    tmp = tmp_path_factory.mktemp("incr_db")
+    db_path = tmp / "test_incr.db"
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.executescript(OPERATOR_PROFILE_SCHEMA)
+    ensure_schema(conn)
+
+    paths = _all_jsonl_paths()
+    t0 = time.time()
+    merged = extract_incremental(
+        list(_stream_records(paths)), existing_profile=None
+    )
+    persist_incremental_profile(conn, merged)
+    conn.commit()
+    elapsed = time.time() - t0
+
+    stored = get_profile(conn)
+    conn.close()
+    print(
+        f"\n[incremental_persisted] ingest+persist time: {elapsed:.1f}s, "
+        f"timezone={stored.get('timezone', '')!r}, "
+        f"handle={stored.get('handle', '')!r}"
+    )
+    return stored
+
+
+def test_persisted_incremental_timezone_not_garbage(incremental_persisted_profile):
+    """The persisted incremental profile must not contain a garbage timezone."""
+    tz = incremental_persisted_profile.get("timezone", "")
+    assert _valid_iana_or_empty(tz), (
+        f"Persisted incremental profile has invalid timezone: {tz!r}. "
+        "Check that extract_incremental uses the same anchored IANA regex "
+        "as extract_operator_profile."
+    )
+
+
+def test_persisted_incremental_handle_in_ground_truth(incremental_persisted_profile):
+    """The persisted incremental profile must carry a ground-truth handle."""
+    candidates = {h.lower() for h in GT["profile"]["github_handles"]}
+    resolved = (
+        incremental_persisted_profile.get("handle", "")
+        or incremental_persisted_profile.get("github_user", "")
+        or ""
+    ).lower()
+
+    assert resolved, (
+        "persisted incremental profile: handle/github_user both missing or empty"
+    )
+    assert resolved in candidates, (
+        f"persisted incremental profile: handle not in "
+        f"top-{len(candidates)} ground-truth candidates "
+        f"(got handle count: 1, expected one of {len(candidates)} candidates)"
     )
