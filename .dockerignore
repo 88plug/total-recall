@@ -1,0 +1,16 @@
+# Exclude runtime / local-state dirs from docker build context.
+data/
+tests/local/
+.venv/
+venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+dist/
+build/
+*.egg-info/
+.DS_Store
