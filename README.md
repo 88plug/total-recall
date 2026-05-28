@@ -6,7 +6,7 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/88plug/total-recall)
 
-Version: `v0.7.2` — see [git tag](https://github.com/88plug/total-recall/releases/tag/v0.7.2).
+Version: `v0.9.0` — see [git tag](https://github.com/88plug/total-recall/releases/tag/v0.9.0).
 
 Cross-session memory for Claude Code. Mines your own `~/.claude/projects/<cwd-slug>/*.jsonl` session
 transcripts and surfaces the useful parts — prior decisions, your corrections, approaches that
@@ -61,7 +61,7 @@ session files (a typical corpus drops from ~22s single-threaded to ~9s at `--job
 
 ## What it captures
 
-14 extractors total. 11 run inline over each session's record stream; 3 are operator-level
+17 extractors total. 11 run inline over each session's record stream; 6 are operator-level
 aggregators that run out-of-band against the full corpus.
 
 **Per-session (in pipeline):**
@@ -89,7 +89,21 @@ aggregators that run out-of-band against the full corpus.
 - `voice_profile` — how the user writes: tone, phrasing patterns, verbal tics. Lets a model
   match register without being told.
 - `ontology` — vocabulary the user uses for their own systems (project names, machine names,
-  service names) so a fresh session resolves jargon without asking.
+  service names) so a fresh session resolves jargon without asking. Also populates a
+  cross-project co-mention graph (`projects.related_projects`) so the operator's portfolio
+  shape — hub vs spoke projects, dependency direction — is queryable.
+- `workflow` — *how* the operator works: fan-out vocabulary + per-session frequency, autonomy
+  score, mid-flight interrupt rate, planning idiom, peak hours / preferred work window,
+  session shape, subagent adoption rate. EMA-blended on the hot path.
+- `implicit_preferences` — preferences the operator expresses by *behavior* rather than as
+  a ban/decision: tool-call ratios (e.g. Edit vs Write), shell-command dominance within a
+  group (e.g. uv vs pip), absence patterns, format preferences, recurring vocabulary. Promoted
+  only when the signal crosses a multi-axis threshold (≥5 sessions, ≥3 projects, ≥7-day span,
+  ≥80% non-contradiction).
+- `satisfaction` — bidirectional praise/frustration profile paired with the preceding
+  assistant-turn shape (`tool_call_brief`, `long_prose`, `confirmation_request`, etc.).
+  Captures that for some operators satisfaction is silent — calibration on the absence of
+  frustration, not just the presence of praise.
 
 ## Metrics
 
@@ -134,7 +148,7 @@ When (a) the upstream MCP SDK lands OTel middleware, or (b) total-recall gets mu
   cap is a few hundred tokens; truthfully nothing if there's nothing useful to say. The
   recommended one-call pattern for the model is `get_operator_context`, which bundles the
   operator profile, voice profile, active goal, recent corrections, and standing decisions.
-- **MCP server (23 tools)** — live queries the model can call mid-conversation.
+- **MCP server (26 tools)** — live queries the model can call mid-conversation.
 
   *v0.1 core (6):* `recall`, `prior_sessions_for_cwd`, `find_failed_attempts`,
   `find_user_preferences`, `get_session_digest`, `search_messages`.
@@ -144,6 +158,9 @@ When (a) the upstream MCP SDK lands OTel middleware, or (b) total-recall gets mu
   `list_standing_decisions`, `get_decision_for_topic`, `check_banned`, `list_failed_attempts`,
   `get_active_goal`, `list_goals`, `get_past_truth_assertions`, `assess_escalation_risk`,
   `get_project_graph`, `get_machine_inventory`, `define_term`, `recall_targeted`.
+
+  *v0.8 workflow / satisfaction / implicit-prefs (3):* `get_workflow_profile`,
+  `get_satisfaction_profile`, `list_implicit_preferences`.
 
 - **`/recall` skill** — orientation-style guidance the model loads on demand for deeper dives.
 - **`/speak-like-operator` skill** — operator voice-matching skill, runtime-populated from `get_voice_profile()`.

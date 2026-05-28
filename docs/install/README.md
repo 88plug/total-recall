@@ -1,6 +1,6 @@
 # Installing total-recall in an agent CLI
 
-total-recall ships an **MCP server** (23 tools — recall, get_operator_context, check_banned, ...) and a **session-ingest pipeline** that reads transcripts from every supported agent CLI. The two surfaces are independent: a CLI that does not support MCP can still have its sessions ingested for backfill context.
+total-recall ships an **MCP server** (26 tools — recall, get_operator_context, check_banned, ...) and a **session-ingest pipeline** that reads transcripts from every supported agent CLI. The two surfaces are independent: a CLI that does not support MCP can still have its sessions ingested for backfill context.
 
 | CLI | MCP | Hooks | Session ingest | Doc |
 | --- | --- | --- | --- | --- |

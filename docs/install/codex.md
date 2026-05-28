@@ -27,7 +27,7 @@
 4. Verify: launch Codex and ask for "the tools you can see" — it should mention `total-recall`'s tools (or check Codex's own `/mcp` equivalent if your build has one).
 
 ## What you get
-- 23 MCP tools (recall, get_operator_context, check_banned, ...).
+- 26 MCP tools (recall, get_operator_context, check_banned, ...).
 - No hooks — Codex CLI does not expose lifecycle hooks.
 
 ## Session ingest

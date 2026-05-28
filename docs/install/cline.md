@@ -26,7 +26,7 @@
 4. Verify: Cline's MCP Servers panel should list `total-recall` with a green dot.
 
 ## What you get
-- 23 MCP tools (recall, get_operator_context, check_banned, ...).
+- 26 MCP tools (recall, get_operator_context, check_banned, ...).
 - No hook integration — Cline does not expose lifecycle hooks today.
 
 ## Session ingest

@@ -27,10 +27,10 @@ plugin directory and runs via `uv` so no manual venv work is required.
    ```
 
 3. Restart Claude Code (or reload via `/mcp`).
-4. Verify: `/mcp` should list `total-recall` and its 23 tools.
+4. Verify: `/mcp` should list `total-recall` and its 26 tools.
 
 ## What you get
-- 23 MCP tools (recall, get_operator_context, check_banned, get_voice, get_decisions, ...).
+- 26 MCP tools (recall, get_operator_context, check_banned, get_voice, get_decisions, ...).
 - Full hook integration: hooks under `hooks/` fire on UserPromptSubmit, SessionStart, PreToolUse, Stop, etc. — see `hooks/README.md` in the plugin.
 - Real-time session ingest: the live `.jsonl` is tailed, so recall reflects the current conversation within seconds.
 

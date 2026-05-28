@@ -24,7 +24,7 @@
 4. Verify: Cursor's Settings → MCP panel should show `total-recall` and its tools.
 
 ## What you get
-- 23 MCP tools (recall, get_operator_context, check_banned, ...).
+- 26 MCP tools (recall, get_operator_context, check_banned, ...).
 - No hooks — Cursor exposes no lifecycle hook surface.
 
 ## Session ingest

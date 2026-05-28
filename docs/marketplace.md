@@ -40,17 +40,9 @@ Claude-Code-only path — other CLIs install via their own MCP config.
 
 ---
 
-## To fix before publishing
+## Current plugin metadata (v0.9.0)
 
-The following differences exist between amnesia's `plugin.json` (the
-reference) and total-recall's `.claude-plugin/plugin.json`:
-
-| Field        | amnesia (reference)           | total-recall (current)        | Action needed |
-|--------------|-------------------------------|--------------------------------|---------------|
-| `displayName`| `"Amnesia"`                   | **missing**                    | Add `"displayName": "Total Recall"` |
-| `description`| Full sentence, no stale counts| References "14 extractors", "22-tool MCP server" — counts may be stale | Update to match actual shipped counts |
-| `keywords`   | 7 entries, includes `"session"` | 8 entries, no `"session"` | Minor; add `"session"` if desired |
-
-The missing `displayName` is the only structural gap vs. amnesia's schema.
-Stale counts in `description` should be corrected to match what actually
-ships in v0.7.2 (23 tools, 5 hooks, 15 slash commands, 2 skills per this spec).
+`.claude-plugin/plugin.json` ships with `displayName: "Total Recall"`, a description that
+reflects the current counts (26 MCP tools, 5 hooks, 15 slash commands, 2 skills + optional
+local-LLM refinement layer), and the appropriate keyword set. No outstanding gaps vs.
+the marketplace schema.

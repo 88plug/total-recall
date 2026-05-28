@@ -18,7 +18,7 @@ extractors, extractors feed an index, the index feeds delivery surfaces.
             |  (b) Extractors        |   |  detector/       |
             |      extractors/       |-->|  escalation.py   |
             |   pipeline-routed (11) |   |  (consumes rows, |
-            |   standalone     (3)   |   |   no rows out)   |
+            |   standalone     (6)   |   |   no rows out)   |
             |   + secrets scrubber   |   +------------------+
             +------------------------+
                                     |
@@ -35,7 +35,7 @@ extractors, extractors feed an index, the index feeds delivery surfaces.
             +-----------------------------------------------+
             |  (d) Delivery     hooks/  mcp_server/         |
             |                   skills/ commands/           |
-            |      SessionStart v2 signpost, 23 MCP tools,  |
+            |      SessionStart v2 signpost, 26 MCP tools,  |
             |      2 skills, 15 slash commands              |
             +-----------------------------------------------+
 ```
@@ -55,7 +55,7 @@ records, in DAG order, without OOMing on a 14k-line session.
 ## Layer (b) — Extractors (`extractors/`)
 
 **Responsibility.** Walk the record stream emitted by layer (a) and emit structured facts. The
-package ships 14 extractors + a universal scrubber, split into two execution lanes.
+package ships 17 extractors + a universal scrubber, split into two execution lanes (plus an optional v0.9 LLM refinement lane).
 
 **Pipeline-routed extractors** (run through `extractors/pipeline.py::ALL_EXTRACTORS`; each yields
 `Extraction` rows that the ingest loop writes to `extractions`):
@@ -77,7 +77,12 @@ and writes them directly via `index/`):
 
 - `operator_profile.py` — identity/role aggregates → `operator_profile`.
 - `voice_profile.py` — voice-fingerprint stats → `voice_profile`.
-- `ontology.py` — project / machine / vocabulary graph → `projects`, `machines`, `vocabulary`.
+- `ontology.py` — project / machine / vocabulary graph → `projects` (incl. `related_projects` co-mention edges as of v0.8), `machines`, `vocabulary`.
+- `workflow.py` (v0.8) — how the operator works: fan-out vocab, autonomy score, interrupt rate, planning idiom, peak hours, session shape, subagent adoption → `workflow_profile`.
+- `implicit_preferences.py` (v0.8) — behavior-derived preferences (Edit vs Write, shell-command dominance, absence patterns, format prefs, recurring vocab) → `implicit_preferences`.
+- `satisfaction.py` (v0.8) — bidirectional praise/frustration × prior-assistant-turn shape → `satisfaction_profile` (+ `satisfaction_meta`).
+
+**Optional refinement lane** (v0.9, `extractors/llm/`). Off by default. When `TOTAL_RECALL_LLM_PROVIDER=auto` AND a local ollama daemon is reachable AND the configured model is pulled, `cmd_rebuild` invokes refinement passes AFTER heuristic consolidation: machines NER filter, vocabulary definitions, project narratives. Local-only via ollama (cloud APIs deliberately excluded — would break the no-reupload-transcripts privacy guarantee). Heuristic baseline always wins on disagreement.
 
 **Universal scrubber.** `secrets.py` runs over every emitted row's `content` plus every string
 field in `context` (recursive). It is invoked from the orchestrator, not the extractors, so a
@@ -118,14 +123,16 @@ session. Four surfaces, each optional:
   `stop-index.sh` + `post-compact-index.sh` (async reindex). Configured in `hooks/hooks.json`.
   All bash hooks share `hooks/lib/common.sh`; database reads route through `hooks/lib/query.py`,
   which is the only shim between hook code and the index.
-- `mcp_server/` — 23 MCP tools total. **Core v0.1 (6, in `mcp_server/tools.py`):** `recall`,
+- `mcp_server/` — 26 MCP tools total. **Core v0.1 (6, in `mcp_server/tools.py`):** `recall`,
   `prior_sessions_for_cwd`, `find_failed_attempts`, `find_user_preferences`,
   `get_session_digest`, `search_messages`. **v0.3 operator-aware (17, in
   `mcp_server/extras/*_tools.py`):** `recall_corrections_about`, `get_recent_corrections`,
   `list_standing_decisions`, `get_decision_for_topic`, `check_banned`, `list_failed_attempts`,
   `get_active_goal`, `list_goals`, `get_past_truth_assertions`, `get_project_graph`,
   `get_machine_inventory`, `define_term`, `get_operator_profile`, `get_voice_profile`,
-  `get_operator_context`, `assess_escalation_risk`, `recall_targeted`.
+  `get_operator_context`, `assess_escalation_risk`, `recall_targeted`. **v0.8 behavioral (3, also
+  in `mcp_server/extras/*_tools.py`):** `get_workflow_profile`, `get_satisfaction_profile`,
+  `list_implicit_preferences`.
 - `skills/` — `recall/` (orientation guidance for using the MCP surface on demand) and
   `speak-like-operator/` (operator voice-matching skill, runtime-populated from `get_voice_profile()`).
 - `commands/` — 15 slash commands for the human operator: `/recall`, `/recall-status`,

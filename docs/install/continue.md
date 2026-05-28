@@ -29,7 +29,7 @@
 4. Verify: Continue's tool list should include the total-recall tools.
 
 ## What you get
-- 23 MCP tools (recall, get_operator_context, check_banned, ...).
+- 26 MCP tools (recall, get_operator_context, check_banned, ...).
 - No hook integration — Continue exposes no lifecycle hooks.
 
 ## Session ingest

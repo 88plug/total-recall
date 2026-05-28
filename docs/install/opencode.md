@@ -36,7 +36,7 @@
 4. Verify: the MCP panel in OpenCode should list `total-recall` and its tools.
 
 ## What you get
-- 23 MCP tools (recall, get_operator_context, check_banned, ...).
+- 26 MCP tools (recall, get_operator_context, check_banned, ...).
 - No hook integration — OpenCode does not expose lifecycle hooks. Use the MCP tools manually or wire them into instructions.
 
 ## Session ingest

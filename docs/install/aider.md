@@ -14,7 +14,7 @@ Aider has no MCP integration. There are no CLI-side changes to make.
 - Session ingest only: total-recall reads `.aider.chat.history.md` files from your git repos to backfill prior context.
 - No live MCP tools inside Aider itself.
 
-If you want the 23 MCP tools available *while* coding, run a second agent (Claude Code, OpenCode, Cursor, etc.) alongside Aider and install total-recall there — it will be reading from the same shared SQLite index and will surface Aider's recent chats in `recall` results.
+If you want the 26 MCP tools available *while* coding, run a second agent (Claude Code, OpenCode, Cursor, etc.) alongside Aider and install total-recall there — it will be reading from the same shared SQLite index and will surface Aider's recent chats in `recall` results.
 
 ## Session ingest
 

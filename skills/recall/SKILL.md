@@ -16,7 +16,7 @@ The transcripts are read-only. Never write into `~/.claude/projects/*.jsonl`. Ne
 
 ## What's available
 
-23 MCP tools (v0.3), namespaced `mcp__total-recall__*`. Use the closest-fit tool — don't fall back to the generic `recall` if a more specific one exists.
+26 MCP tools (v0.3 + v0.8 behavioral profiles), namespaced `mcp__total-recall__*`. Use the closest-fit tool — don't fall back to the generic `recall` if a more specific one exists.
 
 ### v0.1 generic (6 tools)
 
@@ -49,9 +49,19 @@ These v0.1 tools accept `scope` ∈ `{this_cwd, this_project, global}` (default 
 | `get_voice_profile()` | Voice cheat sheet (lowercase pct, median length, signature typos). |
 | `get_machine_inventory()` | Hosts, IPs, services. |
 | `define_term(term)` | Operator vocabulary glossary. |
-| (plus 3 more index/util tools) | See per-tool reference. |
+| `get_recent_corrections(limit?)` | Recent `model_correction` rows — what Claude got wrong, paired with the rejected approach. |
+| `list_failed_attempts(cwd?)` | Abandoned approaches log (with replacement choice + reason). |
+| `get_project_graph()` | Project inventory + cross-project relationships (now includes `related_projects` co-mention edges as of v0.8). |
 
-Note: v0.3 tools do NOT all accept `scope`. The `scope` param applies to v0.1 generic-recall tools; v0.3 tools have their own scoping semantics — see [query-recall-mcp.md](references/query-recall-mcp.md).
+### v0.8 behavioral profiles (3 tools)
+
+| Tool | When to use |
+| --- | --- |
+| `get_workflow_profile()` | How the operator works — fan-out vocabulary + frequency, autonomy score, mid-flight interrupt rate, planning idiom, peak hours, session shape, subagent adoption. Use to calibrate response style at SessionStart. |
+| `list_implicit_preferences(min_confidence?, category?)` | Behavior-derived preferences the operator never stated explicitly (e.g. `edit_strategy=prefer_edit`, `shell_command=prefer_uv`, `format=no_emojis_in_chat`). Promoted only past a multi-axis threshold (≥5 sessions, ≥3 projects, ≥7-day span, ≥80% non-contradiction). |
+| `get_satisfaction_profile()` | Bidirectional praise/frustration model × prior assistant-turn shape. Tells you which AI behaviors (tool_call_brief / long_prose / confirmation_request / …) historically pair with praise vs frustration for THIS operator. Calibration is often asymmetric — satisfaction is silent, frustration is loud. |
+
+Note: v0.3 + v0.8 tools do NOT all accept `scope`. The `scope` param applies to v0.1 generic-recall tools; the operator-aware tools have their own scoping semantics — see [query-recall-mcp.md](references/query-recall-mcp.md).
 
 ## Session start (one call)
 
