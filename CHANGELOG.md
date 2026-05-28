@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-05-28
+
+### Added — modeling HOW the operator works, not just WHO they are
+
+Three new aggregated profiles, all data-driven, no LLM, no operator-specific
+hardcoding. Each ships an extractor, persistence, an MCP tool, and a
+consolidation pass on `rebuild`. Total MCP tools: 23 → 26.
+
+- **`WorkflowProfile`** (`extractors/workflow.py`, `index/workflow.py`, MCP
+  `get_workflow_profile`): captures how the operator works — fan-out
+  vocabulary + per-session frequency, autonomy score (ratio of short
+  execute-style turns to question turns), mid-flight interrupt rate,
+  detected planning idiom (waves/phases/steps/sprints), peak hours and
+  preferred work window, session shape (ops_burst / focused / marathon /
+  bimodal / mixed), subagent adoption rate. EMA-blended on the hot path.
+
+- **`ImplicitPreferenceProfile`** (`extractors/implicit_preferences.py`,
+  `index/implicit_preferences.py`, MCP `list_implicit_preferences`): captures
+  preferences the operator expresses by behavior rather than by ban/decision
+  — tool-call ratios (e.g. Edit vs Write), shell-command dominance within
+  functional groups (e.g. uv vs pip), absence patterns, format preferences
+  (e.g. emoji-free), recurring vocabulary phrases. Promoted only when the
+  signal crosses a multi-axis threshold (≥5 sessions, ≥3 projects, ≥7-day
+  span, ≥80% non-contradiction).
+
+- **`SatisfactionProfile`** (`extractors/satisfaction.py`,
+  `index/satisfaction.py`, MCP `get_satisfaction_profile`): a bidirectional
+  praise/frustration model paired with the preceding assistant-turn shape
+  (`tool_call_brief`, `long_prose`, `confirmation_request`, etc.). Captures
+  that for some operators satisfaction is silent — calibration must work on
+  the absence of frustration, not just the presence of praise.
+
+### Added — drift trigger in escalation detector
+
+`detector/escalation.py` gains a `drift` trigger (+2 risk) matching
+"drifting / off track / diverging" patterns. Existing trigger weights and
+state thresholds unchanged.
+
+### Added — cross-project co-mention graph
+
+`extractors/ontology.py` now populates the previously-empty
+`projects.related_projects` JSON column via a co-mention pass over each
+project's session text. Surfaces the operator's portfolio shape (hub vs
+spoke projects, dependency direction) for any operator with multiple cwds.
+
+### Coverage
+
+Adds 103 new unit tests (workflow 30, implicit_preferences 21, satisfaction
+20 + escalation 25 still green, ontology +1 co-mention). Full unit suite:
+1038 passed.
+
 ## [0.7.3] - 2026-05-27
 
 ### Fixed — data-driven operator discovery quality

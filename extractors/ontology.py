@@ -48,6 +48,7 @@ __all__ = [
     "persist_ontology",
     "iter_project_dirs",
     "update_vocabulary_counts",
+    "compute_co_mention_graph",
 ]
 
 
@@ -62,7 +63,7 @@ class ProjectRecord:
     display_name: str = ""
     purpose: str = ""
     primary_language: str = ""
-    related_projects: list[str] = field(default_factory=list)
+    related_projects: list = field(default_factory=list)
     first_seen_ts: int = 0
     last_active_ts: int = 0
     message_count: int = 0
@@ -718,38 +719,215 @@ def extract_ontology(
             snap.vocabulary.append(v)
             seen_terms.add(v.term.lower())
 
-    # Compute simple related-projects adjacency.
-    _populate_related_projects(snap.projects)
+    # Compute co-mention graph: scan session message text for cross-project
+    # name references and populate each project's related_projects list.
+    session_texts = _collect_session_texts(projects_root, snap.projects)
+    co_mentions = compute_co_mention_graph(snap.projects, session_texts)
+    for proj in snap.projects:
+        proj.related_projects = co_mentions.get(proj.cwd, [])
 
     return snap
 
 
-def _populate_related_projects(projects: list[ProjectRecord]) -> None:
-    """Naive token-overlap adjacency. O(n^2) — fine for ~100 projects."""
-    def tokens(slug: str) -> set[str]:
-        # Drop the leading dash, split on dashes, drop common path prefixes.
-        # We strip the leading path component generically (e.g. /home/<name>/)
-        # rather than hardcoding any username.
-        parts = [p for p in slug.lstrip("-").split("-") if p]
-        boring = {"home", "tmp", "src", "code", "github", "users", "opt"}
-        # Also skip very short tokens and pure-numeric tokens.
-        return {
-            p for p in parts
-            if p and p not in boring and len(p) >= 3 and not p.isdigit()
-        }
+# ---------------------------------------------------------------------------
+# Co-mention graph
+# ---------------------------------------------------------------------------
 
-    token_index = {p.cwd: tokens(p.cwd) for p in projects}
-    for p in projects:
-        my = token_index[p.cwd]
-        if not my:
+# Names shorter than this are too generic to match reliably.
+_CO_MENTION_MIN_NAME_LEN: int = 4
+
+# Top-N related projects to keep per project.
+_CO_MENTION_TOP_N: int = 5
+
+# Common path-segment stopwords and generic names that should never be
+# treated as project identifiers.  These are structural artifacts of the
+# filesystem layout, not project names.  No operator-specific literals.
+_CO_MENTION_STOPWORDS: frozenset[str] = frozenset(
+    """
+    home tmp src code github gitlab users opt local share bin lib
+    projects project work workspace dev repos repo andrew user
+    """.split()
+)
+
+
+def _name_is_generic(name: str) -> bool:
+    """Return True if ``name`` is too short or a known-generic path segment.
+
+    Guards against high-false-positive matches from names like "tmp", "src",
+    "foo", "code", "dev" that would appear in almost any project's text.
+    """
+    low = name.lower().strip()
+    if len(low) < _CO_MENTION_MIN_NAME_LEN:
+        return True
+    # Purely numeric strings are never project names.
+    if low.isdigit():
+        return True
+    # Whole-word check against the combined stopword sets.
+    if low in _CO_MENTION_STOPWORDS or low in _STOPWORDS or low in _GENERIC_TECH:
+        return True
+    return False
+
+
+def _candidate_names_for_project(proj: ProjectRecord) -> list[str]:
+    """Derive non-generic candidate names for a project from its slug.
+
+    We derive names purely from the slug (filesystem artifact), not from any
+    hardcoded data.  The slug is the directory basename under
+    ``~/.claude/projects/``.  It encodes the cwd with ``/`` → ``-``.
+
+    Strategy: build suffix names of increasing length (1 to 3 right-most
+    segments) and keep every suffix that is non-generic.  Having multiple
+    candidates handles cases where the operator might mention the project
+    either by its short name ("core") or its full name ("falcon-core").
+
+    Double-counting across multiple patterns is avoided in
+    :func:`compute_co_mention_graph` by taking the MAX hit count across all
+    patterns for the same target project, rather than summing them.
+    """
+    slug = proj.cwd.lstrip("-")
+    parts = [p for p in slug.split("-") if p]
+
+    candidates: list[str] = []
+    suffix_parts: list[str] = []
+    for part in reversed(parts):
+        suffix_parts.insert(0, part)
+        name = "-".join(suffix_parts)
+        if not _name_is_generic(name):
+            candidates.append(name)
+        if len(suffix_parts) >= 3:
+            break
+
+    # Return longest-first so that in compute_co_mention_graph we can take
+    # the most specific match as the primary signal.
+    return list(reversed(candidates))
+
+
+def _collect_session_texts(
+    projects_root: Path, projects: list[ProjectRecord]
+) -> dict[str, list[str]]:
+    """Return ``{cwd_slug: [text, ...]}`` — one text blob per session file.
+
+    Each blob is the concatenation of all flattened record texts in a session.
+    We collect every record (assistant + user) because cross-project mentions
+    appear in both roles.
+    """
+    slug_set = {p.cwd for p in projects}
+    result: dict[str, list[str]] = {p.cwd: [] for p in projects}
+
+    for proj_dir in iter_project_dirs(projects_root):
+        slug = proj_dir.name
+        if slug not in slug_set:
             continue
-        related: list[str] = []
-        for q in projects:
-            if q.cwd == p.cwd:
+        for session_file in _iter_session_files(proj_dir):
+            lines: list[str] = []
+            for rec in _iter_jsonl_records(session_file):
+                text = _flatten_record_text(rec)
+                if text:
+                    lines.append(text)
+            if lines:
+                result[slug].append("\n".join(lines))
+
+    return result
+
+
+def compute_co_mention_graph(
+    projects: list[ProjectRecord],
+    session_texts: dict[str, list[str]],
+    top_n: int = _CO_MENTION_TOP_N,
+) -> dict[str, list[dict]]:
+    """Compute a data-driven co-mention adjacency graph across projects.
+
+    For each project P:
+    - Scan the message text from all of P's sessions.
+    - Count whole-word (``\\b``-bounded, case-insensitive) occurrences of
+      every other project Q's candidate display names / basenames.
+    - Rank by total mention count; keep top ``top_n``.
+
+    Args:
+        projects: All discovered project records.  Used to derive candidate
+            names (from the slug only — no operator-specific literals).
+        session_texts: ``{cwd_slug: [text_blob, ...]}`` — pre-collected
+            session text for each project.  Pure inputs; this function does
+            not perform any I/O.
+        top_n: Maximum number of related projects to keep per project.
+
+    Returns:
+        ``{cwd: [{"cwd": str, "display_name": str, "mention_count": int}, ...]}``
+        ordered by ``mention_count`` descending.  Projects with no
+        cross-mentions get an empty list (never ``None``).
+
+    Pure function — no side-effects, no I/O.
+    """
+    # Build a map from slug → list of compiled patterns for each candidate name.
+    # Skip projects whose every candidate name is too generic.
+    PatternEntry = tuple[str, re.Pattern]  # (candidate_name, pattern)
+    project_patterns: dict[str, list[PatternEntry]] = {}
+    for proj in projects:
+        names = _candidate_names_for_project(proj)
+        if not names:
+            continue
+        patterns: list[PatternEntry] = []
+        for name in names:
+            try:
+                pat = re.compile(
+                    r"\b" + re.escape(name) + r"\b",
+                    re.IGNORECASE,
+                )
+                patterns.append((name, pat))
+            except re.error:
                 continue
-            if my & token_index[q.cwd]:
-                related.append(q.cwd)
-        p.related_projects = sorted(related)
+        if patterns:
+            project_patterns[proj.cwd] = patterns
+
+    result: dict[str, list[dict]] = {}
+
+    for proj in projects:
+        my_cwd = proj.cwd
+        texts = session_texts.get(my_cwd, [])
+        if not texts:
+            result[my_cwd] = []
+            continue
+
+        # Combined text for this project's sessions (cheap for regex scanning).
+        combined = "\n".join(texts)
+        counts: Counter[str] = Counter()
+
+        for other_cwd, patterns in project_patterns.items():
+            if other_cwd == my_cwd:
+                continue  # skip self
+            # Take the MAX across all candidate patterns for this project to
+            # avoid double-counting when a shorter pattern matches inside a
+            # longer one (e.g. "engine" inside "raptor-engine").
+            max_hits = 0
+            for _name, pat in patterns:
+                hits = len(pat.findall(combined))
+                if hits > max_hits:
+                    max_hits = hits
+            if max_hits:
+                counts[other_cwd] = max_hits
+
+        if not counts:
+            result[my_cwd] = []
+            continue
+
+        # Build display-name lookup for the result records.
+        slug_to_proj = {p.cwd: p for p in projects}
+
+        ranked = counts.most_common(top_n)
+        result[my_cwd] = [
+            {
+                "cwd": cwd,
+                "display_name": slug_to_proj[cwd].display_name if cwd in slug_to_proj else cwd,
+                "mention_count": cnt,
+            }
+            for cwd, cnt in ranked
+        ]
+
+    # Ensure every project has an entry (even if empty).
+    for proj in projects:
+        result.setdefault(proj.cwd, [])
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -773,16 +951,43 @@ def persist_ontology(conn, snap: OntologySnapshot) -> dict[str, int]:
     written = {"projects": 0, "machines": 0, "vocabulary": 0}
 
     for p in snap.projects:
-        upsert_project(
-            conn,
-            cwd=p.cwd,
-            display_name=p.display_name or None,
-            purpose=p.purpose or None,
-            primary_language=p.primary_language or None,
-            related_projects=p.related_projects or None,
-            first_seen_ts=p.first_seen_ts or None,
-            last_active_ts=p.last_active_ts or None,
-            message_count=p.message_count or None,
+        # related_projects may be a list[dict] (co-mention graph output) or a
+        # legacy list[str].  Serialize it directly so dict entries aren't
+        # mangled by upsert_project's str() coercion.
+        rp_json: str | None = None
+        if p.related_projects:
+            rp_json = json.dumps(p.related_projects, ensure_ascii=False)
+
+        # Use a raw execute to inject the pre-serialized JSON, bypassing the
+        # upsert_project helper's sorted-string-set logic for this field only.
+        from index.ontology import ensure_schema as _ensure_schema
+        _ensure_schema(conn)
+        conn.execute(
+            """
+            INSERT INTO projects(
+                cwd, display_name, purpose, primary_language,
+                related_projects, first_seen_ts, last_active_ts, message_count
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cwd) DO UPDATE SET
+                display_name     = COALESCE(excluded.display_name, projects.display_name),
+                purpose          = COALESCE(excluded.purpose, projects.purpose),
+                primary_language = COALESCE(excluded.primary_language, projects.primary_language),
+                related_projects = COALESCE(excluded.related_projects, projects.related_projects),
+                first_seen_ts    = COALESCE(MIN(excluded.first_seen_ts, projects.first_seen_ts), projects.first_seen_ts, excluded.first_seen_ts),
+                last_active_ts   = COALESCE(MAX(excluded.last_active_ts, projects.last_active_ts), projects.last_active_ts, excluded.last_active_ts),
+                message_count    = COALESCE(excluded.message_count, projects.message_count)
+            """,
+            (
+                p.cwd,
+                p.display_name or None,
+                p.purpose or None,
+                p.primary_language or None,
+                rp_json,
+                p.first_seen_ts or None,
+                p.last_active_ts or None,
+                p.message_count or None,
+            ),
         )
         written["projects"] += 1
 

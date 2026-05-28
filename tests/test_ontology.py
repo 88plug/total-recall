@@ -30,6 +30,7 @@ from extractors.ontology import (
     MachineRecord,
     ProjectRecord,
     _extract_machines_from_text,
+    compute_co_mention_graph,
     extract_ontology,
     persist_ontology,
     _UNIVERSAL_CLAUDE_CODE_TERMS,
@@ -168,8 +169,9 @@ def test_project_extraction_records_slug_and_language(
     assert "host-alpha" in a.purpose
     # 2 records (1 user + 1 assistant) for this synthetic session.
     assert a.message_count == 2
-    # Adjacency picks up sibling via shared "acme-net" token.
-    assert "-home-operator-acme-net-tools" in a.related_projects
+    # related_projects is now a list (co-mention graph); may be empty if the
+    # synthetic session text doesn't literally mention the sibling project name.
+    assert isinstance(a.related_projects, list)
 
     b = by_slug["-home-operator-acme-net-tools"]
     assert b.primary_language == "python"
@@ -309,3 +311,171 @@ def test_extract_and_persist_round_trip(
     for v in _UNIVERSAL_CLAUDE_CODE_TERMS:
         term_row = get_term(memdb, v.term)
         assert term_row is not None, f"universal term {v.term!r} missing"
+
+
+# ---------------------------------------------------------------------------
+# 7. Co-mention graph populates related_projects
+# ---------------------------------------------------------------------------
+
+
+def test_co_mention_graph_populates_related_projects(tmp_path: Path) -> None:
+    """Synthetic 3-project corpus: A mentions B 10x and C 2x.
+
+    Verifies:
+    - related_projects is ordered by mention_count descending.
+    - self-references are skipped.
+    - projects with no cross-mentions get an empty list (not None).
+    - the result has the expected structure {cwd, display_name, mention_count}.
+    """
+    root = tmp_path / "projects"
+    root.mkdir()
+
+    # Slugs are chosen so that each has a unique non-generic basename that the
+    # co-mention extractor can match.  We use multi-segment slugs to exercise
+    # the candidate-name derivation path.
+    slug_a = "-home-op-falcon-core"
+    slug_b = "-home-op-raptor-engine"
+    slug_c = "-home-op-viper-tools"
+
+    # Names the extractor will derive from the slugs:
+    #   slug_a → "falcon-core" (or just "falcon"/"core")
+    #   slug_b → "raptor-engine" (or "raptor")
+    #   slug_c → "viper-tools" (or "viper")
+    # We embed these literal names in the session text so matching is reliable.
+
+    def _sess(proj_dir: Path, stem: str, records: list[dict]) -> None:
+        path = proj_dir / f"{stem}.jsonl"
+        with path.open("w") as fh:
+            for r in records:
+                fh.write(json.dumps(r) + "\n")
+
+    # Project A — mentions "raptor-engine" 10 times and "viper-tools" 2 times
+    # in its single session.  Self-mentions of "falcon-core" must be skipped.
+    a_dir = root / slug_a
+    a_dir.mkdir()
+    raptor_mentions = " raptor-engine" * 10
+    viper_mentions = " viper-tools" * 2
+    _sess(
+        a_dir,
+        "0" * 32,
+        [
+            {
+                "type": "user",
+                "sessionId": "sA",
+                "uuid": "uA1",
+                "timestamp": "2026-05-01T10:00:00Z",
+                "cwd": "/home/op/falcon-core",
+                "message": {
+                    "role": "user",
+                    "content": (
+                        "Working on falcon-core."
+                        + raptor_mentions
+                        + viper_mentions
+                    ),
+                },
+            }
+        ],
+    )
+
+    # Project B — no cross-mentions; related_projects should be empty.
+    b_dir = root / slug_b
+    b_dir.mkdir()
+    _sess(
+        b_dir,
+        "1" * 32,
+        [
+            {
+                "type": "user",
+                "sessionId": "sB",
+                "uuid": "uB1",
+                "timestamp": "2026-05-01T10:00:00Z",
+                "cwd": "/home/op/raptor-engine",
+                "message": {
+                    "role": "user",
+                    "content": "standalone raptor-engine work, no cross-project refs",
+                },
+            }
+        ],
+    )
+
+    # Project C — no cross-mentions.
+    c_dir = root / slug_c
+    c_dir.mkdir()
+    _sess(
+        c_dir,
+        "2" * 32,
+        [
+            {
+                "type": "user",
+                "sessionId": "sC",
+                "uuid": "uC1",
+                "timestamp": "2026-05-01T10:00:00Z",
+                "cwd": "/home/op/viper-tools",
+                "message": {
+                    "role": "user",
+                    "content": "standalone viper-tools session",
+                },
+            }
+        ],
+    )
+
+    snap = extract_ontology(root)
+    by_slug = {p.cwd: p for p in snap.projects}
+
+    assert slug_a in by_slug, "project A not discovered"
+    assert slug_b in by_slug, "project B not discovered"
+    assert slug_c in by_slug, "project C not discovered"
+
+    a = by_slug[slug_a]
+
+    # related_projects must be a list (never None)
+    assert isinstance(a.related_projects, list), "related_projects must be a list"
+
+    # Should have exactly 2 entries (B and C)
+    assert len(a.related_projects) == 2, (
+        f"expected 2 related projects for A, got {len(a.related_projects)}: "
+        f"{a.related_projects}"
+    )
+
+    # Each entry has the expected keys.
+    for entry in a.related_projects:
+        assert "cwd" in entry
+        assert "display_name" in entry
+        assert "mention_count" in entry
+
+    # Ordered by mention_count descending — B (10) before C (2).
+    first, second = a.related_projects
+    assert first["cwd"] == slug_b, f"expected B first, got {first}"
+    assert first["mention_count"] == 10, f"expected 10 mentions of B, got {first['mention_count']}"
+    assert second["cwd"] == slug_c, f"expected C second, got {second}"
+    assert second["mention_count"] == 2, f"expected 2 mentions of C, got {second['mention_count']}"
+
+    # Self-reference: "falcon-core" must not appear in A's related_projects.
+    related_cwds = {e["cwd"] for e in a.related_projects}
+    assert slug_a not in related_cwds, "self-reference must be excluded"
+
+    # B and C have no cross-mentions — their related_projects are empty lists.
+    b = by_slug[slug_b]
+    assert isinstance(b.related_projects, list)
+    assert b.related_projects == [], f"B should have no related projects, got {b.related_projects}"
+
+    c = by_slug[slug_c]
+    assert isinstance(c.related_projects, list)
+    assert c.related_projects == [], f"C should have no related projects, got {c.related_projects}"
+
+    # Verify round-trip through persist_ontology writes the richer dict format.
+    memdb = sqlite3.connect(":memory:", isolation_level=None)
+    memdb.row_factory = sqlite3.Row
+    ensure_schema(memdb)
+    persist_ontology(memdb, snap)
+
+    from index.ontology import get_project
+    row_a = get_project(memdb, slug_a)
+    assert row_a is not None
+    rp = row_a["related_projects"]
+    # _row_to_project decodes JSON into a list; our dict entries survive.
+    assert isinstance(rp, list)
+    assert len(rp) == 2
+    # After persist + read-back the dicts are preserved.
+    assert rp[0]["mention_count"] == 10
+    assert rp[1]["mention_count"] == 2

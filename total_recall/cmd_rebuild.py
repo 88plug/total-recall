@@ -124,6 +124,73 @@ def rebuild_cmd(
     except Exception as exc:  # noqa: BLE001 — best-effort, never fail the rebuild
         click.echo(f"total-recall: profile consolidation skipped ({exc})", err=True)
 
+    # Consolidation for the additional aggregated profiles. Same rationale —
+    # per-file incremental can drift; the full-corpus pass is authoritative.
+    # Each is wrapped independently so one failure doesn't block the others.
+    root = (
+        Path(projects_root).expanduser()
+        if projects_root
+        else Path("~/.claude/projects").expanduser()
+    )
+    all_jsonl = sorted(root.glob("*/*.jsonl"))
+
+    if all_jsonl:
+        # Workflow profile.
+        try:
+            from extractors.workflow import extract_workflow
+            from index.workflow import persist_workflow
+            wf = extract_workflow(all_jsonl)
+            conn = connect(db_path)
+            try:
+                persist_workflow(conn, wf)
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"total-recall: workflow consolidation skipped ({exc})", err=True)
+
+        # Implicit preferences.
+        try:
+            from extractors.implicit_preferences import extract_implicit_preferences
+            from index.implicit_preferences import persist_implicit_preferences
+            ip = extract_implicit_preferences(all_jsonl)
+            conn = connect(db_path)
+            try:
+                persist_implicit_preferences(conn, ip)
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"total-recall: implicit_preferences consolidation skipped ({exc})", err=True)
+
+        # Satisfaction profile.
+        try:
+            from extractors.satisfaction import extract_satisfaction
+            from index.satisfaction import persist_satisfaction
+            sat = extract_satisfaction(all_jsonl)
+            conn = connect(db_path)
+            try:
+                persist_satisfaction(conn, sat)
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"total-recall: satisfaction consolidation skipped ({exc})", err=True)
+
+        # Ontology — re-derive projects + co-mention graph + vocabulary from
+        # the full corpus so related_projects gets populated authoritatively.
+        try:
+            from extractors.ontology import extract_ontology, persist_ontology
+            snap = extract_ontology(root)
+            conn = connect(db_path)
+            try:
+                persist_ontology(conn, snap)
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"total-recall: ontology consolidation skipped ({exc})", err=True)
+
     elapsed = time.monotonic() - started
 
     files = _result_get(result, "files", 0)

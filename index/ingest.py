@@ -989,6 +989,50 @@ def _commit_parsed(
                 _o_inc(_new_records, conn)
             except Exception as exc:  # noqa: BLE001
                 log.warning("vocabulary incremental update failed: %s", exc)
+
+            # WorkflowProfile (B1) — EMA-blended over rolling session window.
+            try:
+                from extractors.workflow import extract_workflow_incremental as _wf_inc
+                from index.workflow import get_workflow, persist_workflow
+                _existing_wf = get_workflow(conn) or {}
+                _existing_wf.pop("_updated_ts", None)
+                _merged_wf = _wf_inc(_new_records, _existing_wf)
+                if _merged_wf:
+                    persist_workflow(conn, _merged_wf)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("workflow incremental update failed: %s", exc)
+
+            # ImplicitPreferenceProfile (B2) — evidence-accumulating merge.
+            # The incremental extractor maintains accumulated counts inside the
+            # batch itself; the existing persisted rows can stay (persist is
+            # idempotent). Pass None so the extractor builds a fresh batch
+            # candidate which is then upsert-merged into the table.
+            try:
+                from extractors.implicit_preferences import (
+                    extract_implicit_preferences_incremental as _ip_inc,
+                )
+                from index.implicit_preferences import persist_implicit_preferences
+                _merged_ip = _ip_inc(_new_records, None)
+                if _merged_ip:
+                    persist_implicit_preferences(conn, _merged_ip)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("implicit_preferences incremental update failed: %s", exc)
+
+            # SatisfactionProfile (B4) — additive matrix accumulation.
+            try:
+                from extractors.satisfaction import (
+                    extract_satisfaction_incremental as _sat_inc,
+                )
+                from index.satisfaction import (
+                    get_satisfaction_summary,
+                    persist_satisfaction,
+                )
+                _existing_sat = get_satisfaction_summary(conn)
+                _merged_sat = _sat_inc(_new_records, _existing_sat)
+                if _merged_sat:
+                    persist_satisfaction(conn, _merged_sat)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("satisfaction incremental update failed: %s", exc)
         except Exception as exc:  # noqa: BLE001
             log.warning("incremental profile updates failed (non-fatal): %s", exc)
 

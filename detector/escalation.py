@@ -171,6 +171,15 @@ def assess_escalation(
         risk += 1
         triggers.append("directive_flip")
 
+    # Drift — operator signals the model has wandered off-task.
+    if re.search(
+        r"\bdrifting\b|\bdrift\b|you'?re drift|fix the drift|\boff track\b|\bdiverging\b",
+        last_user,
+        re.IGNORECASE,
+    ):
+        risk += 2
+        triggers.append("drift")
+
     # Repetition call-out — explicit "I already told you" markers.
     if re.search(
         r"\b(still|again|alread|i said|i told you|you forgot|you didn'?t)\b",

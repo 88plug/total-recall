@@ -126,6 +126,7 @@ from mcp_server.extras import operator_tools as _operator_tools  # noqa: E402,F4
 from mcp_server.extras import recall_targeted_tools as _recall_targeted_tools  # noqa: E402,F401
 from mcp_server.extras import rhetoric_tools as _rhetoric_tools  # noqa: E402,F401
 from mcp_server.extras import voice_tools as _voice_tools  # noqa: E402,F401
+from mcp_server.extras import workflow_tools as _workflow_tools  # noqa: E402,F401
 
 
 # ---------------------------------------------------------------------------
