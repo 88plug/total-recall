@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.3] - 2026-05-27
+
+### Fixed — data-driven operator discovery quality
+
+A real-corpus backtest surfaced two discovery bugs in the per-file
+incremental ingest path (the synthetic test only exercised the full-pass
+extractor):
+
+- **Timezone** could emit a non-zone fragment (any capitalized `Word/Word`
+  matched the IANA pattern). Now anchored to real region prefixes and
+  guarded at reduce time — invalid candidates yield an empty timezone
+  rather than garbage.
+- **Handle** could rank a frequently-mentioned project over the operator's
+  real handle. Candidates corroborated by the resolved email local-part /
+  domain / name now get a frequency boost so the operator's own handle
+  wins. Derived at runtime; no hardcoded identity.
+
+**Consolidation pass on rebuild.** The profile update runs per-file during
+ingest, and append-supersede can freeze an early, non-global winner for
+frequency-ranked identity scalars. `total-recall rebuild` now re-derives
+the operator profile in a single full-corpus pass after ingest and persists
+the globally-correct values — the cold-path reconcile the incremental hot
+path defers to.
+
+New tests: timezone-garbage rejection, handle email-reinforcement,
+full-vs-incremental agreement guard, and backtest assertions that exercise
+the incremental + persisted path against a real corpus.
+
 ## [0.7.2] - 2026-05-27
 
 ### Reverted
