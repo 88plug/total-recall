@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-05-28
+
+### Added — optional local-LLM refinement (off by default)
+
+New `[llm]` extra wires an opt-in refinement layer for the operator profile.
+Refines machines (filters NER-hard noise from the heuristic dict),
+vocabulary (per-term definitions from the operator's own corpus context),
+and project narratives. Local-only via ollama; transcripts never leave the
+machine. Cloud APIs (Anthropic / OpenAI / etc.) deliberately not supported
+— sending transcripts off-machine would break the privacy guarantee.
+
+Env vars: `TOTAL_RECALL_LLM_PROVIDER` (default `auto`), `TOTAL_RECALL_LLM_MODEL`
+(default `gemma4:e2b`), `TOTAL_RECALL_LLM_BASE_URL`. Graceful absence:
+skipped silently if ollama/model not present, heuristic baseline stays
+authoritative.
+
 ## [0.8.0] - 2026-05-28
 
 ### Added — modeling HOW the operator works, not just WHO they are

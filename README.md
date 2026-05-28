@@ -192,6 +192,51 @@ The session JSONLs themselves are never written to.
 - **No re-uploading.** Transcripts contain secrets, internal URLs, and private code. They never
   leave the machine.
 
+## Optional local-LLM refinement
+
+By default, total-recall is 100% deterministic heuristics — zero model calls,
+zero network egress. For operators who want sharper machine-name extraction,
+vocabulary definitions, and per-project narratives, an OPT-IN refinement
+layer can call a LOCAL LLM via ollama.
+
+**Privacy stays intact**: transcripts never leave the machine. The cloud-API
+path is deliberately not supported because it would break the no-reupload
+guarantee.
+
+Install ollama + pull the default model:
+
+```bash
+# ollama install: https://ollama.com
+ollama pull gemma4:e2b   # small CPU-friendly default
+```
+
+Enable refinement (env vars; off by default):
+
+```bash
+export TOTAL_RECALL_LLM_PROVIDER=auto   # or 'ollama' to force; 'none' to disable
+export TOTAL_RECALL_LLM_MODEL=gemma4:e2b
+export TOTAL_RECALL_LLM_BASE_URL=http://localhost:11434
+total-recall rebuild --yes
+```
+
+Install the optional Python client conveniences alongside the `[vec]` extra:
+
+```bash
+pip install -e .[llm]
+# or both at once:
+pip install -e .[llm,vec]
+```
+
+Refinement runs ONLY during `rebuild` (cold path). If ollama isn't running
+or the model isn't pulled, refinement is skipped silently and the
+heuristic baseline remains authoritative.
+
+| Env var | Default | Description |
+|---|---|---|
+| `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `auto` probes the daemon; `ollama` forces; `none` disables. |
+| `TOTAL_RECALL_LLM_MODEL` | `gemma4:e2b` | Model tag to use. Any ollama-pulled model works. |
+| `TOTAL_RECALL_LLM_BASE_URL` | `http://localhost:11434` | Ollama API endpoint. |
+
 ## Relation to amnesia
 
 `amnesia` and `total-recall` are complements, not competitors:

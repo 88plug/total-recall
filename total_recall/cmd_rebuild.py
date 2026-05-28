@@ -191,6 +191,100 @@ def rebuild_cmd(
         except Exception as exc:  # noqa: BLE001
             click.echo(f"total-recall: ontology consolidation skipped ({exc})", err=True)
 
+    # Optional local-LLM refinement (cold path, opt-in via env).
+    # Heuristics produce the authoritative baseline; the LLM only REFINES
+    # specific weak fields (machines NER, vocabulary definitions, project
+    # narratives). Skipped silently if ollama isn't running or the model
+    # isn't pulled — heuristic results remain canonical.
+    try:
+        from extractors.llm.client import get_default_client  # type: ignore[import-not-found]
+        _llm = get_default_client()
+        if _llm.available:
+            if verbose:
+                click.echo(
+                    f"[rebuild] LLM refinement enabled"
+                    f" (provider={_llm.provider}, model={_llm.model})",
+                    err=True,
+                )
+
+            # Machines refinement
+            try:
+                from extractors.llm.refine_machines import refine_machines  # type: ignore[import-not-found]
+                from index.operator import get_profile, upsert_profile_field  # type: ignore[import-not-found]
+                conn = connect(db_path)
+                try:
+                    prof = get_profile(conn)
+                    machines = prof.get("machines") or {}
+                    email = prof.get("email_primary") or None
+                    refined = refine_machines(machines, operator_email=email, client=_llm)
+                    if refined is not None and refined != machines:
+                        upsert_profile_field(
+                            conn,
+                            key="machines",
+                            value=refined,
+                            confidence=prof.get("_confidence", {}).get("machines", 0.5),
+                            sources=prof.get("_sources", {}).get("machines", []),
+                        )
+                        conn.commit()
+                finally:
+                    conn.close()
+            except Exception as exc:  # noqa: BLE001
+                click.echo(f"total-recall: machines LLM refinement skipped ({exc})", err=True)
+
+            # Vocabulary + project narratives refinement
+            try:
+                from extractors.llm.refine_ontology import (  # type: ignore[import-not-found]
+                    refine_project_narratives,
+                    refine_vocabulary_definitions,
+                )
+                from index.ontology import (  # type: ignore[import-not-found]
+                    list_projects,
+                    list_terms,
+                    upsert_project,
+                    upsert_vocabulary_term,
+                )
+                conn = connect(db_path)
+                try:
+                    # Vocabulary
+                    vocab_rows = list_terms(conn)
+                    if vocab_rows:
+                        refined_vocab = refine_vocabulary_definitions(vocab_rows, client=_llm)
+                        for v in refined_vocab:
+                            if v.get("definition") is not None:
+                                upsert_vocabulary_term(
+                                    conn,
+                                    v["term"],
+                                    v.get("definition") or "",
+                                    v.get("category", "concept"),
+                                    v.get("frequency", 1),
+                                )
+                    # Project narratives
+                    proj_rows = list_projects(conn)
+                    if proj_rows:
+                        refined_projs = refine_project_narratives(proj_rows, client=_llm)
+                        for p in refined_projs:
+                            if p.get("narrative"):
+                                upsert_project(
+                                    conn,
+                                    cwd=p["cwd"],
+                                    display_name=p.get("display_name"),
+                                    purpose=p["narrative"][:300],
+                                    primary_language=p.get("primary_language"),
+                                )
+                    conn.commit()
+                finally:
+                    conn.close()
+            except Exception as exc:  # noqa: BLE001
+                click.echo(f"total-recall: ontology LLM refinement skipped ({exc})", err=True)
+        elif verbose:
+            click.echo(
+                "[rebuild] LLM refinement off"
+                " (ollama/model absent or TOTAL_RECALL_LLM_PROVIDER=none)",
+                err=True,
+            )
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"total-recall: LLM layer load failed ({exc})", err=True)
+
     elapsed = time.monotonic() - started
 
     files = _result_get(result, "files", 0)
