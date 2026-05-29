@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.3] - 2026-05-28
+
+### Fixed — vocabulary miner specificity (lifts both heuristic + LLM-refined vocab)
+
+The data-driven `mine_vocabulary` surfaced generic single English words by raw
+frequency (`andrew`, `home`, `name`, `state`, `agent`, `read`, `ctrl`),
+polluting the `vocabulary` table and feeding the LLM refinement garbage inputs
+(which it correctly nulled — wasted work). Added a specificity gate in
+`extractors/ontology.py`: a token is promoted only if it carries a structural
+marker (hyphen / digit / dot / multi-word / internal-caps) OR is a bare alpha
+word that is NOT in an English wordlist AND ≥ a minimum length. This keeps
+coined/domain names (`opnsense`, `wireguard`, `litestream`, `relay-eu-west`,
+`racknerd-4b4fa33`) and drops common English. Real-corpus top-40 after the fix
+is all domain-specific (`ip-service-for-docker`, `opnsense`, `wireguard`,
+`relay-us-east`, `docker-compose`, …) with zero generics.
+
+### Fixed — operator-specific literal in co-mention stopwords
+
+`extractors/ontology.py` `_CO_MENTION_STOPWORDS` hardcoded the author's
+username `andrew` (a v0.8.0 leftover, despite a "no operator-specific
+literals" comment) — it only stripped one operator's username and did nothing
+for anyone else. Removed; the co-mention path relies on the generic
+short-name / stopword filters. Neutralised remaining illustrative comments
+that used the real first name (`andrew@example.com` → `dana@example.com`) and
+fixed a stale `speak-like-andrew` → `speak-like-operator` skill reference.
+
+New ontology tests: `test_mine_vocabulary_drops_generic_english`,
+`test_mine_vocabulary_keeps_operator_specific`. Full unit suite: 1106 passed.
+
 ## [0.9.2] - 2026-05-28
 
 ### Fixed — LLM refinement now fires + persists during rebuild (validated end-to-end on real corpus + live ollama)

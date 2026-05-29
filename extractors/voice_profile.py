@@ -45,7 +45,7 @@ __all__ = [
 
 # Anything longer than this is almost certainly a pasted spec / log / prompt
 # template, not a natural turn. 400 chars matches the research filter that
-# produced the cheat sheet in skills/speak-like-andrew/SKILL.md.
+# produced the cheat sheet in skills/speak-like-operator/SKILL.md.
 NATURAL_MAX_CHARS = 400
 
 # First-word imperatives — used to compute imperative_first_word_pct.

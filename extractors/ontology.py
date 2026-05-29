@@ -37,6 +37,81 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
+# ---------------------------------------------------------------------------
+# English wordlist — loaded once, used by the vocabulary specificity filter.
+# Mirrors the pattern in extractors/voice_profile.py.
+# ---------------------------------------------------------------------------
+
+_ENGLISH_WORDS_CACHE: frozenset[str] | None = None
+
+
+def _load_english_wordlist() -> frozenset[str]:
+    """Return a frozenset of lowercase English words.
+
+    Tries /usr/share/dict/words first (Linux/macOS system wordlist, ~100k
+    entries). Falls back to an embedded ~600-word common-English set that
+    covers the vocabulary most likely to pollute operator-specific mining
+    (common verbs, nouns, adjectives, pronouns).
+    """
+    system_path = "/usr/share/dict/words"
+    try:
+        with open(system_path, encoding="utf-8", errors="ignore") as fh:
+            words = frozenset(w.strip().lower() for w in fh if w.strip().isalpha())
+        if len(words) > 1000:
+            return words
+    except OSError:
+        pass
+
+    # Embedded fallback — intentionally broad to suppress common English noise.
+    _COMMON = (
+        "a", "about", "above", "across", "add", "after", "again", "against",
+        "ago", "all", "also", "although", "always", "and", "any", "are",
+        "around", "as", "at", "back", "bad", "be", "because", "been",
+        "before", "being", "below", "between", "both", "build", "but", "by",
+        "call", "can", "change", "check", "clean", "close", "code", "come",
+        "config", "copy", "could", "create", "current", "data", "day", "dead",
+        "debug", "delete", "deploy", "did", "do", "does", "done", "down",
+        "each", "easy", "end", "error", "every", "fail", "false", "far",
+        "file", "find", "first", "fix", "for", "from", "full", "get", "go",
+        "going", "good", "got", "great", "had", "has", "have", "he", "help",
+        "her", "here", "him", "his", "how", "if", "in", "install", "into",
+        "is", "it", "its", "just", "keep", "key", "know", "last", "let",
+        "like", "list", "local", "log", "long", "look", "make", "may", "me",
+        "merge", "more", "most", "move", "much", "must", "my", "name", "new",
+        "next", "no", "not", "now", "null", "of", "off", "ok", "on", "one",
+        "only", "open", "or", "other", "our", "out", "over", "path", "pick",
+        "port", "pull", "push", "put", "re", "read", "real", "remove",
+        "restart", "right", "run", "same", "see", "server", "set", "should",
+        "show", "since", "so", "some", "start", "still", "stop", "sure",
+        "take", "test", "than", "that", "the", "their", "them", "then",
+        "there", "these", "they", "this", "through", "time", "to", "too",
+        "true", "try", "two", "under", "up", "update", "use", "used",
+        "using", "very", "via", "want", "was", "way", "we", "were", "what",
+        "when", "where", "which", "while", "who", "why", "will", "with",
+        "work", "write", "yes", "yet", "you", "your",
+        "agent", "home", "user", "state", "read", "type", "item", "node",
+        "root", "base", "info", "send", "load", "save", "mode", "view",
+        "move", "step", "task", "line", "main", "plan", "repo", "role",
+        "rule", "side", "size", "sort", "spec", "text", "tree", "type",
+        "unit", "word", "note", "host", "link", "call", "cast", "bind",
+        "done", "fail", "feel", "flag", "form", "gate", "give", "grab",
+        "hard", "hash", "head", "hold", "hook", "idea", "init", "join",
+        "kind", "lack", "mark", "mean", "meet", "miss", "name", "near",
+        "need", "next", "nice", "null", "once", "pair", "pass", "ping",
+        "pipe", "poll", "pool", "post", "prep", "rate", "rate", "wrap",
+        "wait", "warn", "with", "sign", "skip", "slow", "snap", "span",
+        "spin", "stat", "stem", "swap", "sync", "tail", "tell", "tend",
+        "test", "tick", "trim", "turn", "vary", "void", "walk", "watch",
+    )
+    return frozenset(_COMMON)
+
+
+def _get_english_words() -> frozenset[str]:
+    global _ENGLISH_WORDS_CACHE
+    if _ENGLISH_WORDS_CACHE is None:
+        _ENGLISH_WORDS_CACHE = _load_english_wordlist()
+    return _ENGLISH_WORDS_CACHE
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -141,6 +216,8 @@ _UNIVERSAL_CLAUDE_CODE_TERMS: list[VocabularyTerm] = [
 ]
 
 # Common English stopwords — single-word only (2-grams checked separately).
+# Also includes generic path-segment noise (home, user, name, state, read,
+# agent, …) that leaks through the length filter but is never operator-specific.
 _STOPWORDS: frozenset[str] = frozenset(
     """
     a about above after again against all also am an and any are aren't as at
@@ -165,6 +242,15 @@ _STOPWORDS: frozenset[str] = frozenset(
     old one other our own part please put really right run same see set show
     since still take then there thing things think though time too true until
     upon use used using via want way well where while without yet
+    home name state read user file path type item node root base info send
+    load save mode view step task line main plan repo role rule side size
+    sort spec text tree unit word note host link cast bind feel flag form
+    gate give grab hard hash head hold hook idea init join kind lack mark
+    mean meet miss near need nice null once pair pass ping pipe poll pool
+    post prep rate wrap wait warn sign skip slow snap span spin stat stem
+    swap sync tail tell tend tick trim turn vary void walk watch agent open
+    data code work test true real done fail help push pull keep next make
+    move show stop start some more find just over back into this from also
     """.split()
 )
 
@@ -202,6 +288,45 @@ _VOCAB_MIN_TOKEN_LEN: int = 4
 # Regex to extract candidate tokens from operator text (words + hyphenated compounds).
 _TOKEN_RE = re.compile(r"\b([a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*)\b")
 
+# Minimum length for a bare-alpha word to be considered operator-specific when
+# it is NOT in the English wordlist (e.g. "opnsense", "wireguard").
+_BARE_ALPHA_MIN_LEN: int = 5
+
+
+def _derive_operator_usernames(projects_root: Path) -> frozenset[str]:
+    """Detect the operator's Unix username(s) from /home/<name>/ path segments.
+
+    Scans the cwd slug of each project directory (format: -home-<name>-...).
+    Returns the set of all <name> values found — typically just one.
+    Purely data-driven; no hardcoded names.
+    """
+    names: set[str] = set()
+    if not projects_root.is_dir():
+        return frozenset()
+    for child in projects_root.iterdir():
+        if not child.is_dir():
+            continue
+        # Slug: -home-<username>-...  Strip leading dash then split.
+        parts = child.name.lstrip("-").split("-")
+        # Look for the "home" segment and take the following segment as username.
+        for i, part in enumerate(parts):
+            if part == "home" and i + 1 < len(parts):
+                candidate = parts[i + 1]
+                if candidate and candidate.isalpha() and len(candidate) >= 2:
+                    names.add(candidate.lower())
+    return frozenset(names)
+
+
+# Module-level cache so we only derive once per process invocation.
+_OPERATOR_USERNAMES: frozenset[str] | None = None
+
+
+def _get_operator_usernames(projects_root: Path) -> frozenset[str]:
+    global _OPERATOR_USERNAMES
+    if _OPERATOR_USERNAMES is None:
+        _OPERATOR_USERNAMES = _derive_operator_usernames(projects_root)
+    return _OPERATOR_USERNAMES
+
 
 def _snippet_for_term(term: str, text: str, window: int = 60) -> str:
     """Return a short context snippet around the first occurrence of ``term``.
@@ -229,8 +354,49 @@ def _snippet_for_term(term: str, text: str, window: int = 60) -> str:
     return snippet[:120]
 
 
-def _is_boring_token(tok: str) -> bool:
-    """True if ``tok`` is a stopword, generic tech term, or too short."""
+def _has_specificity_marker(tok: str) -> bool:
+    """Return True if ``tok`` carries a structural marker that makes it
+    operator-specific regardless of whether it appears in a wordlist.
+
+    Specificity markers (any one is sufficient):
+    - Contains a hyphen  → compound service/hostname style (``relay-eu-west``)
+    - Contains a digit   → version/ID-suffixed name (``racknerd-4b4fa33``)
+    - Contains a dot     → FQDN/namespace style (``api.example.com``)
+    - Is mixed-case/camelCase → proper noun or acronym (``WireGuard``, ``OpnSense``)
+    - Is a multi-word phrase  → already operator-specific by definition
+    - Is a bare alpha word NOT in the English wordlist AND length >= _BARE_ALPHA_MIN_LEN
+      → coined / domain name (``opnsense``, ``wireguard``, ``litestream``)
+    """
+    # Structural markers — fast O(1) checks first.
+    if "-" in tok:
+        return True
+    if any(c.isdigit() for c in tok):
+        return True
+    if "." in tok:
+        return True
+    if " " in tok:
+        return True
+
+    # Mixed-case / camelCase: has both upper and lower letters and the first
+    # uppercase is NOT just the leading character (e.g. "WireGuard", not "Wire").
+    lower = tok.lower()
+    has_upper_after_first = any(c.isupper() for c in tok[1:])
+    has_lower = any(c.islower() for c in tok)
+    if has_upper_after_first and has_lower:
+        return True
+
+    # Bare alpha word: keep only if long enough AND not a known English word.
+    if tok.isalpha() and len(lower) >= _BARE_ALPHA_MIN_LEN:
+        english_words = _get_english_words()
+        if lower not in english_words:
+            return True
+
+    return False
+
+
+def _is_boring_token(tok: str, operator_usernames: frozenset[str] | None = None) -> bool:
+    """True if ``tok`` is a stopword, generic tech term, too short, or
+    lacks any specificity marker indicating it is operator-specific."""
     lower = tok.lower()
     if len(lower) < _VOCAB_MIN_TOKEN_LEN:
         return True
@@ -241,10 +407,20 @@ def _is_boring_token(tok: str) -> bool:
     # Pure numeric or version strings (e.g. "1234", "v0.3") — skip.
     if re.fullmatch(r"v?\d+[\d.]*", lower):
         return True
+    # Drop the operator's own username — it appears everywhere but is not vocab.
+    if operator_usernames and lower in operator_usernames:
+        return True
+    # Specificity filter: drop generic English words that have no structural
+    # marker making them operator-specific.
+    if not _has_specificity_marker(tok):
+        return True
     return False
 
 
-def _extract_operator_tokens(rec: dict) -> list[str]:
+def _extract_operator_tokens(
+    rec: dict,
+    operator_usernames: frozenset[str] | None = None,
+) -> list[str]:
     """Extract candidate vocabulary tokens from a user-role record only.
 
     We mine operator turns exclusively — assistant turns are Claude output,
@@ -269,7 +445,7 @@ def _extract_operator_tokens(rec: dict) -> list[str]:
         return []
     text = " ".join(parts)
     tokens = _TOKEN_RE.findall(text)
-    return [t for t in tokens if not _is_boring_token(t)]
+    return [t for t in tokens if not _is_boring_token(t, operator_usernames)]
 
 
 def mine_vocabulary(
@@ -286,6 +462,10 @@ def mine_vocabulary(
 
     Returns terms sorted by frequency descending.
     """
+    # Derive the operator's username(s) from the project slugs so we can
+    # drop them from vocabulary (they appear everywhere but are not vocab).
+    operator_usernames = _derive_operator_usernames(projects_root)
+
     # term → {session_ids}
     term_sessions: dict[str, set[str]] = defaultdict(set)
     # term → total count
@@ -304,7 +484,7 @@ def mine_vocabulary(
                 file_ts = 0
 
             for rec in _iter_jsonl_records(session_file):
-                tokens = _extract_operator_tokens(rec)
+                tokens = _extract_operator_tokens(rec, operator_usernames)
                 if not tokens:
                     continue
                 # For snippet extraction, rebuild the full text from this rec.
@@ -745,7 +925,7 @@ _CO_MENTION_TOP_N: int = 5
 _CO_MENTION_STOPWORDS: frozenset[str] = frozenset(
     """
     home tmp src code github gitlab users opt local share bin lib
-    projects project work workspace dev repos repo andrew user
+    projects project work workspace dev repos repo user
     """.split()
 )
 

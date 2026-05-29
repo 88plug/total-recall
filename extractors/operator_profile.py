@@ -686,7 +686,7 @@ def _extract_from_text_stream(
         profile.confidence["name"] = min(0.7, 0.4 + 0.05 * n)
     elif profile.email_primary and "@" in profile.email_primary:
         # Last-resort: derive a candidate from the email local part.
-        # ``andrew@example.com`` → ``Andrew``. Honest when the corpus has
+        # ``dana@example.com`` → ``Dana``. Honest when the corpus has
         # no explicit git/author declaration and no person-name mentions.
         local = profile.email_primary.split("@", 1)[0]
         local_main = re.split(r"[._+\-]", local)[0]
@@ -698,12 +698,12 @@ def _extract_from_text_stream(
         # a handle matching the email local-part, the email SLD (second-level
         # domain label), or a name token gets a strong frequency boost so it
         # beats unrelated high-frequency tokens (e.g. a frequently-mentioned
-        # project like ``opnsense`` can't outrank ``andrew`` when the email is
-        # ``andrew@example.com``).
+        # project like ``opnsense`` can't outrank ``dana`` when the email is
+        # ``dana@example.com``).
         identity_tokens: set[str] = set()
         if profile.email_primary and "@" in profile.email_primary:
             local, domain = profile.email_primary.split("@", 1)
-            # Local part and each dot/dash component (e.g. "andrew.m" → "andrew").
+            # Local part and each dot/dash component (e.g. "dana.m" → "dana").
             identity_tokens.add(local.lower())
             for tok in re.split(r"[._+\-]", local):
                 if tok:

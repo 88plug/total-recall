@@ -32,6 +32,7 @@ from extractors.ontology import (
     _extract_machines_from_text,
     compute_co_mention_graph,
     extract_ontology,
+    mine_vocabulary,
     persist_ontology,
     _UNIVERSAL_CLAUDE_CODE_TERMS,
 )
@@ -479,3 +480,116 @@ def test_co_mention_graph_populates_related_projects(tmp_path: Path) -> None:
     # After persist + read-back the dicts are preserved.
     assert rp[0]["mention_count"] == 10
     assert rp[1]["mention_count"] == 2
+
+
+# ---------------------------------------------------------------------------
+# 8. Vocabulary specificity filter — generic English words are dropped
+# ---------------------------------------------------------------------------
+
+
+def _write_session_file(path: Path, records: list[dict]) -> None:
+    with path.open("w", encoding="utf-8") as fh:
+        for r in records:
+            fh.write(json.dumps(r) + "\n")
+
+
+def _make_user_record(session_id: str, uuid: str, content: str, cwd: str) -> dict:
+    return {
+        "type": "user",
+        "sessionId": session_id,
+        "uuid": uuid,
+        "timestamp": "2026-05-01T10:00:00Z",
+        "cwd": cwd,
+        "message": {"role": "user", "content": content},
+    }
+
+
+def test_mine_vocabulary_drops_generic_english(tmp_path: Path) -> None:
+    """Generic English words and the operator's username must NOT be promoted.
+
+    Synthetic corpus: user turns in 3 sessions each repeat
+    ``home``, ``name``, ``state``, ``read``, and ``andrew`` 20 times.
+    None of these should appear in the promoted vocabulary.
+    """
+    root = tmp_path / "projects"
+    root.mkdir()
+    proj = root / "-home-andrew-myproject"
+    proj.mkdir()
+
+    # Three sessions, each with many occurrences of generic words.
+    generic_words = ["home", "name", "state", "read", "andrew"]
+    content = " ".join(w for w in generic_words for _ in range(20))
+
+    for i in range(3):
+        sess_path = proj / f"{'a' * 31}{i}.jsonl"
+        _write_session_file(
+            sess_path,
+            [_make_user_record(f"s{i}", f"u{i}", content, "/home/andrew/myproject")],
+        )
+
+    terms = mine_vocabulary(root, min_sessions=2, min_freq=4)
+    promoted_names = {t.term for t in terms}
+
+    for word in generic_words:
+        assert word not in promoted_names, (
+            f"generic word {word!r} must not be promoted to vocabulary, "
+            f"but it was. All promoted: {sorted(promoted_names)}"
+        )
+
+
+def test_mine_vocabulary_keeps_operator_specific(tmp_path: Path) -> None:
+    """Operator-specific terms must be promoted; generic ones must not.
+
+    Synthetic corpus:
+    - ``opnsense``      15× across 3 sessions  (bare alpha, not English, len>=5)
+    - ``wireguard``      8× across 3 sessions  (bare alpha, not English, len>=5)
+    - ``relay-eu-west``  6× across 2 sessions  (hyphenated compound — always kept)
+    - ``home``/``name``/``state``/``read``/``andrew`` 20× per session (generic)
+
+    Expect: opnsense, wireguard, relay-eu-west promoted; generics dropped.
+    Note: we avoid ``sidecar`` here because it exists in /usr/share/dict/words
+    and would be filtered on systems that have the system wordlist installed.
+    """
+    root = tmp_path / "projects"
+    root.mkdir()
+    proj = root / "-home-andrew-infra"
+    proj.mkdir()
+
+    generic_blob = " ".join(
+        w for w in ["home", "name", "state", "read", "andrew"] for _ in range(20)
+    )
+
+    # 3 sessions: all mention opnsense 5×, wireguard 3×, relay-eu-west 2× each.
+    for i in range(3):
+        specific_blob = (
+            " opnsense" * 5
+            + " wireguard" * 3
+            + (" relay-eu-west" * 2 if i < 2 else "")  # relay-eu-west only in first 2
+        )
+        content = generic_blob + specific_blob
+        sess_path = proj / f"{'b' * 31}{i}.jsonl"
+        _write_session_file(
+            sess_path,
+            [_make_user_record(f"s{i}", f"u{i}", content, "/home/andrew/infra")],
+        )
+
+    terms = mine_vocabulary(root, min_sessions=2, min_freq=4)
+    promoted_names = {t.term for t in terms}
+
+    # Specific terms must be present.
+    assert "opnsense" in promoted_names, (
+        f"'opnsense' must be promoted but was not. Promoted: {sorted(promoted_names)}"
+    )
+    assert "wireguard" in promoted_names, (
+        f"'wireguard' must be promoted but was not. Promoted: {sorted(promoted_names)}"
+    )
+    assert "relay-eu-west" in promoted_names, (
+        f"'relay-eu-west' must be promoted but was not. Promoted: {sorted(promoted_names)}"
+    )
+
+    # Generic words must not be present.
+    for word in ["home", "name", "state", "read", "andrew"]:
+        assert word not in promoted_names, (
+            f"generic word {word!r} must not be promoted. "
+            f"Promoted: {sorted(promoted_names)}"
+        )
