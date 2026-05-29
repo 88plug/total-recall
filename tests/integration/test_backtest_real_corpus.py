@@ -43,6 +43,19 @@ pytestmark = pytest.mark.skipif(
     reason="real corpus or ground_truth.json absent — local-only backtest",
 )
 
+# NOTE (multi-source coverage):
+# The consolidation pass now reads all sources via ``lib.sources.collect``
+# (claude_code, opencode, gemini_cli, codex, cursor, continue, cline, aider).
+# The tests in this file exercise ``extract_operator_profile``,
+# ``extract_incremental``, and ``mine_vocabulary`` — all of which call the
+# same ``_extract_from_text_stream`` / ``_iter_text_from_records`` internals
+# that ``extract_operator_profile_from_records`` uses for multi-source input.
+# No assertion here implicitly assumes claude_code-only input: every call
+# accepts a list of JSONL paths resolved from CORPUS_ROOT, which may include
+# sessions from any registered adapter.  If you add a ground-truth fixture
+# that includes opencode or aider sessions, the existing assertions will cover
+# them without modification.
+
 
 # --------------------------------------------------------------------------- #
 # Helpers

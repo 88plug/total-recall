@@ -60,6 +60,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "extract_satisfaction",
     "extract_satisfaction_incremental",
+    "extract_satisfaction_from_records",
     "classify_reaction",
     "classify_ai_behavior",
 ]
@@ -388,3 +389,96 @@ def extract_satisfaction_incremental(
     base_matrix: dict[str, dict[str, int]] = existing.get("matrix", {})
     merged = _merge_matrices(base_matrix, delta)
     return _summarise(merged)
+
+
+def _record_to_dag_dict(rec: Any) -> dict | None:
+    """Convert a :class:`lib.schema.Record` instance to the raw-dict shape
+    that :func:`_process_dag` expects.
+
+    ``_process_dag`` was written against Claude Code JSONL dicts and uses
+    ``rec.get("type")``, ``rec.get("uuid")``, ``rec.get("parentUuid")``,
+    ``rec.get("isSidechain")``, and ``rec.get("message", {})`` for content.
+    This adapter bridges the normalized Record dataclass to that shape.
+
+    Returns ``None`` for records with no uuid (not useful for DAG traversal).
+    """
+    uid = getattr(rec, "uuid", None)
+    if not uid:
+        return None
+
+    rec_type = getattr(rec, "type", "")
+
+    # Reconstruct the ``message`` dict from Record fields so _process_dag
+    # can use its existing _get_content_str / _extract_text helpers.
+    if rec_type == "user":
+        text = getattr(rec, "text", None) or ""
+        message: dict = {"role": "user", "content": text}
+    elif rec_type == "assistant":
+        # Rebuild content blocks list from Block dataclass instances.
+        raw_blocks: list[dict] = []
+        for blk in (getattr(rec, "content", None) or []):
+            btype = getattr(blk, "type", "")
+            if btype == "text":
+                raw_blocks.append({"type": "text", "text": getattr(blk, "text", "") or ""})
+            elif btype == "thinking":
+                raw_blocks.append({"type": "thinking", "thinking": getattr(blk, "thinking", "") or ""})
+            elif btype == "tool_use":
+                tu = getattr(blk, "tool_use", None)
+                raw_blocks.append({
+                    "type": "tool_use",
+                    "id": getattr(tu, "id", "") if tu else "",
+                    "name": getattr(tu, "name", "") if tu else "",
+                    "input": getattr(tu, "input", {}) if tu else {},
+                })
+            else:
+                raw_blocks.append(getattr(blk, "raw", None) or {"type": btype})
+        message = {"role": "assistant", "content": raw_blocks}
+    else:
+        message = {}
+
+    return {
+        "type": rec_type,
+        "uuid": uid,
+        "parentUuid": getattr(rec, "parent_uuid", None),
+        "isSidechain": bool(getattr(rec, "is_sidechain", False)),
+        "message": message,
+        "timestamp": None,
+    }
+
+
+def extract_satisfaction_from_records(
+    records: "Iterable[Any]",
+    existing: dict | None = None,
+) -> dict:
+    """Full or incremental satisfaction extraction from a multi-source record stream.
+
+    Accepts :class:`lib.schema.Record` instances (as yielded by
+    :func:`lib.sources.collect.iter_all_source_records`) and converts them to
+    the raw-dict shape required by :func:`_process_dag`.
+
+    Parameters
+    ----------
+    records:
+        Iterable of :class:`lib.schema.Record` objects OR raw Claude Code JSONL
+        dicts.  Mixed streams are handled — each item is probed with
+        ``isinstance(rec, dict)`` to decide whether conversion is needed.
+    existing:
+        Optional existing profile dict to merge into (same semantics as
+        :func:`extract_satisfaction_incremental`).  Pass ``None`` or ``{}`` for
+        a cold-pass extraction.
+
+    Returns
+    -------
+    dict — profile dict suitable for
+    :func:`index.satisfaction.persist_satisfaction`.
+    """
+    dag_dicts: list[dict] = []
+    for rec in records:
+        if isinstance(rec, dict):
+            dag_dicts.append(rec)
+        else:
+            converted = _record_to_dag_dict(rec)
+            if converted is not None:
+                dag_dicts.append(converted)
+
+    return extract_satisfaction_incremental(dag_dicts, existing or {})

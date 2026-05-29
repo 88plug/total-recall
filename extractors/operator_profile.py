@@ -58,6 +58,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "OperatorProfile",
     "extract_operator_profile",
+    "extract_operator_profile_from_records",
     "extract_incremental",
     "persist_profile",
     "persist_incremental_profile",
@@ -825,6 +826,20 @@ def extract_operator_profile(jsonl_paths: Iterable[Path]) -> OperatorProfile:
     the persisted JSON sane.
     """
     return _extract_from_text_stream(_iter_text_from_paths(jsonl_paths))
+
+
+def extract_operator_profile_from_records(records: Iterable[Any]) -> OperatorProfile:
+    """Mine an in-memory record stream for operator identity signals.
+
+    Accepts both :class:`lib.schema.Record` instances (as yielded by
+    :func:`lib.sources.collect.iter_all_source_records`) and raw Claude Code
+    JSONL dicts.  Either way, :func:`_iter_text_from_records` handles the
+    shape normalization.
+
+    Use this for cold-rebuild / consolidation passes that source records from
+    multiple CLI adapters rather than file paths.
+    """
+    return _extract_from_text_stream(_iter_text_from_records(records))
 
 
 # ---------------------------------------------------------------------------

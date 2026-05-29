@@ -2,6 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.7] - 2026-05-29
+
+### Added — operator profile now mined from ALL CLI sources, not just Claude Code
+
+The thesis is "capture the operator's essence from every way they interact
+with AI on the machine." Ingest was already multi-source (the `messages`
+table is `source`-tagged across all 8 adapters), but the rebuild
+**consolidation** — the pass that builds operator_profile / workflow /
+implicit_preferences / satisfaction / ontology — globbed `~/.claude/projects`
+only, so the profile was claude_code-only. On this machine that silently
+dropped **1,526 OpenCode messages**.
+
+- **`lib/sources/collect.py`** (new): `iter_all_source_records()` /
+  `materialize_all_source_records()` — walks every available `SessionSource`
+  adapter (`discover_sessions()` → `iter_records(session)`) and yields the
+  common `Record` stream. One broken session/source logs a warning and is
+  skipped, never aborting the pass.
+- **Record-stream entry points** on the 5 consolidation extractors:
+  `extract_operator_profile_from_records`, `extract_workflow_from_records`,
+  `extract_satisfaction_from_records`, `extract_ontology_from_records`, and
+  the implicit-preferences triples form. Each accepts the common `Record`
+  (unwrapping via `.raw` / attribute access; satisfaction bridges `Record →`
+  the raw-dict shape its DAG walk needs). Heuristic logic unchanged.
+- **`cmd_rebuild`** materializes all-source records once and feeds all five.
+  Ontology is dual-source: machines + vocabulary from the full multi-source
+  stream, projects + co-mention graph still from the claude_code path glob
+  (`persist_ontology` COALESCE-upserts so neither clobbers the other).
+- **Scoping**: `--projects-root` overrides the *claude_code* projects dir
+  only (it has no meaning for opencode/codex/…), so it now correctly **skips**
+  the multi-source collector and scopes consolidation to that root. Without
+  an override, the collector mines everything. (This bug — the collector
+  ignoring `--projects-root` — was caught by `test_rebuild_consolidation`.)
+
+### Added — multi-source backtest
+
+`tests/integration/test_backtest_multi_source.py`: per-source tagging,
+cross-source dedup, a **load-bearing regression** that a fact appearing ONLY
+in a non-claude_code source reaches `operator_profile` via the from-records
+path, and a real-machine test (ran ungated here: claude_code=133,581 +
+opencode=1,526 messages). Existing consolidation/operator/ontology tests
+updated to assert multi-source coverage.
+
+Full unit suite: 1162 passed. Multi-source backtest: 5 passed (real data).
+
 ## [0.9.6] - 2026-05-29
 
 ### Fixed — real-usage reliability + guards so the bug classes can't recur

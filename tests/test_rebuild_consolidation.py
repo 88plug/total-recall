@@ -14,7 +14,10 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from extractors.operator_profile import extract_operator_profile
+from extractors.operator_profile import (
+    extract_operator_profile,
+    extract_operator_profile_from_records,
+)
 from index.db import connect
 from index.operator import get_profile
 from total_recall.__main__ import cli
@@ -133,3 +136,127 @@ def test_rebuild_profile_has_no_credential_fields(tmp_path: Path) -> None:
         assert "password" not in key.lower()
         assert "secret" not in key.lower()
         assert key != "default_root_pw"
+
+
+# ---------------------------------------------------------------------------
+# Multi-source consolidation: from_records path
+# ---------------------------------------------------------------------------
+
+
+def _opencode_dict(text: str, cwd: str = "/home/operator/oc-proj") -> dict:
+    """Minimal dict shaped like a normalized OpenCode record.
+
+    ``source_file`` is set to a path outside ``~/.claude/`` so the extractor
+    cannot confuse this with a claude_code JSONL record.
+    """
+    return {
+        "type": "user",
+        "sessionId": "oc-sess-rebuild",
+        "cwd": cwd,
+        "timestamp": "2026-05-01T15:00:00.000Z",
+        "source_file": "/home/operator/.local/share/opencode/rebuild-session.json",
+        "byte_offset": 0,
+        "message": {"role": "user", "content": text},
+    }
+
+
+def _opencode_asst(text: str, cwd: str = "/home/operator/oc-proj") -> dict:
+    return {
+        "type": "assistant",
+        "sessionId": "oc-sess-rebuild",
+        "cwd": cwd,
+        "timestamp": "2026-05-01T15:00:01.000Z",
+        "source_file": "/home/operator/.local/share/opencode/rebuild-session.json",
+        "byte_offset": 200,
+        "message": {
+            "id": "oc_msg_r",
+            "model": "gpt-4o",
+            "role": "assistant",
+            "content": [{"type": "text", "text": text}],
+        },
+    }
+
+
+def test_from_records_multi_source_opencode_signal_surfaces() -> None:
+    """``extract_operator_profile_from_records`` must surface identity signals
+    carried by records tagged as opencode (non-claude_code ``source_file``).
+
+    This exercises the same consolidation path that ``rebuild`` uses when it
+    reads from ``lib.sources.collect`` (multi-source) rather than walking
+    ``~/.claude/projects/*.jsonl`` directly.  By asserting on the from_records
+    entry point we pin that the consolidation cannot silently regress to
+    claude_code-only input.
+    """
+    oc_records = [
+        _opencode_dict(
+            "I'm Petra Nkosi (petranx). Email: petra@tessaract.dev. "
+            "github.com/petranx is my profile. "
+            "We run on Asia/Kolkata time. Never use heroku."
+        ),
+        _opencode_asst(
+            "Got it — petra@tessaract.dev, github.com/petranx, Asia/Kolkata."
+        ),
+        _opencode_dict("Confirmed: petra@tessaract.dev is correct."),
+        _opencode_asst("Your primary handle is github.com/petranx."),
+    ]
+
+    profile = extract_operator_profile_from_records(oc_records)
+
+    assert profile.name == "Petra Nkosi", (
+        f"Expected 'Petra Nkosi' from opencode records, got {profile.name!r} — "
+        "multi-source consolidation dropped the opencode signal"
+    )
+    assert profile.email_primary == "petra@tessaract.dev", (
+        f"Expected 'petra@tessaract.dev', got {profile.email_primary!r}"
+    )
+    assert profile.timezone == "Asia/Kolkata", (
+        f"Expected 'Asia/Kolkata', got {profile.timezone!r}"
+    )
+    assert "heroku" in profile.banned_providers, (
+        "banned_providers must include 'heroku' from opencode records"
+    )
+    handle = (profile.handle or profile.github_user or "").lower()
+    assert handle in ("petranx", "tessaract"), (
+        f"Expected handle 'petranx' (or domain label 'tessaract'), got {handle!r}"
+    )
+
+
+def test_from_records_mixed_sources_consolidates_to_global_winner() -> None:
+    """When records come from both claude_code and opencode, the final profile
+    must reflect the globally-strongest signal (email-corroborated handle wins
+    over a noisier unrelated token), exactly as the rebuild consolidation
+    guarantees for the file-based path.
+    """
+    noisy_cc = [
+        _user(
+            "look at github.com/noisylib — github.com/noisylib is great, "
+            "github.com/noisylib again, github.com/noisylib repeated",
+            cwd="/home/operator/cc-proj",
+            sid="cc-sess-1",
+        ),
+        _assistant(
+            "github.com/noisylib noisylib noisylib",
+            cwd="/home/operator/cc-proj",
+            sid="cc-sess-1",
+        ),
+    ] * 3
+
+    signal_oc = [
+        _opencode_dict(
+            "im petra, email petra@tessaract.dev. see github.com/petranx. "
+            "timezone Asia/Kolkata."
+        ),
+        _opencode_asst("confirmed petra@tessaract.dev, github.com/petranx"),
+    ]
+
+    profile = extract_operator_profile_from_records(noisy_cc + signal_oc)
+
+    handle = (profile.handle or profile.github_user or "").lower()
+    # Email-corroborated "petranx" must beat the higher-frequency noise token.
+    assert handle != "noisylib", (
+        f"Consolidation let noisylib win — email-corroboration logic broken for "
+        f"multi-source input (got handle={handle!r})"
+    )
+    assert handle in ("petranx", "tessaract"), (
+        f"Expected corroborated handle, got {handle!r}"
+    )

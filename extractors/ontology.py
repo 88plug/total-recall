@@ -120,6 +120,7 @@ __all__ = [
     "VocabularyTerm",
     "OntologySnapshot",
     "extract_ontology",
+    "extract_ontology_from_records",
     "persist_ontology",
     "iter_project_dirs",
     "update_vocabulary_counts",
@@ -1152,6 +1153,200 @@ def compute_co_mention_graph(
         result.setdefault(proj.cwd, [])
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Record-stream entry point (multi-source collector path)
+# ---------------------------------------------------------------------------
+
+
+def _record_is_user_role(rec: Any) -> bool:
+    """Return True if ``rec`` is a user-role turn, handling both dict and
+    Record objects (lib.schema.UserRecord)."""
+    if isinstance(rec, dict):
+        msg = rec.get("message")
+        if isinstance(msg, dict):
+            return msg.get("role") == "user"
+        return False
+    # Record objects: UserRecord has a .text attribute and content_kind, but
+    # role is encoded in the type field.  Check rec.type == "user" as the
+    # cheapest proxy — that is exactly what the file-based path does.
+    return str(getattr(rec, "type", "")) == "user"
+
+
+def _extract_operator_tokens_from_rec(
+    rec: Any,
+    operator_usernames: frozenset[str] | None = None,
+) -> list[str]:
+    """Extract candidate vocabulary tokens from a user-role record.
+
+    Handles both raw dict records (existing corpus path) and Record objects
+    emitted by the multi-source collector.  Falls back to `.raw` for types
+    that carry the original dict.
+    """
+    if isinstance(rec, dict):
+        return _extract_operator_tokens(rec, operator_usernames)
+
+    # Record object path: only user-role turns yield operator vocabulary.
+    if not _record_is_user_role(rec):
+        return []
+
+    # Try .text first (UserRecord.text is the pre-extracted plain string).
+    text: str | None = None
+    t = getattr(rec, "text", None)
+    if isinstance(t, str) and t:
+        text = t
+    else:
+        # Fallback: try .raw (original dict) so _extract_operator_tokens works.
+        raw = getattr(rec, "raw", None)
+        if isinstance(raw, dict):
+            return _extract_operator_tokens(raw, operator_usernames)
+
+    if not text:
+        return []
+
+    tokens = _TOKEN_RE.findall(text)
+    return [tok for tok in tokens if not _is_boring_token(tok, operator_usernames)]
+
+
+def extract_ontology_from_records(records: Iterable[Any]) -> OntologySnapshot:
+    """Mine MACHINES and VOCABULARY from a stream of session records.
+
+    Accepts :class:`lib.schema.Record` objects from the multi-source
+    collector OR raw JSONL-parsed dicts — any mix is handled.
+
+    Returns an :class:`OntologySnapshot` with:
+    - ``machines`` populated via the existing hostname + IP regex pipeline.
+    - ``vocabulary`` populated via the same token-mining + specificity gate +
+      English-wordlist filter used by :func:`mine_vocabulary`, with the same
+      promotion thresholds (``VOCAB_MIN_SESSIONS`` / ``VOCAB_MIN_FREQ``).
+    - ``projects`` **empty** — project rows come from the ``projects`` table
+      already populated by the ingest path's directory walk.  Skip the
+      project-dir walk here because we don't have the projects-root path and
+      the co-mention graph (which needs full project slug lists) is a
+      separate concern executed on the file-based :func:`extract_ontology`
+      path during rebuild.
+
+    The co-mention graph is **not** computed here — it requires a
+    corpus-wide slug list + session-text collection and is not meaningful for
+    a single incremental record batch.  It remains a rebuild-only, full-corpus
+    concern in :func:`extract_ontology`.
+    """
+    snap = OntologySnapshot()
+    machines: dict[str, MachineRecord] = {}
+
+    # Vocab accumulators (mirror mine_vocabulary).
+    term_sessions: dict[str, set[str]] = defaultdict(set)
+    term_counts: Counter[str] = Counter()
+    term_snippet: dict[str, str] = {}
+    term_first_ts: dict[str, int] = {}
+
+    # We can't derive operator usernames from a project-dir walk here;
+    # skip the username-filter (minor — those names are caught by _STOPWORDS).
+    operator_usernames: frozenset[str] = frozenset()
+
+    for rec in records:
+        # --- Normalise to a usable shape ---
+        if isinstance(rec, dict):
+            raw_dict: dict | None = rec
+            rec_obj: Any = None
+        else:
+            raw_dict = getattr(rec, "raw", None) if isinstance(getattr(rec, "raw", None), dict) else None
+            rec_obj = rec
+
+        # --- Text extraction ---
+        if raw_dict is not None:
+            text = _flatten_record_text(raw_dict)
+            ts_val = raw_dict.get("timestamp") or ""
+            session_id = (
+                raw_dict.get("sessionId") or raw_dict.get("session_id") or "_stream"
+            )
+        else:
+            # Record object path.
+            text = _record_to_text(rec_obj)
+            ts_attr = getattr(rec_obj, "ts", None)
+            if ts_attr is not None:
+                try:
+                    ts_val = ts_attr.isoformat()
+                except AttributeError:
+                    ts_val = str(ts_attr)
+            else:
+                ts_val = ""
+            session_id = (
+                getattr(rec_obj, "session_id", None) or "_stream"
+            )
+
+        # Parse timestamp to unix seconds for MachineRecord.last_seen_ts.
+        ts_int = 0
+        if ts_val:
+            try:
+                from datetime import datetime, timezone
+                dt = datetime.fromisoformat(ts_val.replace("Z", "+00:00"))
+                ts_int = int(dt.astimezone(timezone.utc).timestamp())
+            except (ValueError, TypeError, AttributeError):
+                pass
+
+        # --- Machine extraction ---
+        if text:
+            _extract_machines_from_text(text, ts_int, machines)
+
+        # --- Vocabulary extraction (user-role turns only) ---
+        tokens = _extract_operator_tokens_from_rec(
+            raw_dict if raw_dict is not None else rec_obj,
+            operator_usernames,
+        )
+        if tokens:
+            # Reconstruct text for snippet extraction when needed.
+            rec_text = text
+            for tok in tokens:
+                key = tok.lower()
+                term_sessions[key].add(session_id)
+                term_counts[key] += 1
+                if key not in term_snippet and rec_text:
+                    snip = _snippet_for_term(tok, rec_text)
+                    if snip:
+                        term_snippet[key] = snip
+                if key not in term_first_ts and ts_int:
+                    term_first_ts[key] = ts_int
+
+    snap.machines = sorted(machines.values(), key=lambda m: m.hostname)
+
+    # Vocabulary: universal terms + promoted operator terms.
+    now = int(time.time())
+    seen_terms: set[str] = set()
+    for v in _UNIVERSAL_CLAUDE_CODE_TERMS:
+        snap.vocabulary.append(
+            VocabularyTerm(
+                term=v.term,
+                definition=v.definition,
+                category=v.category,
+                frequency=1,
+                first_seen_ts=now,
+            )
+        )
+        seen_terms.add(v.term.lower())
+
+    for key, sessions in term_sessions.items():
+        if len(sessions) < VOCAB_MIN_SESSIONS:
+            continue
+        freq = term_counts[key]
+        if freq < VOCAB_MIN_FREQ:
+            continue
+        if key in seen_terms:
+            continue
+        snap.vocabulary.append(
+            VocabularyTerm(
+                term=key,
+                definition=term_snippet.get(key, ""),
+                category="concept",
+                frequency=freq,
+                first_seen_ts=term_first_ts.get(key, 0),
+            )
+        )
+        seen_terms.add(key)
+
+    snap.vocabulary.sort(key=lambda v: v.frequency, reverse=True)
+    return snap
 
 
 # ---------------------------------------------------------------------------

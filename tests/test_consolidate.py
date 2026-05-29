@@ -412,3 +412,107 @@ def test_timer_unit_weekly() -> None:
     s = (_scripts_dir() / "total-recall-consolidate.timer").read_text()
     assert "OnCalendar=Sun" in s
     assert "WantedBy=timers.target" in s
+
+
+# --------------------------------------------------------------------------- #
+# Multi-source variant
+#
+# ``total-recall consolidate`` operates purely on the summary tables
+# (operator_profile, standing_decisions, bans, voice_profile, vocabulary,
+# vocab_candidates, tentative_facts, projects, machines) — it does NOT
+# re-read session files or branch on a per-row ``source`` field.  There is
+# therefore no source-specific code path inside the consolidate command that
+# could silently exclude opencode or other non-claude_code rows.
+#
+# The test below confirms this by seeding rows that carry an explicit
+# ``source='opencode'`` column (added to the mini-schema) and asserting that
+# consolidate's decay pass still processes them correctly.  This guards
+# against any future refactor that might accidentally filter by source.
+# --------------------------------------------------------------------------- #
+
+
+_CONSOLIDATE_SCHEMA_WITH_SOURCE = (
+    _CONSOLIDATE_SCHEMA.rstrip()
+    + "\nALTER TABLE operator_profile ADD COLUMN source TEXT DEFAULT 'claude_code';\n"
+)
+
+
+@pytest.fixture
+def seeded_db_multi_source(tmp_path: Path) -> Path:
+    """Like ``seeded_db`` but operator_profile rows carry a mix of sources."""
+    db = tmp_path / "index_ms.db"
+    conn = sqlite3.connect(str(db))
+    # Build the base schema first, then add the source column.
+    conn.executescript(_CONSOLIDATE_SCHEMA)
+    conn.execute(
+        "ALTER TABLE operator_profile ADD COLUMN source TEXT DEFAULT 'claude_code'"
+    )
+
+    now = int(time.time())
+    day = 86400
+
+    # Row from claude_code source — 90 days silent.
+    conn.execute(
+        "INSERT INTO operator_profile(field, value, confidence, last_reasserted_ts, source) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("editor", "vim", 0.9, now - 90 * day, "claude_code"),
+    )
+    # Row from opencode source — 100 days silent.
+    conn.execute(
+        "INSERT INTO operator_profile(field, value, confidence, last_reasserted_ts, source) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("shell", "bash", 0.9, now - 100 * day, "opencode"),
+    )
+    # Low-confidence row from aider — should be archived.
+    conn.execute(
+        "INSERT INTO operator_profile(field, value, confidence, last_reasserted_ts, source) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("dead_field", "x", 0.1, now - 20 * day, "aider"),
+    )
+
+    # Minimal entries to satisfy other consolidate steps.
+    conn.execute(
+        "INSERT INTO vocab_candidates(term, n_sessions, n_days) VALUES (?, ?, ?)",
+        ("relay", 4, 3),
+    )
+
+    conn.commit()
+    conn.close()
+    return db
+
+
+def test_consolidate_multi_source_rows_processed(seeded_db_multi_source: Path) -> None:
+    """Consolidate must apply decay to rows regardless of their ``source``.
+
+    - The opencode row (100 d silent) must decay below the claude_code row (90 d).
+    - The aider low-confidence row must be archived.
+    This asserts the command is source-agnostic and cannot silently skip
+    non-claude_code entries.
+    """
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["--db", str(seeded_db_multi_source), "consolidate"]
+    )
+    assert result.exit_code == 0, result.output
+
+    conn = sqlite3.connect(str(seeded_db_multi_source))
+    conn.row_factory = sqlite3.Row
+
+    row_cc = conn.execute(
+        "SELECT confidence FROM operator_profile WHERE field='editor'"
+    ).fetchone()
+    row_oc = conn.execute(
+        "SELECT confidence FROM operator_profile WHERE field='shell'"
+    ).fetchone()
+    row_dead = conn.execute(
+        "SELECT archived FROM operator_profile WHERE field='dead_field'"
+    ).fetchone()
+    conn.close()
+
+    assert row_oc["confidence"] < row_cc["confidence"], (
+        f"opencode row (100d) should decay below claude_code row (90d): "
+        f"opencode={row_oc['confidence']}, claude_code={row_cc['confidence']}"
+    )
+    assert row_dead["archived"] == 1, (
+        "aider-sourced low-confidence row must be archived by decay pass"
+    )

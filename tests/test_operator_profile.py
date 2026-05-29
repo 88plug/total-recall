@@ -18,6 +18,7 @@ from extractors.operator_profile import (
     OperatorProfile,
     extract_incremental,
     extract_operator_profile,
+    extract_operator_profile_from_records,
     persist_profile,
 )
 from index.operator import (
@@ -469,3 +470,115 @@ def test_full_and_incremental_agree(tmp_path):
             f"Path divergence on handle: "
             f"file={file_handle!r}, incremental={incr_handle!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Multi-source coverage: extract_operator_profile_from_records
+# ---------------------------------------------------------------------------
+
+
+def _opencode_record(text: str) -> dict:
+    """Synthetic record shaped like a normalized OpenCode dict passed through
+    ``_iter_text_from_records``.  We set ``source_file`` to a path that would
+    come from an opencode session so citations reflect a non-claude_code origin.
+    """
+    return {
+        "type": "user",
+        "sessionId": "oc-sess-1",
+        "cwd": "/home/operator/oc-proj",
+        "timestamp": "2026-05-01T14:00:00.000Z",
+        "source_file": "/home/operator/.local/share/opencode/session-abc.json",
+        "byte_offset": 0,
+        "message": {"role": "user", "content": text},
+    }
+
+
+def _opencode_assistant(text: str) -> dict:
+    return {
+        "type": "assistant",
+        "sessionId": "oc-sess-1",
+        "cwd": "/home/operator/oc-proj",
+        "timestamp": "2026-05-01T14:00:01.000Z",
+        "source_file": "/home/operator/.local/share/opencode/session-abc.json",
+        "byte_offset": 100,
+        "message": {
+            "id": "oc_msg_1",
+            "model": "gpt-4o",
+            "role": "assistant",
+            "content": [{"type": "text", "text": text}],
+        },
+    }
+
+
+def test_extract_profile_from_records_non_claude_code_source():
+    """``extract_operator_profile_from_records`` must surface identity signals
+    from records that carry a non-claude_code ``source_file`` path (simulating
+    opencode or any other multi-source adapter).  This pins the from_records
+    entry point as source-agnostic.
+    """
+    records = [
+        _opencode_record("Hi, I'm Mira Osei (miraosei). My email is mira@helioslab.dev."),
+        _opencode_assistant("Got it — git config user.email mira@helioslab.dev."),
+        _opencode_record(
+            "Never use vercel. HeliosLab runs on bare metal only. "
+            "I'm in America/Chicago timezone."
+        ),
+        _opencode_assistant(
+            "Deploying to helio-box (10.0.1.5). "
+            "github.com/miraosei is your handle."
+        ),
+        _opencode_record("github.com/miraosei is my profile."),
+        _opencode_assistant("Confirmed at mira@helioslab.dev."),
+    ]
+
+    profile = extract_operator_profile_from_records(records)
+
+    assert isinstance(profile, OperatorProfile)
+    assert profile.name == "Mira Osei", (
+        f"Expected 'Mira Osei', got {profile.name!r} — "
+        "non-claude_code source records must feed identity extraction"
+    )
+    assert profile.email_primary == "mira@helioslab.dev", (
+        f"Expected 'mira@helioslab.dev', got {profile.email_primary!r}"
+    )
+    assert "vercel" in profile.banned_providers, (
+        "banned_providers must include 'vercel' from non-claude_code records"
+    )
+    assert profile.timezone == "America/Chicago", (
+        f"Expected 'America/Chicago', got {profile.timezone!r}"
+    )
+    handle = (profile.handle or profile.github_user or "").lower()
+    assert handle in ("miraosei", "helioslab"), (
+        f"Expected handle 'miraosei' (or domain label 'helioslab'), got {handle!r}"
+    )
+
+
+def test_extract_profile_from_records_mixed_sources():
+    """Records from two synthetic sources (one claude_code-shaped, one opencode-
+    shaped) must be reconciled into a single merged profile.  Both signal the
+    same operator; combined confidence must exceed single-source extraction.
+    """
+    cc_records = [
+        _user("My github is github.com/lena-voss — use that for all commits."),
+        _assistant("Noted: github.com/lena-voss. I'll use lena@quantumleap.io."),
+    ]
+    oc_records = [
+        _opencode_record("lena@quantumleap.io is my email. I'm in Europe/Paris."),
+        _opencode_assistant("Confirmed lena@quantumleap.io. github.com/lena-voss is yours."),
+    ]
+
+    profile = extract_operator_profile_from_records(cc_records + oc_records)
+
+    assert profile.email_primary == "lena@quantumleap.io", (
+        f"Mixed-source email not resolved: {profile.email_primary!r}"
+    )
+    assert profile.timezone == "Europe/Paris", (
+        f"Mixed-source timezone not resolved: {profile.timezone!r}"
+    )
+    handle = (profile.handle or profile.github_user or "").lower()
+    assert "lena" in handle or handle in ("lena-voss", "quantumleap"), (
+        f"Mixed-source handle not resolved: {handle!r}"
+    )
+    # Confidence on multi-sourced fields should be > 0.
+    assert profile.confidence.get("email_primary", 0.0) > 0.0
+    assert profile.confidence.get("handle", 0.0) > 0.0

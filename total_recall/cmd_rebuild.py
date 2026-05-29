@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections import Counter
 from pathlib import Path
 
 import click
@@ -96,20 +97,90 @@ def rebuild_cmd(
     # have the whole corpus, so re-derive the operator profile in ONE pass
     # over every session and persist the globally-correct values. This is
     # the cold-path reconcile the incremental hot path defers to.
+    #
+    # Multi-source path: materialize all records from every registered CLI
+    # source (Claude Code, OpenCode, Codex, Gemini CLI, …) into a list so
+    # the 5 consolidation extractors can each iterate it independently.
+    # Falls back to the claude_code path-glob when the collector import
+    # fails or yields nothing — this preserves test coverage (synthetic
+    # corpora in tmp_path are not visible to all_sources()).
+    root = (
+        Path(projects_root).expanduser()
+        if projects_root
+        else Path("~/.claude/projects").expanduser()
+    )
+    all_jsonl = sorted(root.glob("*/*.jsonl"))
+
+    # Attempt multi-source record materialization.
+    #
+    # SCOPING: ``--projects-root`` overrides the *claude_code* projects dir
+    # (e.g. tests pointing at a synthetic tmp corpus, or a targeted rebuild).
+    # It has no meaning for the other CLI sources (opencode/codex/…), which
+    # the collector reads from their own fixed on-disk locations. So when an
+    # explicit projects_root is given we DELIBERATELY skip the multi-source
+    # collector and use the path-glob over that root only — otherwise the
+    # collector would silently mine the real machine's full corpus and ignore
+    # the requested scope. Multi-source collection runs only on the default
+    # (no override) path, i.e. "mine everything on this machine".
+    all_records: list | None = None
+    _using_records = False
+    if projects_root is not None:
+        if verbose:
+            click.echo(
+                "[rebuild] --projects-root set → claude_code-scoped consolidation"
+                " (multi-source collector skipped)",
+                err=True,
+            )
+    else:
+        try:
+            from lib.sources.collect import materialize_all_source_records  # type: ignore[import-not-found]
+            all_records = materialize_all_source_records()
+            if all_records:
+                _using_records = True
+                if verbose:
+                    _src_counts: Counter = Counter()
+                    for _r in all_records:
+                        _src_counts[getattr(_r, "source", "unknown")] += 1
+                    _src_summary = ", ".join(
+                        f"{s}={n}" for s, n in sorted(_src_counts.items())
+                    )
+                    click.echo(
+                        f"[rebuild] multi-source collector: {len(all_records)} records"
+                        f" ({_src_summary})",
+                        err=True,
+                    )
+            elif verbose:
+                click.echo(
+                    "[rebuild] multi-source collector returned 0 records"
+                    " — falling back to claude_code path glob",
+                    err=True,
+                )
+        except Exception as exc:  # noqa: BLE001
+            click.echo(
+                f"total-recall: multi-source collector unavailable ({exc})"
+                " — falling back to claude_code path glob",
+                err=True,
+            )
+
+    # Operator profile consolidation.
     try:
         from extractors.operator_profile import (  # type: ignore[import-not-found]
             extract_operator_profile,
+            extract_operator_profile_from_records,
             persist_profile,
         )
 
-        root = (
-            Path(projects_root).expanduser()
-            if projects_root
-            else Path("~/.claude/projects").expanduser()
-        )
-        all_jsonl = sorted(root.glob("*/*.jsonl"))
-        if all_jsonl:
+        if _using_records and all_records:
+            full_profile = extract_operator_profile_from_records(all_records)
+            _profile_source = f"{len(all_records)} records (multi-source)"
+        elif all_jsonl:
             full_profile = extract_operator_profile(all_jsonl)
+            _profile_source = f"{len(all_jsonl)} sessions (claude_code)"
+        else:
+            full_profile = None
+            _profile_source = ""
+
+        if full_profile is not None:
             conn = connect(db_path)
             try:
                 persist_profile(conn, full_profile)
@@ -118,8 +189,7 @@ def rebuild_cmd(
                 conn.close()
             if verbose:
                 click.echo(
-                    f"[rebuild] consolidated operator profile from "
-                    f"{len(all_jsonl)} sessions (single full pass)",
+                    f"[rebuild] consolidated operator profile from {_profile_source}",
                     err=True,
                 )
     except Exception as exc:  # noqa: BLE001 — best-effort, never fail the rebuild
@@ -128,19 +198,20 @@ def rebuild_cmd(
     # Consolidation for the additional aggregated profiles. Same rationale —
     # per-file incremental can drift; the full-corpus pass is authoritative.
     # Each is wrapped independently so one failure doesn't block the others.
-    root = (
-        Path(projects_root).expanduser()
-        if projects_root
-        else Path("~/.claude/projects").expanduser()
-    )
-    all_jsonl = sorted(root.glob("*/*.jsonl"))
 
-    if all_jsonl:
+    _has_data = (_using_records and all_records) or bool(all_jsonl)
+    if _has_data:
         # Workflow profile.
         try:
-            from extractors.workflow import extract_workflow
-            from index.workflow import persist_workflow
-            wf = extract_workflow(all_jsonl)
+            from extractors.workflow import (  # type: ignore[import-not-found]
+                extract_workflow,
+                extract_workflow_from_records,
+            )
+            from index.workflow import persist_workflow  # type: ignore[import-not-found]
+            if _using_records and all_records:
+                wf = extract_workflow_from_records(all_records)
+            else:
+                wf = extract_workflow(all_jsonl)
             conn = connect(db_path)
             try:
                 persist_workflow(conn, wf)
@@ -152,9 +223,17 @@ def rebuild_cmd(
 
         # Implicit preferences.
         try:
-            from extractors.implicit_preferences import extract_implicit_preferences
-            from index.implicit_preferences import persist_implicit_preferences
-            ip = extract_implicit_preferences(all_jsonl)
+            from extractors.implicit_preferences import extract_implicit_preferences  # type: ignore[import-not-found]
+            from index.implicit_preferences import persist_implicit_preferences  # type: ignore[import-not-found]
+            if _using_records and all_records:
+                # extract_implicit_preferences accepts (session_id, cwd, records)
+                # triples OR path-likes. Build a single pseudo-triple so all
+                # records are fed through the per-session accumulator logic.
+                ip = extract_implicit_preferences(
+                    [("_rebuild", "_all_sources", iter(all_records))]
+                )
+            else:
+                ip = extract_implicit_preferences(all_jsonl)
             conn = connect(db_path)
             try:
                 persist_implicit_preferences(conn, ip)
@@ -166,9 +245,15 @@ def rebuild_cmd(
 
         # Satisfaction profile.
         try:
-            from extractors.satisfaction import extract_satisfaction
-            from index.satisfaction import persist_satisfaction
-            sat = extract_satisfaction(all_jsonl)
+            from extractors.satisfaction import (  # type: ignore[import-not-found]
+                extract_satisfaction,
+                extract_satisfaction_from_records,
+            )
+            from index.satisfaction import persist_satisfaction  # type: ignore[import-not-found]
+            if _using_records and all_records:
+                sat = extract_satisfaction_from_records(all_records, {})
+            else:
+                sat = extract_satisfaction(all_jsonl)
             conn = connect(db_path)
             try:
                 persist_satisfaction(conn, sat)
@@ -178,14 +263,38 @@ def rebuild_cmd(
         except Exception as exc:  # noqa: BLE001
             click.echo(f"total-recall: satisfaction consolidation skipped ({exc})", err=True)
 
-        # Ontology — re-derive projects + co-mention graph + vocabulary from
-        # the full corpus so related_projects gets populated authoritatively.
+        # Ontology — dual-source strategy:
+        #   1. extract_ontology_from_records(all_records): mines MACHINES and
+        #      VOCABULARY from the full multi-source record stream and persists
+        #      them. Machines/vocab benefit from all CLI sources; the record-
+        #      based extractor intentionally leaves projects empty (it has no
+        #      path context for the co-mention graph).
+        #   2. extract_ontology(root): mines PROJECTS + co-mention graph from
+        #      the claude_code path glob (authoritative for related_projects).
+        #      persist_ontology uses COALESCE so the second call never clobbers
+        #      the machine/vocab rows written by the first.
         try:
-            from extractors.ontology import extract_ontology, persist_ontology
-            snap = extract_ontology(root)
+            from extractors.ontology import (  # type: ignore[import-not-found]
+                extract_ontology,
+                extract_ontology_from_records,
+                persist_ontology,
+            )
+
+            if _using_records and all_records:
+                # Pass 1: machines + vocabulary from all sources.
+                snap_records = extract_ontology_from_records(all_records)
+                conn = connect(db_path)
+                try:
+                    persist_ontology(conn, snap_records)
+                    conn.commit()
+                finally:
+                    conn.close()
+
+            # Pass 2 (always): projects + co-mention graph from claude_code path.
+            snap_path = extract_ontology(root)
             conn = connect(db_path)
             try:
-                persist_ontology(conn, snap)
+                persist_ontology(conn, snap_path)
                 conn.commit()
             finally:
                 conn.close()

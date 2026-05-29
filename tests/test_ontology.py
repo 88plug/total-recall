@@ -32,6 +32,7 @@ from extractors.ontology import (
     _extract_machines_from_text,
     compute_co_mention_graph,
     extract_ontology,
+    extract_ontology_from_records,
     mine_vocabulary,
     persist_ontology,
     _UNIVERSAL_CLAUDE_CODE_TERMS,
@@ -656,3 +657,94 @@ def test_mine_vocabulary_drops_harness_artifacts(tmp_path: Path) -> None:
         f"legit operator term {legit_token!r} must be promoted, "
         f"but was not. All promoted: {sorted(promoted_names)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 10. extract_ontology_from_records — record-stream entry point
+# ---------------------------------------------------------------------------
+
+
+def _user_rec(session_id: str, content: str, ts: str = "2025-05-01T10:00:00.000Z") -> dict:
+    return {
+        "type": "user",
+        "sessionId": session_id,
+        "timestamp": ts,
+        "message": {"role": "user", "content": content},
+    }
+
+
+def test_extract_ontology_from_records_machines() -> None:
+    """Machine regex runs over record text via the record-stream path."""
+    from extractors.ontology import OntologySnapshot
+
+    text = (
+        "Configure host-alpha (192.168.50.10) — Tailscale 100.64.0.5. "
+        "relay-fra-1 is the paris node."
+    )
+    records = [_user_rec("sM1", text)]
+    snap = extract_ontology_from_records(records)
+    assert isinstance(snap, OntologySnapshot)
+    assert snap.projects == [], "projects must be empty (directory walk deferred)"
+    hostnames = {m.hostname for m in snap.machines}
+    assert "host-alpha" in hostnames, f"host-alpha missing from {hostnames}"
+    ha = next(m for m in snap.machines if m.hostname == "host-alpha")
+    assert ha.lan_ip == "192.168.50.10"
+    assert ha.tailscale_ip == "100.64.0.5"
+
+
+def test_extract_ontology_from_records_vocabulary() -> None:
+    """Vocabulary terms promoted across multiple sessions survive the filters."""
+    # 3 sessions, each mentioning opnsense 5× and relay-eu-west 2×
+    # → both should pass VOCAB_MIN_SESSIONS=2 and VOCAB_MIN_FREQ=4.
+    records = []
+    for i in range(3):
+        content = " opnsense" * 5 + " relay-eu-west" * 2
+        records.append(_user_rec(f"sV{i}", content))
+
+    snap = extract_ontology_from_records(records)
+    promoted = {v.term for v in snap.vocabulary}
+    assert "opnsense" in promoted, f"opnsense not promoted; got {sorted(promoted)}"
+    assert "relay-eu-west" in promoted, f"relay-eu-west not promoted; got {sorted(promoted)}"
+    # Universal terms must always be present.
+    for v in _UNIVERSAL_CLAUDE_CODE_TERMS:
+        assert v.term in promoted, f"universal term {v.term!r} missing"
+
+
+def test_extract_ontology_from_records_generic_words_dropped() -> None:
+    """Generic English words must not be promoted even with high frequency."""
+    records = []
+    for i in range(3):
+        content = " home" * 20 + " name" * 20 + " state" * 20
+        records.append(_user_rec(f"sG{i}", content))
+
+    snap = extract_ontology_from_records(records)
+    promoted = {v.term for v in snap.vocabulary}
+    for word in ["home", "name", "state"]:
+        assert word not in promoted, f"generic word {word!r} must not be promoted"
+
+
+def test_extract_ontology_from_records_record_objects() -> None:
+    """Record objects with .raw dicts are handled the same as raw dicts."""
+
+    class FakeRecord:
+        def __init__(self, raw):
+            self.raw = raw
+            self.type = raw["type"]
+
+    raw = _user_rec("sRec1", "opnsense opnsense opnsense wireguard wireguard wireguard host-beta (10.0.0.5)")
+    # Three sessions, each with a FakeRecord carrying the same content.
+    records = [FakeRecord({**raw, "sessionId": f"sRec{i}"}) for i in range(3)]
+    snap = extract_ontology_from_records(records)
+    # Machines should be extracted from the text.
+    assert any(m.hostname == "host-beta" for m in snap.machines), (
+        f"host-beta missing from {[m.hostname for m in snap.machines]}"
+    )
+
+
+def test_extract_ontology_from_records_empty() -> None:
+    """Empty input returns a valid snapshot with universal vocab only."""
+    snap = extract_ontology_from_records([])
+    assert snap.projects == []
+    assert snap.machines == []
+    # Universal terms are always added.
+    assert len(snap.vocabulary) == len(_UNIVERSAL_CLAUDE_CODE_TERMS)

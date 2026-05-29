@@ -466,5 +466,81 @@ def test_imports():
     from index import workflow as w_index
     from mcp_server.extras import workflow_tools as w_tools
     assert hasattr(w_extractor, "extract_workflow")
+    assert hasattr(w_extractor, "extract_workflow_from_records")
     assert hasattr(w_index, "persist_workflow")
     assert hasattr(w_tools, "get_workflow_profile")
+
+
+# ---------------------------------------------------------------------------
+# Tests: extract_workflow_from_records (public record-stream entry point)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractWorkflowFromRecords:
+    """Verify the public record-stream API handles raw dicts, Record objects,
+    and mixed iterables without error."""
+
+    def test_empty_iterable_returns_defaults(self):
+        from extractors.workflow import extract_workflow_from_records
+        p = extract_workflow_from_records([])
+        assert isinstance(p, WorkflowProfile)
+        assert p.sample_size == 0
+
+    def test_raw_dicts_produce_same_result_as_extract_workflow(self, tmp_path):
+        from extractors.workflow import extract_workflow_from_records
+        files = _action_bias_corpus(tmp_path)
+        records = []
+        for f in files:
+            for line in f.read_text().splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        records.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+        p_files = extract_workflow(files)
+        p_recs = extract_workflow_from_records(records)
+        assert p_recs.sample_size == p_files.sample_size
+        assert p_recs.fan_out_hits_per_session == p_files.fan_out_hits_per_session
+        assert p_recs.autonomy_score == p_files.autonomy_score
+
+    def test_record_objects_unwrapped_via_raw(self):
+        """Record objects carrying .raw dicts are correctly unwrapped."""
+        from extractors.workflow import extract_workflow_from_records
+        from datetime import datetime, timezone
+
+        class FakeRecord:
+            def __init__(self, raw):
+                self.raw = raw
+
+        raw1 = {"type": "user", "sessionId": "sR1",
+                "timestamp": "2025-05-01T22:00:00.000Z",
+                "message": {"role": "user", "content": "fan out these tasks"}}
+        raw2 = {"type": "user", "sessionId": "sR1",
+                "timestamp": "2025-05-01T22:01:00.000Z",
+                "message": {"role": "user", "content": "ok"}}
+
+        records = [FakeRecord(raw1), FakeRecord(raw2)]
+        p = extract_workflow_from_records(records)
+        assert isinstance(p, WorkflowProfile)
+        assert p.sample_size == 1
+        assert p.fan_out_hits_per_session > 0
+
+    def test_mixed_dicts_and_records_accepted(self):
+        """Mix of raw dicts and Record-like objects processes without error."""
+        from extractors.workflow import extract_workflow_from_records
+
+        class FakeRec:
+            def __init__(self, raw):
+                self.raw = raw
+
+        raw_dict = {"type": "user", "sessionId": "sm1",
+                    "timestamp": "2025-05-01T20:00:00.000Z",
+                    "message": {"role": "user", "content": "spin up workers"}}
+        raw_rec = FakeRec({"type": "user", "sessionId": "sm2",
+                           "timestamp": "2025-05-01T20:00:00.000Z",
+                           "message": {"role": "user", "content": "go"}})
+
+        p = extract_workflow_from_records([raw_dict, raw_rec])
+        assert isinstance(p, WorkflowProfile)
+        assert p.sample_size >= 1

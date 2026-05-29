@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "WorkflowProfile",
     "extract_workflow",
+    "extract_workflow_from_records",
     "extract_workflow_incremental",
 ]
 
@@ -565,6 +566,34 @@ def _normalize_existing(
     return profile
 
 
+def extract_workflow_from_records(records: Iterable[Any]) -> WorkflowProfile:
+    """Public record-stream entry point.  Accepts :class:`lib.schema.Record`
+    objects, raw dicts, or any mix.
+
+    Record objects emitted by the multi-source collector carry a ``.raw``
+    attribute that is the original parsed dict — we unwrap those so the
+    existing dict-aware ``_process_record`` / helper machinery works
+    unchanged.  Plain dicts are passed through as-is for back-compat with
+    tests and callers that already work with raw JSONL-parsed records.
+
+    Co-mention graph and project-dir walk are not applicable here (those
+    live in the ontology extractor path).
+    """
+    return _extract_workflow_from_records(_iter_as_dicts(records))
+
+
+def _iter_as_dicts(records: Iterable[Any]) -> Iterable[dict]:
+    """Yield records as dicts, unwrapping Record objects via .raw."""
+    for rec in records:
+        if isinstance(rec, dict):
+            yield rec
+        else:
+            raw = getattr(rec, "raw", None)
+            if isinstance(raw, dict):
+                yield raw
+            # Non-dict without .raw: silently skip (unknown shape).
+
+
 def extract_workflow_incremental(
     records: Iterable[dict],
     existing: "WorkflowProfile | dict | None" = None,
@@ -591,7 +620,7 @@ def extract_workflow_incremental(
     batch has > 0 sessions, otherwise inherited from existing — they encode
     *current* observed patterns better than a weighted average.
     """
-    batch = _extract_workflow_from_records(records)
+    batch = _extract_workflow_from_records(_iter_as_dicts(records))
     batch_n = batch.sample_size
 
     existing_wp = _normalize_existing(existing)
