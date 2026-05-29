@@ -35,6 +35,14 @@ def iter_all_source_records() -> Iterator[Record]:
             for session in src.discover_sessions():
                 try:
                     for _cursor, rec in src.iter_records(session):
+                        # Tag the record with its originating source so
+                        # consolidation diagnostics (and any downstream
+                        # source-aware logic) can attribute it. Best-effort:
+                        # a slotted/frozen Record just keeps its default.
+                        try:
+                            rec.source = src_name
+                        except Exception:  # noqa: BLE001
+                            pass
                         yield rec
                 except Exception as exc:  # noqa: BLE001
                     log.warning(

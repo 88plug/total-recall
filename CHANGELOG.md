@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.8] - 2026-05-29
+
+### Fixed — multi-source collector tags records with their origin
+
+`lib/sources/collect.py` now sets `rec.source = <adapter name>` on each
+yielded `Record` (best-effort). Previously the consolidation diagnostic
+logged `multi-source collector: N records (unknown=N)` because the in-memory
+`Record` carried no source attribute (source is tagged at ingest-persist
+time, not on the dataclass). Purely a diagnostic accuracy fix — the records
+were always genuinely multi-source (real rebuild: claude_code=133,911 +
+opencode=1,526 messages mined into the profile); the log just couldn't
+attribute them. Now the verbose line reports true per-source counts.
+
 ## [0.9.7] - 2026-05-29
 
 ### Added — operator profile now mined from ALL CLI sources, not just Claude Code
