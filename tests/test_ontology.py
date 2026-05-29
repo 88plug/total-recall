@@ -593,3 +593,66 @@ def test_mine_vocabulary_keeps_operator_specific(tmp_path: Path) -> None:
             f"generic word {word!r} must not be promoted. "
             f"Promoted: {sorted(promoted_names)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 9. Vocabulary miner drops harness/tooling/path artifacts
+# ---------------------------------------------------------------------------
+
+
+def test_mine_vocabulary_drops_harness_artifacts(tmp_path: Path) -> None:
+    """Session-mechanics noise must never reach the vocabulary table.
+
+    Artifacts like task-notification blocks, tool-call IDs, tmp dir names,
+    cwd slugs, and ls permission strings all contain hyphens so they pass the
+    specificity gate — the _is_harness_artifact filter is the only thing
+    that removes them.
+
+    Synthetic corpus: 3 sessions, each user turn contains the harness tokens
+    many times.  A real operator term (relay-eu-west) is also included to
+    confirm the filter is not over-broad.
+    """
+    root = tmp_path / "projects"
+    root.mkdir()
+    proj = root / "-home-dana-myproj"  # fixture name uses generic 'dana', not real operator
+    proj.mkdir()
+
+    artifact_tokens = [
+        "task-notification",   # harness XML block
+        "tool-use-id",         # exact exact blocklist
+        "output-file",         # exact blocklist
+        "rw-rw-r",             # unix perms
+        "toolu_abc123",        # tool-call ID (toolu_ prefix)
+        "claude-1000",         # tmp dir (claude- + digits)
+        "home-dana-myproj",    # cwd slug with leading home- segment
+    ]
+    # Legit operator term that must survive the filter.
+    legit_token = "relay-eu-west"
+
+    # Repeat each artifact 20× so they'd easily pass the freq/session thresholds
+    # if the filter wasn't working.
+    artifact_blob = " ".join(tok for tok in artifact_tokens for _ in range(20))
+    content = artifact_blob + (" " + legit_token) * 10
+
+    for i in range(3):
+        sess_path = proj / f"{'c' * 31}{i}.jsonl"
+        _write_session_file(
+            sess_path,
+            [_make_user_record(f"sH{i}", f"uH{i}", content, "/home/dana/myproj")],
+        )
+
+    terms = mine_vocabulary(root, min_sessions=2, min_freq=4)
+    promoted_names = {t.term for t in terms}
+
+    # All artifacts must be absent.
+    for art in artifact_tokens:
+        assert art not in promoted_names, (
+            f"harness artifact {art!r} must not be promoted to vocabulary, "
+            f"but it was. All promoted: {sorted(promoted_names)}"
+        )
+
+    # The real operator term must survive.
+    assert legit_token in promoted_names, (
+        f"legit operator term {legit_token!r} must be promoted, "
+        f"but was not. All promoted: {sorted(promoted_names)}"
+    )

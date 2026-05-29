@@ -394,6 +394,46 @@ def _has_specificity_marker(tok: str) -> bool:
     return False
 
 
+# Exact-token blocklist for session-mechanics / harness artifacts.
+# These contain hyphens so they pass the specificity gate, but they are
+# never operator vocabulary — they come from Claude Code harness scaffolding
+# (task-notification blocks, tool call IDs, tmp dirs, ls output, cwd slugs).
+_HARNESS_ARTIFACT_EXACT: frozenset[str] = frozenset(
+    """
+    task-notification task-id tool-use-id output-file
+    rw-rw-r rw-rw-rw drwxr-xr drwxrwxr
+    """.split()
+)
+
+# Regex patterns for harness/path artifact shapes.
+# Checked against the lowercase token.
+_HARNESS_ARTIFACT_RE = re.compile(
+    r"^toolu[_-]"          # tool-call IDs: toolu_abc123 / toolu-abc123
+    r"|^claude-\d"         # tmp dirs: claude-1000, claude-2345
+    r"|^home-[a-z]"        # cwd slug prefix: home-dana-myproj  (not a vocab term)
+    r"|^[dlcbps-][rwx-]{9}$"  # unix permission strings: drwxr-xr-x
+    r"|^\d+[kmgt]b?$",     # file size tokens: 42kb, 100mb, 4gb
+    re.IGNORECASE,
+)
+
+
+def _is_harness_artifact(tok: str) -> bool:
+    """Return True if ``tok`` is a Claude Code session-mechanics artifact.
+
+    These tokens contain hyphens or digits so they pass the specificity gate,
+    but they originate from harness scaffolding (tool-call IDs, task blocks,
+    tmp dir names, cwd slugs, ls output), never from the operator's domain
+    vocabulary.  Called before promotion to prevent them from polluting the
+    vocabulary table.
+    """
+    lower = tok.lower()
+    if lower in _HARNESS_ARTIFACT_EXACT:
+        return True
+    if _HARNESS_ARTIFACT_RE.search(lower):
+        return True
+    return False
+
+
 def _is_boring_token(tok: str, operator_usernames: frozenset[str] | None = None) -> bool:
     """True if ``tok`` is a stopword, generic tech term, too short, or
     lacks any specificity marker indicating it is operator-specific."""
@@ -409,6 +449,10 @@ def _is_boring_token(tok: str, operator_usernames: frozenset[str] | None = None)
         return True
     # Drop the operator's own username — it appears everywhere but is not vocab.
     if operator_usernames and lower in operator_usernames:
+        return True
+    # Drop harness/tooling/path artifacts even though they contain hyphens
+    # (which would otherwise pass the specificity gate below).
+    if _is_harness_artifact(tok):
         return True
     # Specificity filter: drop generic English words that have no structural
     # marker making them operator-specific.

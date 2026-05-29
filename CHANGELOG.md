@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.4] - 2026-05-28
+
+### Fixed — vocab harness-artifact filter + gate generation-based LLM refinement
+
+A real-corpus rebuild + a standalone LLM diagnosis (default model `gemma4:e2b`)
+surfaced two things:
+
+- **Vocab admitted harness/tooling artifacts** via the v0.9.3 hyphen
+  specificity marker: `task-notification`, `task-id`, `tool-use-id`,
+  `output-file`, `claude-1000` (tmp dir), `rw-rw-r` (ls output),
+  `home-andrew-ip-service-for-docker` (cwd-slug), `toolu_*` (tool-call IDs).
+  These are Claude Code session-mechanics noise, never operator vocabulary.
+  Added `_is_harness_artifact()` to the miner: exact-token blocklist +
+  pattern drops (`toolu_*`, `claude-<digits>`, leading `home-` slug segments,
+  unix permission strings, size tokens). `ip-service-for-docker` (real
+  project) survives; `home-andrew-ip-service-for-docker` (slug) drops.
+
+- **The default CPU model echoes on generation.** Standalone diagnosis showed
+  `gemma4:e2b` (2.3B) parrots the grounding snippets back instead of
+  synthesizing a definition (e.g. `wireguard` → "Agent W: Live WireGuard
+  tunnel… | Task #99…"). Classification works (machines keep/drop 150→10);
+  generation (definitions/narratives) does not on a 2B model. So vocab-def +
+  project-narrative refinement is now gated behind `TOTAL_RECALL_LLM_REFINE_TEXT`
+  (default OFF) — it wants a capable model (>=7B). The machines refinement
+  (classification) stays always-on when the client is available. Default
+  rebuilds no longer burn ~140s producing echo-garbage.
+
+New test: `test_mine_vocabulary_drops_harness_artifacts`. Full suite: 1107 passed.
+
 ## [0.9.3] - 2026-05-28
 
 ### Fixed — vocabulary miner specificity (lifts both heuristic + LLM-refined vocab)

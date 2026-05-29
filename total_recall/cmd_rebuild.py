@@ -8,6 +8,7 @@ otherwise).
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -231,125 +232,144 @@ def rebuild_cmd(
             except Exception as exc:  # noqa: BLE001
                 click.echo(f"total-recall: machines LLM refinement skipped ({exc})", err=True)
 
-            # Vocabulary + project narratives refinement
-            try:
-                from extractors.llm.refine_ontology import (  # type: ignore[import-not-found]
-                    refine_project_narratives,
-                    refine_vocabulary_definitions,
-                )
-                from index.ontology import (  # type: ignore[import-not-found]
-                    list_projects,
-                    list_terms,
-                    upsert_project,
-                    upsert_vocabulary_term,
-                )
-                conn = connect(db_path)
+            # Vocabulary definitions + project narratives refinement.
+            #
+            # WHY gated: small CPU models (e.g. gemma4:e2b, 2.3B default) do
+            # classification well (machines keep/drop) but echo grounding snippets
+            # verbatim on generation tasks (definitions, narratives) instead of
+            # synthesising a real output.  Text-gen refinement therefore requires
+            # an explicit opt-in AND a capable model (>=7B recommended).
+            # Machines refinement above is classification-only and stays always-on.
+            _refine_text_raw = os.environ.get("TOTAL_RECALL_LLM_REFINE_TEXT", "").strip().lower()
+            _refine_text = _refine_text_raw in ("1", "true", "yes")
+
+            if not _refine_text:
+                if verbose:
+                    click.echo(
+                        "[rebuild] LLM text refinement (vocab/narratives) off"
+                        " — set TOTAL_RECALL_LLM_REFINE_TEXT=1 with a capable"
+                        " model (>=7B) to enable",
+                        err=True,
+                    )
+            else:
                 try:
-                    # Helpers: gather grounding snippets from messages FTS so the
-                    # LLM has actual operator-corpus context (not its own training
-                    # data). Without grounding, the anti-hallucination guard
-                    # collapses every output to null.
-                    def _snippets_for_term(term: str, limit: int = 3) -> list[str]:
-                        try:
-                            rows = conn.execute(
-                                "SELECT m.text FROM messages_fts f "
-                                "JOIN messages m ON m.id = f.rowid "
-                                "WHERE f.text MATCH ? AND m.role='user' "
-                                "ORDER BY length(m.text) ASC LIMIT ?",
-                                (term, limit),
-                            ).fetchall()
-                            out = []
-                            for (txt,) in rows:
-                                snippet = (txt or "").strip().replace("\n", " ")
-                                # Reject snippets that look like raw command
-                                # output (high tab density / numeric noise) —
-                                # they mislead the model.
-                                if snippet.count("\t") > 2 or len(snippet) < 20:
-                                    continue
-                                out.append(snippet[:300])
-                            return out
-                        except Exception:  # noqa: BLE001
-                            return []
+                    from extractors.llm.refine_ontology import (  # type: ignore[import-not-found]
+                        refine_project_narratives,
+                        refine_vocabulary_definitions,
+                    )
+                    from index.ontology import (  # type: ignore[import-not-found]
+                        list_projects,
+                        list_terms,
+                        upsert_project,
+                        upsert_vocabulary_term,
+                    )
+                    conn = connect(db_path)
+                    try:
+                        # Helpers: gather grounding snippets from messages FTS so the
+                        # LLM has actual operator-corpus context (not its own training
+                        # data). Without grounding, the anti-hallucination guard
+                        # collapses every output to null.
+                        def _snippets_for_term(term: str, limit: int = 3) -> list[str]:
+                            try:
+                                rows = conn.execute(
+                                    "SELECT m.text FROM messages_fts f "
+                                    "JOIN messages m ON m.id = f.rowid "
+                                    "WHERE f.text MATCH ? AND m.role='user' "
+                                    "ORDER BY length(m.text) ASC LIMIT ?",
+                                    (term, limit),
+                                ).fetchall()
+                                out = []
+                                for (txt,) in rows:
+                                    snippet = (txt or "").strip().replace("\n", " ")
+                                    # Reject snippets that look like raw command
+                                    # output (high tab density / numeric noise) —
+                                    # they mislead the model.
+                                    if snippet.count("\t") > 2 or len(snippet) < 20:
+                                        continue
+                                    out.append(snippet[:300])
+                                return out
+                            except Exception:  # noqa: BLE001
+                                return []
 
-                    def _snippets_for_cwd(cwd: str, limit: int = 3) -> list[str]:
-                        try:
-                            rows = conn.execute(
-                                "SELECT text FROM messages WHERE cwd=? AND role='user' "
-                                "AND length(text) BETWEEN 50 AND 400 "
-                                "ORDER BY ts ASC LIMIT ?",
-                                (cwd, limit),
-                            ).fetchall()
-                            return [(t or "").strip().replace("\n", " ")[:300]
-                                    for (t,) in rows if t and t.strip()]
-                        except Exception:  # noqa: BLE001
-                            return []
+                        def _snippets_for_cwd(cwd: str, limit: int = 3) -> list[str]:
+                            try:
+                                rows = conn.execute(
+                                    "SELECT text FROM messages WHERE cwd=? AND role='user' "
+                                    "AND length(text) BETWEEN 50 AND 400 "
+                                    "ORDER BY ts ASC LIMIT ?",
+                                    (cwd, limit),
+                                ).fetchall()
+                                return [(t or "").strip().replace("\n", " ")[:300]
+                                        for (t,) in rows if t and t.strip()]
+                            except Exception:  # noqa: BLE001
+                                return []
 
-                    # Vocabulary — top 50 by frequency, with grounding snippets.
-                    vocab_rows = list_terms(conn)
-                    if vocab_rows:
-                        ranked = sorted(
-                            vocab_rows,
-                            key=lambda r: (r.get("frequency", 0) if isinstance(r, dict)
-                                           else getattr(r, "frequency", 0)),
-                            reverse=True,
-                        )[:50]
-                        enriched = []
-                        for r in ranked:
-                            row = dict(r) if isinstance(r, dict) else {
-                                "term": getattr(r, "term", ""),
-                                "definition": getattr(r, "definition", "") or "",
-                                "category": getattr(r, "category", "concept"),
-                                "frequency": getattr(r, "frequency", 1),
-                            }
-                            snips = _snippets_for_term(row["term"])
-                            row["context_snippet"] = " | ".join(snips) if snips else (row.get("definition") or "")
-                            enriched.append(row)
-                        refined_vocab = refine_vocabulary_definitions(enriched, client=_llm)
-                        for v in refined_vocab:
-                            if v.get("definition"):
-                                upsert_vocabulary_term(
-                                    conn,
-                                    v["term"],
-                                    v.get("definition") or "",
-                                    category=v.get("category") or None,
-                                    frequency=v.get("frequency") or None,
-                                )
+                        # Vocabulary — top 50 by frequency, with grounding snippets.
+                        vocab_rows = list_terms(conn)
+                        if vocab_rows:
+                            ranked = sorted(
+                                vocab_rows,
+                                key=lambda r: (r.get("frequency", 0) if isinstance(r, dict)
+                                               else getattr(r, "frequency", 0)),
+                                reverse=True,
+                            )[:50]
+                            enriched = []
+                            for r in ranked:
+                                row = dict(r) if isinstance(r, dict) else {
+                                    "term": getattr(r, "term", ""),
+                                    "definition": getattr(r, "definition", "") or "",
+                                    "category": getattr(r, "category", "concept"),
+                                    "frequency": getattr(r, "frequency", 1),
+                                }
+                                snips = _snippets_for_term(row["term"])
+                                row["context_snippet"] = " | ".join(snips) if snips else (row.get("definition") or "")
+                                enriched.append(row)
+                            refined_vocab = refine_vocabulary_definitions(enriched, client=_llm)
+                            for v in refined_vocab:
+                                if v.get("definition"):
+                                    upsert_vocabulary_term(
+                                        conn,
+                                        v["term"],
+                                        v.get("definition") or "",
+                                        category=v.get("category") or None,
+                                        frequency=v.get("frequency") or None,
+                                    )
 
-                    # Project narratives — top 25 by message_count, with grounding.
-                    proj_rows = list_projects(conn)
-                    if proj_rows:
-                        ranked_p = sorted(
-                            proj_rows,
-                            key=lambda p: (p.get("message_count", 0) if isinstance(p, dict)
-                                           else getattr(p, "message_count", 0)),
-                            reverse=True,
-                        )[:25]
-                        enriched_p = []
-                        for p in ranked_p:
-                            row = dict(p) if isinstance(p, dict) else {
-                                "cwd": getattr(p, "cwd", ""),
-                                "display_name": getattr(p, "display_name", ""),
-                                "purpose": getattr(p, "purpose", "") or "",
-                                "primary_language": getattr(p, "primary_language", "") or "",
-                                "related_projects": getattr(p, "related_projects", []) or [],
-                            }
-                            row["context_snippets"] = _snippets_for_cwd(row["cwd"])
-                            enriched_p.append(row)
-                        refined_projs = refine_project_narratives(enriched_p, client=_llm)
-                        for p in refined_projs:
-                            if p.get("narrative"):
-                                upsert_project(
-                                    conn,
-                                    cwd=p["cwd"],
-                                    display_name=p.get("display_name"),
-                                    purpose=p["narrative"][:300],
-                                    primary_language=p.get("primary_language"),
-                                )
-                    conn.commit()
-                finally:
-                    conn.close()
-            except Exception as exc:  # noqa: BLE001
-                click.echo(f"total-recall: ontology LLM refinement skipped ({exc})", err=True)
+                        # Project narratives — top 25 by message_count, with grounding.
+                        proj_rows = list_projects(conn)
+                        if proj_rows:
+                            ranked_p = sorted(
+                                proj_rows,
+                                key=lambda p: (p.get("message_count", 0) if isinstance(p, dict)
+                                               else getattr(p, "message_count", 0)),
+                                reverse=True,
+                            )[:25]
+                            enriched_p = []
+                            for p in ranked_p:
+                                row = dict(p) if isinstance(p, dict) else {
+                                    "cwd": getattr(p, "cwd", ""),
+                                    "display_name": getattr(p, "display_name", ""),
+                                    "purpose": getattr(p, "purpose", "") or "",
+                                    "primary_language": getattr(p, "primary_language", "") or "",
+                                    "related_projects": getattr(p, "related_projects", []) or [],
+                                }
+                                row["context_snippets"] = _snippets_for_cwd(row["cwd"])
+                                enriched_p.append(row)
+                            refined_projs = refine_project_narratives(enriched_p, client=_llm)
+                            for p in refined_projs:
+                                if p.get("narrative"):
+                                    upsert_project(
+                                        conn,
+                                        cwd=p["cwd"],
+                                        display_name=p.get("display_name"),
+                                        purpose=p["narrative"][:300],
+                                        primary_language=p.get("primary_language"),
+                                    )
+                        conn.commit()
+                    finally:
+                        conn.close()
+                except Exception as exc:  # noqa: BLE001
+                    click.echo(f"total-recall: ontology LLM refinement skipped ({exc})", err=True)
         elif verbose:
             click.echo(
                 "[rebuild] LLM refinement off"
