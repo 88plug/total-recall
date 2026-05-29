@@ -3,7 +3,7 @@ description: List most-extracted topics from past Claude Code sessions — corre
 argument-hint: [since (default 30d)]
 ---
 
-Run `total-recall metrics topics --since ${ARGUMENTS:-30d} --limit 15` via Bash.
+Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/recall-cli.sh" metrics topics --since ${ARGUMENTS:-30d} --limit 15` via Bash.
 
 For each topic returned, present:
 - the topic phrase

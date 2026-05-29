@@ -250,48 +250,116 @@ class TestExtractWorkflowMalformedInput:
 # ---------------------------------------------------------------------------
 
 
+def _corpus_records(tmp_path: Path) -> list[dict]:
+    """Return all raw record dicts from the action-bias corpus — same shape
+    that ``_profile_record_snapshot`` emits for the hot path in ingest.py."""
+    files = _action_bias_corpus(tmp_path)
+    records: list[dict] = []
+    for f in files:
+        for line in f.read_text().splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+    return records
+
+
 class TestExtractWorkflowIncremental:
     @pytest.fixture
     def batch_profile(self, tmp_path):
         files = _action_bias_corpus(tmp_path)
         return extract_workflow(files)
 
-    def test_cold_start_equals_batch(self, tmp_path):
+    # ------------------------------------------------------------------
+    # test_incremental_from_records_and_dict — replicates the ACTUAL ingest
+    # wiring types that were broken before this fix.  Builds a list of raw
+    # record dicts + an existing DICT exactly like get_workflow() returns
+    # (with _updated_ts sidecar), then calls extract_workflow_incremental
+    # with that pairing.  This is the test that would have caught the bug.
+    # ------------------------------------------------------------------
+
+    def test_incremental_from_records_and_dict(self, tmp_path):
+        """Replicate the exact types ingest.py passes: records + dict with _updated_ts."""
+        records = _corpus_records(tmp_path)
+        # Simulate what index.workflow.get_workflow() returns after _updated_ts.pop()
+        # is NOT called (we want to prove _normalize_existing handles it).
+        existing_dict = {
+            "fan_out_hits_per_session": 1.0,
+            "fan_out_vocabulary": ["fan out"],
+            "typical_agent_count": 5,
+            "autonomy_score": 0.4,
+            "interrupt_rate": 0.5,
+            "planning_idiom": "steps",
+            "peak_hours": [14, 15, 16],
+            "preferred_work_window": "afternoon",
+            "session_shape": "focused",
+            "subagent_adoption": 0.3,
+            "sample_size": 20,
+            # The sidecar key that caused 'dict object has no attribute sample_size'
+            "_updated_ts": {"autonomy_score": 1716000000, "sample_size": 1716000000},
+        }
+        # Must not raise; must return a valid profile with sample_size > 0.
+        result = extract_workflow_incremental(records, existing_dict)
+        assert isinstance(result, WorkflowProfile)
+        assert result.sample_size > 0, "sample_size must be > 0 for a non-empty record batch"
+
+    def test_incremental_existing_none_cold_start(self, tmp_path):
+        """existing=None (cold start) should return the batch profile directly."""
+        records = _corpus_records(tmp_path)
+        result = extract_workflow_incremental(records, existing=None)
+        assert isinstance(result, WorkflowProfile)
+        assert result.sample_size > 0
+
+    def test_incremental_existing_workflowprofile_backcompat(self, tmp_path):
+        """existing as a WorkflowProfile object must still work (back-compat)."""
+        records = _corpus_records(tmp_path)
+        existing_wp = WorkflowProfile(autonomy_score=0.0, sample_size=10)
+        result = extract_workflow_incremental(records, existing=existing_wp)
+        assert isinstance(result, WorkflowProfile)
+        assert result.sample_size > 0
+        # Should have blended toward the batch's non-zero autonomy.
+        assert result.autonomy_score > 0.0
+
+    def test_cold_start_records_match_full_corpus(self, tmp_path):
+        """Records from the same corpus should yield same profile as extract_workflow."""
         files = _action_bias_corpus(tmp_path)
         p_full = extract_workflow(files)
-        p_inc = extract_workflow_incremental(files, existing=None)
+        records = _corpus_records(tmp_path)
+        p_inc = extract_workflow_incremental(records, existing=None)
         assert p_full.autonomy_score == p_inc.autonomy_score
         assert p_full.fan_out_hits_per_session == p_inc.fan_out_hits_per_session
         assert p_full.sample_size == p_inc.sample_size
 
-    def test_no_new_paths_returns_existing(self):
+    def test_no_new_records_returns_existing(self):
         existing = WorkflowProfile(autonomy_score=0.8, sample_size=10)
         result = extract_workflow_incremental([], existing=existing)
         assert result.autonomy_score == 0.8
         assert result.sample_size == 10
 
     def test_ema_blends_toward_batch(self, tmp_path):
-        files = _action_bias_corpus(tmp_path)
+        records = _corpus_records(tmp_path)
         # Existing has autonomy 0.0; the batch has high autonomy.
         existing = WorkflowProfile(autonomy_score=0.0, sample_size=50)
-        result = extract_workflow_incremental(files, existing=existing, window_size=50)
+        result = extract_workflow_incremental(records, existing=existing, window_size=50)
         # With batch_n=3 and window=50, alpha=3/50=0.06; new value should be
         # slightly above 0.0 but much less than the batch's raw value.
         assert result.autonomy_score > 0.0
 
     def test_large_batch_dominates(self, tmp_path):
-        files = _action_bias_corpus(tmp_path)
+        records = _corpus_records(tmp_path)
         # Existing has low autonomy, window = 3 (same as batch size) → alpha=1.0
         existing = WorkflowProfile(autonomy_score=0.0, sample_size=1)
-        result = extract_workflow_incremental(files, existing=existing, window_size=3)
-        batch = extract_workflow(files)
+        result = extract_workflow_incremental(records, existing=existing, window_size=3)
+        batch = extract_workflow(_action_bias_corpus(tmp_path))
         # alpha=1.0 → result should equal batch values exactly.
         assert result.autonomy_score == batch.autonomy_score
 
     def test_sample_size_clamped_to_window(self, tmp_path):
-        files = _action_bias_corpus(tmp_path)
+        records = _corpus_records(tmp_path)
         existing = WorkflowProfile(sample_size=48)
-        result = extract_workflow_incremental(files, existing=existing, window_size=50)
+        result = extract_workflow_incremental(records, existing=existing, window_size=50)
         assert result.sample_size <= 50
 
 

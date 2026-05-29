@@ -299,17 +299,11 @@ def extract_workflow(jsonl_paths: Iterable[Path]) -> WorkflowProfile:
     Tolerant of malformed records — individual bad JSON lines are skipped.
     Empty corpus → all-zero / empty-string defaults (stable shape).
     """
-    # Per-session accumulators.
-    sessions: dict[str, dict] = {}  # session_id → {fan_out, user_msgs, interrupts, ...}
-
-    # Cross-session accumulators.
+    sessions: dict[str, dict] = {}
     hour_counter: Counter = Counter()
     fan_out_vocab: Counter = Counter()
     agent_counts: list[int] = []
     planning_idiom_votes: Counter = Counter()
-    autonomy_numerator = 0
-    total_user_turns = 0
-    sessions_with_subagent: set = set()
 
     for path in jsonl_paths:
         try:
@@ -325,62 +319,86 @@ def extract_workflow(jsonl_paths: Iterable[Path]) -> WorkflowProfile:
             log.debug("skipping %s: %s", path, exc)
             continue
 
-    # Aggregate per-session data.
-    session_list = list(sessions.values())
-    sample_size = len(session_list)
+    return _build_profile(sessions, hour_counter, fan_out_vocab, agent_counts, planning_idiom_votes)
 
-    if sample_size == 0:
-        return WorkflowProfile()
 
-    # Fan-out rate.
-    total_fan_out = sum(s["fan_out_hits"] for s in session_list)
-    fan_out_hits_per_session = total_fan_out / sample_size
+def _process_record(
+    rec: dict,
+    fallback_sid: str,
+    sessions: dict,
+    hour_counter: Counter,
+    fan_out_vocab: Counter,
+    agent_counts: list,
+    planning_idiom_votes: Counter,
+) -> None:
+    """Update all accumulators for a single already-parsed record dict."""
+    if not isinstance(rec, dict):
+        return
 
-    # Fan-out vocabulary (top phrases, operator's actual terms).
-    fan_out_vocabulary = [term for term, _ in fan_out_vocab.most_common(10)]
+    sid = _record_session_id(rec) or fallback_sid
+    if sid not in sessions:
+        sessions[sid] = {
+            "fan_out_hits": 0,
+            "user_turns": 0,
+            "autonomy_hits": 0,
+            "interrupts": 0,
+            "has_subagent": False,
+        }
+    sess = sessions[sid]
 
-    # Typical agent count (median).
-    typical_agent_count = int(_median_int(agent_counts)) if agent_counts else 0
+    rec_type = _record_type(rec)
 
-    # Autonomy score.
-    total_user = sum(s["user_turns"] for s in session_list)
-    total_auto = sum(s["autonomy_hits"] for s in session_list)
-    autonomy_score = (total_auto / total_user) if total_user > 0 else 0.0
+    # Track message timestamps for hour distribution.
+    ts = _record_timestamp(rec)
+    hour = _parse_hour(ts)
+    if hour is not None:
+        hour_counter[hour] += 1
 
-    # Interrupt rate.
-    total_interrupts = sum(s["interrupts"] for s in session_list)
-    interrupt_rate = total_interrupts / sample_size
+    # User turns: fan-out, autonomy, planning idiom.
+    if rec_type == "user":
+        text = _user_text(rec)
+        if text:
+            sess["user_turns"] += 1
+            text_lc = text.lower()
 
-    # Planning idiom (plurality vote).
-    planning_idiom = planning_idiom_votes.most_common(1)[0][0] if planning_idiom_votes else ""
+            # Fan-out vocabulary detection.
+            for phrase, pattern in _FAN_OUT_PATTERNS:
+                if pattern.search(text):
+                    sess["fan_out_hits"] += 1
+                    fan_out_vocab[phrase] += 1
+                    # Also capture the agent count when present.
+                    m = _AGENT_COUNT_RE.search(text)
+                    if m:
+                        try:
+                            agent_counts.append(int(m.group(1)))
+                        except ValueError:
+                            pass
+                    break  # count once per turn
 
-    # Peak hours (top 3 by message count).
-    peak_hours = [h for h, _ in hour_counter.most_common(3)]
+            # Autonomy / fire-and-forget detection.
+            tokens = text_lc.split()
+            if len(tokens) == 1 and tokens[0] in _AUTONOMY_WORDS:
+                sess["autonomy_hits"] += 1
+            else:
+                for ap in _AUTONOMY_PHRASES:
+                    if text_lc.strip() == ap:
+                        sess["autonomy_hits"] += 1
+                        break
 
-    # Preferred work window.
-    preferred_work_window = _work_window(hour_counter)
+            # Planning idiom detection (first idiom found per turn counts).
+            for idiom, pattern in _PLANNING_IDIOMS:
+                if pattern.search(text):
+                    planning_idiom_votes[idiom] += 1
+                    break
 
-    # Session shape.
-    msg_counts = [s["user_turns"] for s in session_list]
-    session_shape = _session_shape(msg_counts)
+    # Interrupt (queued command mid-flight).
+    elif rec_type in _INTERRUPT_TYPES:
+        sess["interrupts"] += 1
 
-    # Subagent adoption (fraction of sessions with any subagent tool use).
-    sessions_with_sub = sum(1 for s in session_list if s["has_subagent"])
-    subagent_adoption = sessions_with_sub / sample_size
-
-    return WorkflowProfile(
-        fan_out_hits_per_session=round(fan_out_hits_per_session, 4),
-        fan_out_vocabulary=fan_out_vocabulary,
-        typical_agent_count=typical_agent_count,
-        autonomy_score=round(min(1.0, max(0.0, autonomy_score)), 4),
-        interrupt_rate=round(interrupt_rate, 4),
-        planning_idiom=planning_idiom,
-        peak_hours=peak_hours,
-        preferred_work_window=preferred_work_window,
-        session_shape=session_shape,
-        subagent_adoption=round(subagent_adoption, 4),
-        sample_size=sample_size,
-    )
+    # Subagent tool use.
+    elif rec_type == "assistant":
+        if _is_subagent_turn(rec):
+            sess["has_subagent"] = True
 
 
 def _process_file(
@@ -403,71 +421,11 @@ def _process_file(
                 continue
             if not isinstance(rec, dict):
                 continue
-
-            sid = _record_session_id(rec) or str(path)
-            if sid not in sessions:
-                sessions[sid] = {
-                    "fan_out_hits": 0,
-                    "user_turns": 0,
-                    "autonomy_hits": 0,
-                    "interrupts": 0,
-                    "has_subagent": False,
-                }
-            sess = sessions[sid]
-
-            rec_type = _record_type(rec)
-
-            # Track message timestamps for hour distribution.
-            ts = _record_timestamp(rec)
-            hour = _parse_hour(ts)
-            if hour is not None:
-                hour_counter[hour] += 1
-
-            # User turns: fan-out, autonomy, planning idiom.
-            if rec_type == "user":
-                text = _user_text(rec)
-                if text:
-                    sess["user_turns"] += 1
-                    text_lc = text.lower()
-
-                    # Fan-out vocabulary detection.
-                    for phrase, pattern in _FAN_OUT_PATTERNS:
-                        if pattern.search(text):
-                            sess["fan_out_hits"] += 1
-                            fan_out_vocab[phrase] += 1
-                            # Also capture the agent count when present.
-                            m = _AGENT_COUNT_RE.search(text)
-                            if m:
-                                try:
-                                    agent_counts.append(int(m.group(1)))
-                                except ValueError:
-                                    pass
-                            break  # count once per turn
-
-                    # Autonomy / fire-and-forget detection.
-                    tokens = text_lc.split()
-                    if len(tokens) == 1 and tokens[0] in _AUTONOMY_WORDS:
-                        sess["autonomy_hits"] += 1
-                    else:
-                        for ap in _AUTONOMY_PHRASES:
-                            if text_lc.strip() == ap:
-                                sess["autonomy_hits"] += 1
-                                break
-
-                    # Planning idiom detection (first idiom found per turn counts).
-                    for idiom, pattern in _PLANNING_IDIOMS:
-                        if pattern.search(text):
-                            planning_idiom_votes[idiom] += 1
-                            break
-
-            # Interrupt (queued command mid-flight).
-            elif rec_type in _INTERRUPT_TYPES:
-                sess["interrupts"] += 1
-
-            # Subagent tool use.
-            elif rec_type == "assistant":
-                if _is_subagent_turn(rec):
-                    sess["has_subagent"] = True
+            _process_record(
+                rec, str(path),
+                sessions, hour_counter, fan_out_vocab, agent_counts,
+                planning_idiom_votes,
+            )
 
 
 def _median_int(values: list[int]) -> float:
@@ -502,30 +460,146 @@ _EMA_FLOAT_FIELDS: tuple[str, ...] = (
 _EMA_INT_FIELDS: tuple[str, ...] = ("typical_agent_count",)
 
 
+def _extract_workflow_from_records(records: Iterable[dict]) -> WorkflowProfile:
+    """Build a :class:`WorkflowProfile` from an iterable of pre-parsed record dicts.
+
+    This is the record-stream core shared by :func:`extract_workflow_incremental`
+    (hot path, records already in memory) and the full-corpus path (which reads
+    from JSONL files via :func:`_process_file`).
+
+    Records are the same raw Claude-Code-shaped dicts that
+    ``_profile_record_snapshot`` emits and that voice/operator incrementals
+    consume.  Extra keys are silently ignored; missing keys fall back to defaults.
+    """
+    sessions: dict[str, dict] = {}
+    hour_counter: Counter = Counter()
+    fan_out_vocab: Counter = Counter()
+    agent_counts: list[int] = []
+    planning_idiom_votes: Counter = Counter()
+
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        _process_record(
+            rec, "_records_batch",
+            sessions, hour_counter, fan_out_vocab, agent_counts,
+            planning_idiom_votes,
+        )
+
+    return _build_profile(
+        sessions, hour_counter, fan_out_vocab, agent_counts, planning_idiom_votes
+    )
+
+
+def _build_profile(
+    sessions: dict,
+    hour_counter: Counter,
+    fan_out_vocab: Counter,
+    agent_counts: list[int],
+    planning_idiom_votes: Counter,
+) -> WorkflowProfile:
+    """Aggregate per-session accumulators into a :class:`WorkflowProfile`."""
+    session_list = list(sessions.values())
+    sample_size = len(session_list)
+
+    if sample_size == 0:
+        return WorkflowProfile()
+
+    total_fan_out = sum(s["fan_out_hits"] for s in session_list)
+    fan_out_hits_per_session = total_fan_out / sample_size
+    fan_out_vocabulary = [term for term, _ in fan_out_vocab.most_common(10)]
+    typical_agent_count = int(_median_int(agent_counts)) if agent_counts else 0
+    total_user = sum(s["user_turns"] for s in session_list)
+    total_auto = sum(s["autonomy_hits"] for s in session_list)
+    autonomy_score = (total_auto / total_user) if total_user > 0 else 0.0
+    total_interrupts = sum(s["interrupts"] for s in session_list)
+    interrupt_rate = total_interrupts / sample_size
+    planning_idiom = planning_idiom_votes.most_common(1)[0][0] if planning_idiom_votes else ""
+    peak_hours = [h for h, _ in hour_counter.most_common(3)]
+    preferred_work_window = _work_window(hour_counter)
+    msg_counts = [s["user_turns"] for s in session_list]
+    session_shape = _session_shape(msg_counts)
+    sessions_with_sub = sum(1 for s in session_list if s["has_subagent"])
+    subagent_adoption = sessions_with_sub / sample_size
+
+    return WorkflowProfile(
+        fan_out_hits_per_session=round(fan_out_hits_per_session, 4),
+        fan_out_vocabulary=fan_out_vocabulary,
+        typical_agent_count=typical_agent_count,
+        autonomy_score=round(min(1.0, max(0.0, autonomy_score)), 4),
+        interrupt_rate=round(interrupt_rate, 4),
+        planning_idiom=planning_idiom,
+        peak_hours=peak_hours,
+        preferred_work_window=preferred_work_window,
+        session_shape=session_shape,
+        subagent_adoption=round(subagent_adoption, 4),
+        sample_size=sample_size,
+    )
+
+
+def _normalize_existing(
+    existing: "WorkflowProfile | dict | None",
+) -> WorkflowProfile:
+    """Coerce existing to a :class:`WorkflowProfile`, stripping sidecar keys.
+
+    Accepts:
+    * ``None`` / empty dict → all-zero defaults (cold-start).
+    * dict (from ``index.workflow.get_workflow()``) — strip ``_updated_ts``
+      and any other ``_``-prefixed sidecar keys, map remaining fields.
+    * :class:`WorkflowProfile` — returned unchanged.
+    """
+    if existing is None:
+        return WorkflowProfile()
+    if isinstance(existing, WorkflowProfile):
+        return existing
+    # dict path — strip sidecars, coerce field by field.
+    profile = WorkflowProfile()
+    for key, val in existing.items():
+        if key.startswith("_"):
+            continue
+        if hasattr(profile, key):
+            try:
+                setattr(profile, key, val)
+            except Exception:  # noqa: BLE001
+                pass
+    return profile
+
+
 def extract_workflow_incremental(
-    jsonl_paths: Iterable[Path],
-    existing: WorkflowProfile | None = None,
+    records: Iterable[dict],
+    existing: "WorkflowProfile | dict | None" = None,
     window_size: int = _EMA_WINDOW,
 ) -> WorkflowProfile:
     """Update the workflow profile via EMA over a rolling window.
 
+    Signature change (v0.9.1 fix): the first argument is now an iterable of
+    **pre-parsed record dicts** (the same shape ``_profile_record_snapshot``
+    emits), NOT a list of file paths.  This matches what ``_commit_parsed``
+    in ``index/ingest.py`` actually passes on the Stop-hook hot path.
+
+    ``existing`` is dict-tolerant: it accepts a raw dict as returned by
+    ``index.workflow.get_workflow()`` (including the ``_updated_ts`` sidecar),
+    a :class:`WorkflowProfile` object (back-compat), or ``None`` (cold start).
+
     The EMA weight is ``alpha = min(1.0, batch_sessions / window_size)``.
     An absent existing profile (or a batch larger than the window) snaps
-    directly to the batch values — so cold-start is identical to
-    :func:`extract_workflow`.
+    directly to the batch values — so cold-start is identical to a full-corpus
+    run over the same records.
 
     List/string fields (fan_out_vocabulary, planning_idiom, peak_hours,
     preferred_work_window, session_shape) are taken from the batch when the
     batch has > 0 sessions, otherwise inherited from existing — they encode
     *current* observed patterns better than a weighted average.
     """
-    batch = extract_workflow(list(jsonl_paths))
+    batch = _extract_workflow_from_records(records)
     batch_n = batch.sample_size
 
-    if existing is None or existing.sample_size == 0:
+    existing_wp = _normalize_existing(existing)
+
+    if existing_wp.sample_size == 0:
         return batch
     if batch_n == 0:
-        return existing
+        return existing_wp
 
     alpha = min(1.0, batch_n / float(window_size))
 
@@ -536,21 +610,21 @@ def extract_workflow_incremental(
         return int(round(alpha * new + (1.0 - alpha) * old))
 
     # Blend numeric fields.
-    fohps = _blend_float(existing.fan_out_hits_per_session, batch.fan_out_hits_per_session)
-    auto = min(1.0, max(0.0, _blend_float(existing.autonomy_score, batch.autonomy_score)))
-    ir = _blend_float(existing.interrupt_rate, batch.interrupt_rate)
-    sub = min(1.0, max(0.0, _blend_float(existing.subagent_adoption, batch.subagent_adoption)))
-    tac = _blend_int(existing.typical_agent_count, batch.typical_agent_count)
+    fohps = _blend_float(existing_wp.fan_out_hits_per_session, batch.fan_out_hits_per_session)
+    auto = min(1.0, max(0.0, _blend_float(existing_wp.autonomy_score, batch.autonomy_score)))
+    ir = _blend_float(existing_wp.interrupt_rate, batch.interrupt_rate)
+    sub = min(1.0, max(0.0, _blend_float(existing_wp.subagent_adoption, batch.subagent_adoption)))
+    tac = _blend_int(existing_wp.typical_agent_count, batch.typical_agent_count)
 
     # For categorical / list fields, prefer the batch (most-recent signal),
     # falling back to existing when the batch gives nothing.
-    vocab = batch.fan_out_vocabulary if batch.fan_out_vocabulary else existing.fan_out_vocabulary
-    idiom = batch.planning_idiom if batch.planning_idiom else existing.planning_idiom
-    peak = batch.peak_hours if batch.peak_hours else existing.peak_hours
-    window = batch.preferred_work_window if batch_n > 0 else existing.preferred_work_window
-    shape = batch.session_shape if batch_n > 0 else existing.session_shape
+    vocab = batch.fan_out_vocabulary if batch.fan_out_vocabulary else existing_wp.fan_out_vocabulary
+    idiom = batch.planning_idiom if batch.planning_idiom else existing_wp.planning_idiom
+    peak = batch.peak_hours if batch.peak_hours else existing_wp.peak_hours
+    window = batch.preferred_work_window if batch_n > 0 else existing_wp.preferred_work_window
+    shape = batch.session_shape if batch_n > 0 else existing_wp.session_shape
 
-    prior_n = existing.sample_size
+    prior_n = existing_wp.sample_size
     new_n = min(window_size, prior_n + batch_n)
 
     return WorkflowProfile(

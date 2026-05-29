@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.6] - 2026-05-29
+
+### Fixed — real-usage reliability + guards so the bug classes can't recur
+
+Two bugs that only bit when the plugin was actually used (not in isolated
+unit tests), plus the guards that would have caught them.
+
+- **Slash commands ran the CLI as bare `total-recall …`** — but that console
+  script isn't on PATH for installed users (it lives in the plugin's uv
+  venv), so the executing agent fell back to a system `python` (2.7 / 3.6 /
+  one without deps) and `rebuild` failed outright. New `scripts/recall-cli.sh`
+  wrapper resolves the interpreter exactly like the hooks (`recall::uv`:
+  env override → PATH → ~/.local/bin/uv → bootstrapped uv → auto-install),
+  then `uv run --project <root> python -m total_recall`. All 7 CLI-invoking
+  commands (rebuild/cost/health/status/metrics/topics/inspect) now call the
+  wrapper. Verified: `recall-cli.sh --version` → `total-recall, version`.
+
+- **Workflow incremental crashed every Stop-hook ingest** —
+  `extract_workflow_incremental` wanted `jsonl_paths` + a `WorkflowProfile`,
+  but the ingest hot path passed records + the dict from `get_workflow()`
+  (`'dict' object has no attribute 'sample_size'`). Swallowed by the
+  try/except, so the workflow profile silently never updated incrementally.
+  Refactored to a record-core: `extract_workflow_incremental(records,
+  existing: WorkflowProfile|dict|None)` + a shared `_build_profile` /
+  `_process_record`; `_normalize_existing` accepts the dict-with-sidecar
+  shape. `persist_workflow` accepts dict|WorkflowProfile.
+
+### Added — guard tests for both classes (the "ensure it can't recur" ask)
+
+- `tests/integration/test_ingest_hotpath_clean.py`: runs the REAL ingest
+  over a synthetic corpus and **fails on any swallowed "incremental update
+  failed / consolidation skipped" warning**, and asserts the profile tables
+  actually populated. This is the test that would have caught the workflow
+  crash. Hermetic — no ollama, no network.
+- `tests/test_command_invocations.py`: lints every command markdown — CLI
+  invocations must use the `recall-cli.sh` wrapper, never bare
+  `total-recall`/`python -m total_recall`. It immediately caught 3 stragglers
+  (recall-cost/inspect/metrics follow-up suggestion lines) that the runner
+  pass missed — now fixed.
+
+Root cause both slipped CI: components were unit-tested in isolation with
+correct types; nothing exercised the real ingest→profile wiring or the
+command invocations, and the hot-path try/except suppressed the failure.
+
+Full unit suite: 1149 passed.
+
 ## [0.9.5] - 2026-05-29
 
 ### Added — advanced LLM-refinement round (measured against live gemma4:e2b)

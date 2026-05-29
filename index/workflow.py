@@ -63,17 +63,25 @@ def _decode(raw: Any) -> Any:
 
 def persist_workflow(
     conn: sqlite3.Connection,
-    profile: "WorkflowProfile",
+    profile: "WorkflowProfile | dict",
     updated_ts: int | None = None,
 ) -> None:
     """Bulk-upsert all fields from ``profile`` into the ``workflow_profile`` table.
+
+    Accepts either a :class:`~extractors.workflow.WorkflowProfile` dataclass or a
+    plain dict (e.g. as returned by :func:`get_workflow` or by
+    ``extract_workflow_incremental``). Dict keys prefixed with ``_`` (sidecar
+    metadata such as ``_updated_ts``) are silently skipped.
 
     ``updated_ts`` defaults to ``int(time.time())``. The caller is responsible
     for committing the connection.
     """
     ensure_schema(conn)
     ts = int(updated_ts if updated_ts is not None else time.time())
-    data = asdict(profile)
+    if isinstance(profile, dict):
+        data = {k: v for k, v in profile.items() if not k.startswith("_")}
+    else:
+        data = asdict(profile)
     for key, value in data.items():
         conn.execute(
             """

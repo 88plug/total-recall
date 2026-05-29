@@ -7,4 +7,4 @@ Summarize and confirm:
 - Re-ingests every `~/.claude/projects/<slug>/*.jsonl`.
 - Estimated 1-5 minutes for ~1GB on a dev laptop.
 
-On confirmation: `total-recall rebuild --yes` and tail output.
+On confirmation: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/recall-cli.sh" rebuild --yes` and tail output.
