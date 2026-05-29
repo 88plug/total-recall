@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "gemma4:e2b"
 DEFAULT_BASE_URL = "http://localhost:11434"
-DEFAULT_TIMEOUT_S = 60.0
+DEFAULT_TIMEOUT_S = 180.0  # cold-load + first inference can take >60s on CPU
 
 _PROBE_TIMEOUT_S = 2.0
 
@@ -135,14 +135,34 @@ class LLMClient:
         user: str,
         schema: dict | None = None,
         temperature: float = 0.0,
+        num_predict: int = 512,
+        num_ctx: int = 4096,
     ) -> dict | None:
         """Call the model and return a parsed JSON dict.
 
         Returns None on any failure: unavailable, network error, parse error.
-        Uses ollama's ``format: "json"`` mode for determinism.  When *schema*
+        Uses ollama's ``format: "json"`` mode for determinism. When *schema*
         is provided and the server supports structured output (ollama >= 0.5),
-        ``format=<schema>`` is sent for guaranteed-shape output; otherwise falls
-        back to ``format="json"`` and post-validates that the result parses.
+        ``format=<schema>`` is sent for guaranteed-shape output (constrained
+        decoding — the model literally cannot emit a key not in the schema);
+        otherwise falls back to ``format="json"`` and post-validates.
+
+        CPU-tuned defaults (verified against the ollama Go source
+        ``api/types.go DefaultOptions``):
+
+        * ``temperature=0.0``: deterministic.
+        * ``top_k=1`` + ``top_p=1.0``: greedy; nucleus/top-k disabled.
+        * ``seed=42``: reproducible across retries/debugging.
+        * ``repeat_penalty=1.0``: disabled — at temp=0 the repeat penalty
+          penalises repeated JSON keys like ``"name"`` and hurts structure.
+        * ``num_ctx=4096``: explicit small KV cache. ollama's default of 0
+          negotiates the model's training max (128K for gemma4:e2b) which
+          allocates a huge KV cache on first load — slow on CPU. 4096 is
+          plenty for our ≤2k-token prompts and dramatically faster on CPU.
+        * ``num_predict=512``: hard ceiling on output length so the model
+          can't run away. Tune down to 256 if your outputs are always short.
+        * ``keep_alive="15m"``: keep the model resident across the
+          rebuild's many sequential calls; auto-evict afterwards.
 
         Parameters
         ----------
@@ -154,6 +174,10 @@ class LLMClient:
             Optional JSON Schema dict for structured output (ollama >= 0.5).
         temperature:
             Sampling temperature; 0.0 for deterministic output (default).
+        num_predict:
+            Max output tokens (default 512).
+        num_ctx:
+            KV-cache context length in tokens (default 4096; see note above).
         """
         if not self.available:
             return None
@@ -163,7 +187,16 @@ class LLMClient:
             "prompt": user,
             "system": system,
             "stream": False,
-            "options": {"temperature": temperature},
+            "keep_alive": "15m",
+            "options": {
+                "temperature": temperature,
+                "top_k": 1,
+                "top_p": 1.0,
+                "seed": 42,
+                "repeat_penalty": 1.0,
+                "num_ctx": num_ctx,
+                "num_predict": num_predict,
+            },
         }
 
         if schema is not None:

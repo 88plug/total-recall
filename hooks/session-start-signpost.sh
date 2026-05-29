@@ -104,6 +104,31 @@ if [ -z "${CTX// }" ]; then
   exit 0
 fi
 
+# v0.9.0: LLM refinement detection — emit a one-time notice if ollama or
+# the configured model is absent. Reads TOTAL_RECALL_LLM_PROVIDER env: skip
+# silently when set to "none" (operator explicitly disabled). The sentinel
+# at ${RECALL_DATA_ROOT}/.ollama_notice_shown suppresses the notice after
+# it has been shown once.
+LLM_PROVIDER="${TOTAL_RECALL_LLM_PROVIDER:-auto}"
+LLM_NOTICE_MARK="${RECALL_DATA_ROOT}/.ollama_notice_shown"
+if [ "$LLM_PROVIDER" != "none" ] && [ ! -f "$LLM_NOTICE_MARK" ]; then
+  LLM_MODEL_TAG="${TOTAL_RECALL_LLM_MODEL:-gemma4:e2b}"
+  LLM_BASE_URL="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
+  LLM_NOTICE=""
+  if ! command -v ollama >/dev/null 2>&1; then
+    LLM_NOTICE="[total-recall] Optional local-LLM refinement layer is OFF: ollama not installed. To enable: run /total-recall:llm-setup (one-time). To suppress this notice: set TOTAL_RECALL_LLM_PROVIDER=none."
+  elif ! curl -sf "${LLM_BASE_URL}/api/tags" >/dev/null 2>&1; then
+    LLM_NOTICE="[total-recall] Optional local-LLM refinement layer is OFF: ollama daemon not reachable at ${LLM_BASE_URL}. Start it with 'ollama serve' or run /total-recall:llm-setup."
+  elif ! ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "${LLM_MODEL_TAG}\(:latest\)\?"; then
+    LLM_NOTICE="[total-recall] Optional local-LLM refinement layer is OFF: model ${LLM_MODEL_TAG} not pulled. Run /total-recall:llm-setup to pull it, or 'ollama pull ${LLM_MODEL_TAG}' manually."
+  fi
+  if [ -n "$LLM_NOTICE" ]; then
+    CTX="${CTX}"$'\n\n'"${LLM_NOTICE}"
+    touch "$LLM_NOTICE_MARK" 2>/dev/null || true
+    recall::log "session-start-v2: LLM-refinement notice appended ($(echo "$LLM_NOTICE" | head -c 60)…)"
+  fi
+fi
+
 recall::emit_context "$CTX" "SessionStart" || {
   recall::log "session-start-v2: emit failed (cwd=$CWD)"
   recall::log_json hook.session_start elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="$EMITTED" error="emit_failed" version="v2"

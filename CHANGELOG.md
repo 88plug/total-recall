@@ -2,6 +2,75 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-05-28
+
+### Added — LLM refinement: CPU-tuned defaults + auto-setup UX (validated end-to-end)
+
+Concrete tuning + first-run experience for the v0.9.0 optional refinement
+layer. Verified against the live ollama Go source (`api/types.go
+DefaultOptions`) and the official `gemma4:e2b` library page.
+
+- `extractors/llm/client.py`: `generate_json` now passes a full CPU-optimised
+  options block on every call: `temperature=0`, `top_k=1`, `top_p=1.0`,
+  `seed=42`, `repeat_penalty=1.0` (disabled — interacts badly with repeated
+  JSON keys at temp=0), `num_ctx=4096` (vs ollama's default of 0 which
+  negotiates the model's 128K training max and allocates a huge KV cache on
+  CPU first-load), `num_predict=512` (hard output ceiling). Plus
+  `keep_alive="15m"` so the model stays resident across the rebuild's many
+  sequential calls and auto-evicts after.
+- `gemma4:e2b` verified on `ollama.com/library/gemma4`: 2.3B effective /
+  5.1B total parameters, 128K context, q4_K_M quantization (~7.2 GB on
+  disk), JSON/structured-output supported, designed for CPU inference.
+- `hooks/session-start-signpost.sh`: one-time SessionStart detection of
+  missing ollama / unreachable daemon / un-pulled model. Appends a clear
+  one-line notice to the context payload (or skips silently if
+  `TOTAL_RECALL_LLM_PROVIDER=none`). Suppressed after first display via
+  `${RECALL_DATA_ROOT}/.ollama_notice_shown` sentinel.
+- `skills/llm-setup/SKILL.md` + `scripts/llm-setup.sh`: new
+  `/total-recall:llm-setup` skill that installs ollama (if missing, via
+  the official installer — needs sudo), starts the daemon, pulls the
+  configured model, and runs a smoke test against the refinement client.
+  Idempotent.
+
+UX shape per Claude Code plugin reality: there is no `install` lifecycle
+hook, so first-run detection lives on `SessionStart` + an operator-invoked
+`/total-recall:llm-setup` skill handles the actual install with explicit
+consent. No silent ~7 GB downloads.
+
+### Fixed — discovered by real-corpus validation
+
+End-to-end run against a live ollama daemon + gemma4:e2b on this machine
+surfaced two real wiring gaps:
+
+- **Default timeout 60s was too short for CPU cold-load** (first call always
+  timed out; model load alone is multiple seconds before any inference).
+  Bumped to **180s**.
+- **`cmd_rebuild` was calling `refine_vocabulary_definitions` and
+  `refine_project_narratives` with no context snippets**, so the
+  anti-hallucination guard correctly collapsed every output to null. Now
+  enriches each call: vocab gets the top-3 user-turn FTS hits per term
+  (rejecting tab/newline-heavy raw command output that misleads the model);
+  projects get the top-3 short user turns from the cwd's own sessions.
+  Calls run on top-50 vocab / top-25 projects by frequency, not blind
+  alphabetical first-N.
+
+### Validated against real corpus
+- `refine_machines`: live run on this machine reduced a 150-entry
+  heuristic-noise machines dict to **11 real hosts** in ~82s. All kept
+  entries genuinely look like hostnames (`fly.io`, `mail.acme-net`,
+  `relay-eu-west`, `racknerd-4b4fa33`, …); all dropped entries were
+  English nouns / command fragments (`accessible`, `activity`,
+  `brute-force`, `commands`, …). The NER-hard noise problem documented
+  as a v0.8.0 known limitation is now fixed when the refinement layer
+  is enabled.
+- `refine_vocabulary_definitions` + `refine_project_narratives`:
+  wire green; output quality is bounded by the upstream heuristic miner,
+  which currently surfaces too many generic single-word tokens
+  (`andrew`/`home`/`name`/`state`) by frequency alone. The LLM cannot
+  rescue a bad input; an extractor-level filter (cross-project
+  specificity score, hyphen/digit/length-6+ requirement) is the right
+  follow-up. Tracked as a known limitation.
+
 ## [0.9.0] - 2026-05-28
 
 ### Added — optional local-LLM refinement (off by default)
