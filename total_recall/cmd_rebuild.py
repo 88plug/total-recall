@@ -311,8 +311,8 @@ def rebuild_cmd(
                                     conn,
                                     v["term"],
                                     v.get("definition") or "",
-                                    v.get("category", "concept"),
-                                    v.get("frequency", 1),
+                                    category=v.get("category") or None,
+                                    frequency=v.get("frequency") or None,
                                 )
 
                     # Project narratives — top 25 by message_count, with grounding.

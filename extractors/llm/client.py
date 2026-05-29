@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -23,7 +24,9 @@ DEFAULT_MODEL = "gemma4:e2b"
 DEFAULT_BASE_URL = "http://localhost:11434"
 DEFAULT_TIMEOUT_S = 180.0  # cold-load + first inference can take >60s on CPU
 
-_PROBE_TIMEOUT_S = 2.0
+_PROBE_TIMEOUT_S = 10.0  # generous: probe competes with CPU-heavy ingest on rebuild
+_PROBE_RETRIES = 3       # transient post-ingest load can lose the race; retry before False
+_PROBE_BACKOFF_S = 1.5
 
 
 class LLMClient:
@@ -92,16 +95,22 @@ class LLMClient:
             return False
 
         tags_url = f"{self._base_url}/api/tags"
-        try:
-            req = urllib.request.Request(tags_url, method="GET")
-            with urllib.request.urlopen(req, timeout=_PROBE_TIMEOUT_S) as resp:
-                raw = resp.read()
-                data: dict[str, Any] = json.loads(raw)
-        except urllib.error.URLError as exc:
-            log.debug("LLMClient: ollama unreachable at %s — %s", tags_url, exc)
-            return False
-        except Exception as exc:  # noqa: BLE001
-            log.debug("LLMClient: probe error at %s — %s", tags_url, exc)
+        data: dict[str, Any] | None = None
+        last_exc: Exception | None = None
+        for _attempt in range(_PROBE_RETRIES):
+            try:
+                req = urllib.request.Request(tags_url, method="GET")
+                with urllib.request.urlopen(req, timeout=_PROBE_TIMEOUT_S) as resp:
+                    raw = resp.read()
+                    data = json.loads(raw)
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if _attempt + 1 < _PROBE_RETRIES:
+                    time.sleep(_PROBE_BACKOFF_S)
+        if data is None:
+            log.debug("LLMClient: probe failed after %d tries at %s — %s",
+                      _PROBE_RETRIES, tags_url, last_exc)
             return False
 
         # ollama /api/tags returns {"models": [{"name": "...", ...}, ...]}

@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.2] - 2026-05-28
+
+### Fixed — LLM refinement now fires + persists during rebuild (validated end-to-end on real corpus + live ollama)
+
+Two bugs found by running `rebuild` against a live ollama daemon + the
+`gemma4:e2b` model on the operator's real corpus (not synthetic):
+
+- **Availability probe lost a race under load → refinement silently skipped.**
+  `LLMClient`'s `_probe()` used a 2s timeout, single attempt, result cached.
+  During `rebuild` the probe fires immediately after CPU-heavy ingest +
+  consolidation, so the 2s GET `/api/tags` timed out → cached `available=False`
+  → the whole refinement layer was skipped for the run (verbose:
+  `[rebuild] LLM refinement off`). The same client probed `available=True`
+  when the box was idle. Fix: probe timeout 2s → **10s**, plus **3 retries
+  with 1.5s backoff** before caching False. Rebuild now logs
+  `[rebuild] LLM refinement enabled` and the machines refinement runs.
+  Verified: persisted `operator_profile.machines` went 150 → **10 real
+  hosts** through the actual plugin command.
+
+- **`upsert_vocabulary_term` called with positional kwargs → ontology
+  refinement raised + was skipped.** `category` / `frequency` are
+  keyword-only (after `*`) in the real signature; `cmd_rebuild` passed them
+  positionally (`takes 3 positional arguments but 5 were given`). Fixed to
+  keyword args. Vocabulary + project-narrative refinement now completes
+  without raising.
+
+### Known limitation — vocabulary/narrative quality is bounded by the heuristic miner
+
+With refinement firing correctly, vocab + narrative output is still weak on
+the current corpus: the upstream `mine_vocabulary` heuristic surfaces generic
+single-word tokens (`andrew`, `home`, `name`, `state`) by raw frequency, and
+their grounding snippets are command-output noise (`du -h` fragments). The
+LLM correctly returns null rather than hallucinate a definition from garbage,
+so those terms keep their heuristic stubs. The machines refinement is the
+proven win; vocab/narrative needs an extractor-level specificity filter on
+the miner (drop common-English single words, require cross-project
+specificity) — tracked as the next follow-up. The LLM layer itself is
+working as designed (no crash, no hallucination).
+
 ## [0.9.1] - 2026-05-28
 
 ### Added — LLM refinement: CPU-tuned defaults + auto-setup UX (validated end-to-end)
