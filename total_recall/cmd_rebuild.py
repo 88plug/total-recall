@@ -217,7 +217,46 @@ def rebuild_cmd(
                     prof = get_profile(conn)
                     machines = prof.get("machines") or {}
                     email = prof.get("email_primary") or None
-                    refined = refine_machines(machines, operator_email=email, client=_llm)
+
+                    # Build per-host context snippets so refine_machines can judge
+                    # bare hostnames against real corpus evidence rather than thin
+                    # heuristic metadata. Mirrors the _snippets_for_term pattern
+                    # used below for vocabulary grounding.
+                    sample_contexts: dict[str, list[str]] | None = None
+                    try:
+                        _host_ctx: dict[str, list[str]] = {}
+                        for _host in machines:
+                            _snips: list[str] = []
+                            try:
+                                _rows = conn.execute(
+                                    "SELECT m.text FROM messages_fts f "
+                                    "JOIN messages m ON m.id = f.rowid "
+                                    "WHERE f.text MATCH ? "
+                                    "AND m.role IN ('user', 'assistant') "
+                                    "ORDER BY length(m.text) ASC LIMIT 4",
+                                    (_host,),
+                                ).fetchall()
+                                for (_txt,) in _rows:
+                                    if len(_snips) >= 2:
+                                        break
+                                    _s = (_txt or "").strip().replace("\n", " ")
+                                    # Skip command-output-heavy or near-empty lines.
+                                    if _s.count("\t") > 2 or len(_s) < 20:
+                                        continue
+                                    _snips.append(_s[:200])
+                            except Exception:  # noqa: BLE001
+                                pass
+                            _host_ctx[_host] = _snips
+                        sample_contexts = _host_ctx
+                    except Exception:  # noqa: BLE001
+                        sample_contexts = None
+
+                    refined = refine_machines(
+                        machines,
+                        operator_email=email,
+                        client=_llm,
+                        sample_contexts=sample_contexts,
+                    )
                     if refined is not None and refined != machines:
                         upsert_profile_field(
                             conn,
@@ -235,11 +274,16 @@ def rebuild_cmd(
             # Vocabulary definitions + project narratives refinement.
             #
             # WHY gated: small CPU models (e.g. gemma4:e2b, 2.3B default) do
-            # classification well (machines keep/drop) but echo grounding snippets
-            # verbatim on generation tasks (definitions, narratives) instead of
-            # synthesising a real output.  Text-gen refinement therefore requires
-            # an explicit opt-in AND a capable model (>=7B recommended).
-            # Machines refinement above is classification-only and stays always-on.
+            # classification near-perfectly (machines keep/drop: measured P/R
+            # 1.0/1.0) but are weak at GENERATION (definitions, narratives).
+            # As of v0.9.5 the anti-echo detector + few-shot prompts eliminate
+            # the verbatim-parroting failure (measured echo_rate 0.0 on e2b) —
+            # output is now clean defs or null, never garbage — but coverage is
+            # sparse on a 2B model (~20% of definable terms get a real def; the
+            # rest correctly return null).  Text-gen is therefore SAFE but
+            # LOW-YIELD on small models, so it stays opt-in for the latency
+            # cost; a larger model (>=7B) raises coverage.  Machines refinement
+            # above is classification-only and stays always-on.
             _refine_text_raw = os.environ.get("TOTAL_RECALL_LLM_REFINE_TEXT", "").strip().lower()
             _refine_text = _refine_text_raw in ("1", "true", "yes")
 
@@ -247,8 +291,9 @@ def rebuild_cmd(
                 if verbose:
                     click.echo(
                         "[rebuild] LLM text refinement (vocab/narratives) off"
-                        " — set TOTAL_RECALL_LLM_REFINE_TEXT=1 with a capable"
-                        " model (>=7B) to enable",
+                        " — clean but low-yield on small models; set"
+                        " TOTAL_RECALL_LLM_REFINE_TEXT=1 to enable (a >=7B model"
+                        " gives better coverage)",
                         err=True,
                     )
             else:

@@ -18,6 +18,7 @@ refine_ontology = pytest.importorskip(
 
 refine_vocabulary_definitions = refine_ontology.refine_vocabulary_definitions
 refine_project_narratives = refine_ontology.refine_project_narratives
+_is_echo = refine_ontology._is_echo
 
 
 # ---------------------------------------------------------------------------
@@ -374,3 +375,155 @@ class TestRefineProjectNarratives:
         client = _client_returning(payload)
         refine_project_narratives(projects, client=client)
         assert projects[0] == original_copy
+
+
+# ---------------------------------------------------------------------------
+# _is_echo unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsEcho:
+    def test_verbatim_substring_output_in_source(self):
+        source = "The operator uses sharechain to link p2pool shares together."
+        output = "uses sharechain to link p2pool shares"
+        assert _is_echo(output, source) is True
+
+    def test_verbatim_substring_source_in_output(self):
+        source = "short snippet"
+        output = "This is a short snippet that has been slightly extended."
+        assert _is_echo(output, source) is True
+
+    def test_high_token_overlap_is_echo(self):
+        source = "the operator uses sharechain to link p2pool shares for payouts"
+        # Definition is a near-copy with minimal rearrangement — high overlap
+        output = "the operator uses sharechain link p2pool shares payouts"
+        assert _is_echo(output, source) is True
+
+    def test_synthesised_output_not_echo(self):
+        source = "fan-out parallel agents research wave then build wave non-overlapping files"
+        output = "A workflow pattern where multiple agents work in parallel on separate subtasks."
+        assert _is_echo(output, source) is False
+
+    def test_empty_output_not_echo(self):
+        assert _is_echo("", "some source text") is False
+
+    def test_empty_source_not_echo(self):
+        assert _is_echo("some output text", "") is False
+
+    def test_threshold_boundary(self):
+        # Construct tokens so overlap is exactly at threshold.
+        # output has 5 tokens, 3 shared with source → overlap = 3/5 = 0.6 (== threshold)
+        output = "alpha beta gamma delta epsilon"
+        source = "alpha beta gamma other stuff here"
+        assert _is_echo(output, source, threshold=0.6) is True
+        # One fewer shared token → 2/5 = 0.4 < 0.6
+        output2 = "alpha beta zeta delta epsilon"
+        assert _is_echo(output2, source, threshold=0.6) is False
+
+
+# ---------------------------------------------------------------------------
+# Anti-echo integration: refine_vocabulary_definitions
+# ---------------------------------------------------------------------------
+
+
+class TestAntiEchoVocabulary:
+    def test_echo_definition_suppressed(self):
+        """Model returns the input snippet as the definition — must be nulled."""
+        snippet = "The operator uses sharechain to link p2pool shares together for payouts."
+        terms = [
+            {
+                "term": "sharechain",
+                "frequency": 10,
+                "category": "concept",
+                "context_snippet": snippet,
+            }
+        ]
+        # Model parrots the snippet almost verbatim — high token overlap
+        echo_definition = "The operator uses sharechain to link p2pool shares together for payouts."
+        payload = {"definitions": [{"term": "sharechain", "definition": echo_definition}]}
+        client = _client_returning(payload)
+        result = refine_vocabulary_definitions(terms, client=client)
+
+        assert len(result) == 1
+        assert result[0]["definition"] is None, (
+            "Echo definition should be suppressed to None"
+        )
+
+    def test_synthesised_definition_kept(self):
+        """Model returns a genuinely different sentence — must be kept."""
+        snippet = "fan-out parallel agents research wave then build wave non-overlapping files"
+        terms = [
+            {
+                "term": "fan-out",
+                "frequency": 5,
+                "category": "workflow",
+                "context_snippet": snippet,
+            }
+        ]
+        # Genuinely synthesised — different vocabulary, low token overlap
+        synthesised = "A workflow pattern where multiple agents work in parallel on separate subtasks."
+        payload = {"definitions": [{"term": "fan-out", "definition": synthesised}]}
+        client = _client_returning(payload)
+        result = refine_vocabulary_definitions(terms, client=client)
+
+        assert len(result) == 1
+        assert result[0]["definition"] == synthesised, (
+            "Synthesised definition should be kept"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Anti-echo integration: refine_project_narratives
+# ---------------------------------------------------------------------------
+
+
+class TestAntiEchoNarratives:
+    def test_echo_narrative_suppressed(self):
+        """Model returns the input snippets as the narrative — must be nulled."""
+        snippets = [
+            "returns the real client IP even behind NAT",
+            "tiny Go HTTP service used by sidecar relay fleet",
+        ]
+        projects = [
+            {
+                "cwd": "ip-service-for-docker",
+                "display_name": "IP Service",
+                "context_snippets": snippets,
+            }
+        ]
+        # Model echoes the joined snippets almost verbatim
+        echo_narrative = "returns the real client IP even behind NAT tiny Go HTTP service used by sidecar relay fleet"
+        payload = {"narratives": [{"cwd": "ip-service-for-docker", "narrative": echo_narrative}]}
+        client = _client_returning(payload)
+        result = refine_project_narratives(projects, client=client)
+
+        assert len(result) == 1
+        assert result[0]["narrative"] is None, (
+            "Echo narrative should be suppressed to None"
+        )
+
+    def test_synthesised_narrative_kept(self):
+        """Model returns a genuine 1-2 sentence summary — must be kept."""
+        snippets = [
+            "returns the real client IP even behind NAT",
+            "tiny Go HTTP service used by sidecar relay fleet",
+        ]
+        projects = [
+            {
+                "cwd": "ip-service-for-docker",
+                "display_name": "IP Service",
+                "context_snippets": snippets,
+            }
+        ]
+        synthesised = (
+            "A lightweight Go HTTP service that reports the real client IP address, "
+            "used by the sidecar relay infrastructure."
+        )
+        payload = {"narratives": [{"cwd": "ip-service-for-docker", "narrative": synthesised}]}
+        client = _client_returning(payload)
+        result = refine_project_narratives(projects, client=client)
+
+        assert len(result) == 1
+        assert result[0]["narrative"] == synthesised, (
+            "Synthesised narrative should be kept"
+        )

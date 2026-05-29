@@ -271,3 +271,94 @@ class TestSampleContexts:
         result = refine_machines(machines, sample_contexts=None, client=client)
 
         assert "web-01" in result
+
+
+class TestNonStringInKeep:
+    """Non-string elements in the model's 'keep' list must not crash or pollute."""
+
+    def test_non_string_elements_filtered_out(self):
+        machines = _make_machines("host-a", "relay-1")
+        # Model returns a mix: one valid string, one int, one null.
+        client = _available_client({"keep": ["host-a", 123, None]})
+
+        result = refine_machines(machines, client=client)
+
+        # Only the real string that is also in the input survives.
+        assert set(result.keys()) == {"host-a"}
+
+    def test_all_non_string_keep_returns_empty(self):
+        machines = _make_machines("real-host")
+        client = _available_client({"keep": [42, None, 3.14]})
+
+        result = refine_machines(machines, client=client)
+
+        assert result == {}
+
+    def test_no_crash_mixed_types(self):
+        """Must not raise even with wild types in the keep list."""
+        machines = _make_machines("server-a", "server-b")
+        client = _available_client({"keep": ["server-a", 0, False, None, [], {}]})
+
+        result = refine_machines(machines, client=client)
+
+        assert set(result.keys()) == {"server-a"}
+
+
+class TestBareHostnameWithContext:
+    """Bare single-word hostnames should be kept when context supports them."""
+
+    def test_bare_hostname_kept_with_machine_context(self):
+        machines = _make_machines("novabox")
+        contexts = {"novabox": ["ssh dana@novabox", "novabox rebooted"]}
+        # Model decides to keep it given the context.
+        client = _available_client({"keep": ["novabox"]})
+
+        result = refine_machines(machines, sample_contexts=contexts, client=client)
+
+        assert "novabox" in result
+
+    def test_bare_hostname_context_appears_in_prompt(self):
+        machines = _make_machines("novabox")
+        contexts = {"novabox": ["ssh dana@novabox", "novabox rebooted"]}
+        client = _available_client({"keep": ["novabox"]})
+
+        refine_machines(machines, sample_contexts=contexts, client=client)
+
+        call_kwargs = client.generate_json.call_args
+        user_prompt = call_kwargs[1].get("user") or call_kwargs[0][1]
+        assert "ssh dana@novabox" in user_prompt
+        assert "novabox rebooted" in user_prompt
+
+    def test_bare_hostname_dropped_without_context(self):
+        machines = _make_machines("novabox")
+        # Model drops it when no context is present.
+        client = _available_client({"keep": []})
+
+        result = refine_machines(machines, sample_contexts=None, client=client)
+
+        assert "novabox" not in result
+        assert result == {}
+
+
+class TestNoContextStillWorks:
+    """sample_contexts=None path must work end-to-end without errors."""
+
+    def test_none_sample_contexts_full_flow(self):
+        machines = _make_machines("relay-eu-1", "brute-force", "hardening")
+        client = _available_client({"keep": ["relay-eu-1"]})
+
+        result = refine_machines(machines, sample_contexts=None, client=client)
+
+        assert set(result.keys()) == {"relay-eu-1"}
+        client.generate_json.assert_called_once()
+
+    def test_none_sample_contexts_prompt_has_no_context_field(self):
+        """When sample_contexts is None no '[context:' line appears in prompt."""
+        machines = _make_machines("server-a")
+        client = _available_client({"keep": ["server-a"]})
+
+        refine_machines(machines, sample_contexts=None, client=client)
+
+        call_kwargs = client.generate_json.call_args
+        user_prompt = call_kwargs[1].get("user") or call_kwargs[0][1]
+        assert "[context:" not in user_prompt

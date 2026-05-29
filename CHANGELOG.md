@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.5] - 2026-05-29
+
+### Added — advanced LLM-refinement round (measured against live gemma4:e2b)
+
+An expert round driven by a new reproducible eval harness. Headline: the
+anti-echo work eliminates the v0.9.4 generation failure, and an eval harness
+makes future model/prompt changes measurable instead of vibes.
+
+- **Anti-echo detector** (`extractors/llm/refine_ontology.py`): `_is_echo()`
+  rejects an LLM definition/narrative that parrots its grounding snippet
+  (token-containment ≥ 0.75 OR verbatim substring) → returns null instead.
+  Combined with **rewritten few-shot prompts** ("restate in your own words; do
+  not copy; return null if you can't"), measured **echo_rate dropped to 0.000**
+  on e2b (was ~everything echoing). Output is now clean definitions or null —
+  never garbage.
+
+- **Client-owned response cache** (`extractors/llm/client.py`): `LLMClient`
+  now holds an `LLMCache` (built in `get_default_client()` at
+  `$CLAUDE_PLUGIN_DATA/total-recall/llm_cache.db`); `generate_json` checks it
+  before the HTTP call and stores after. Identical LLM calls across rebuilds
+  are now instant — no repeat inference. Non-fatal if the cache can't open.
+
+- **Machines refinement hardened** (`extractors/llm/refine_machines.py` +
+  `total_recall/cmd_rebuild.py`): `isinstance` guard on the model's keep-list
+  (no crash/pollution from non-string elements); a bare-single-word-hostname
+  rescue rule in the prompt (keeps `novabox`-style hosts when context shows
+  machine usage); and `cmd_rebuild` now gathers per-host FTS context snippets
+  and passes them as `sample_contexts`. Measured machines **precision/recall
+  1.000 / 1.000**, deterministic keep-set.
+
+- **Eval harness** (`tests/integration/test_llm_eval.py` +
+  `tests/local/llm_eval_fixtures.py`): gated on `TOTAL_RECALL_LLM_EVAL=1` +
+  ollama reachable; runs per-model (`TOTAL_RECALL_LLM_EVAL_MODEL`). Reports
+  machines P/R + determinism (hard asserts) and vocab echo_rate /
+  define_coverage / latency (scorecard). Skips cleanly without the gate.
+
+### Changed — text-gen gating rationale
+
+`TOTAL_RECALL_LLM_REFINE_TEXT` stays opt-in (default off), but the reason is
+no longer "echoes garbage" (fixed) — it's now "clean but low-yield on small
+models" (e2b define_coverage ~20%; a ≥7B model raises it). Machines
+refinement (classification) remains always-on when a model is available.
+
+Full unit suite: 1130 passed. Live e2b eval: machines 1.0/1.0, echo_rate 0.0.
+
 ## [0.9.4] - 2026-05-28
 
 ### Fixed — vocab harness-artifact filter + gate generation-based LLM refinement

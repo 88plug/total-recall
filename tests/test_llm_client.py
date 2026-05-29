@@ -207,6 +207,99 @@ class TestGenerateJson:
 
 
 # ---------------------------------------------------------------------------
+# LLMClient cache integration
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateJsonCache:
+    def _client_available_with_cache(self, tmp_path: Path, model: str = DEFAULT_MODEL) -> LLMClient:
+        """Return an available client backed by a fresh tmp LLMCache."""
+        from extractors.llm.cache import LLMCache as _LLMCache
+        cache = _LLMCache(tmp_path / "llm_cache.db")
+        client = LLMClient(provider="auto", model=model, cache=cache)
+        client._available = True  # noqa: SLF001
+        return client
+
+    def test_cache_hit_skips_http(self, tmp_path: Path):
+        """Second call with identical args is served from cache; urlopen called once."""
+        expected = {"entities": ["host1", "host2"]}
+        gen_body = _generate_response(expected)
+
+        client = self._client_available_with_cache(tmp_path)
+        with patch("urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)) as mock_open:
+            result1 = client.generate_json(system="sys", user="tell me about machines")
+            result2 = client.generate_json(system="sys", user="tell me about machines")
+
+        assert mock_open.call_count == 1
+        assert result1 == expected
+        assert result2 == expected
+
+    def test_cache_miss_then_put(self, tmp_path: Path):
+        """First call misses the cache (hits network) and stores the result; second call is a hit."""
+        from extractors.llm.cache import LLMCache as _LLMCache
+
+        expected = {"vocab": ["term1"]}
+        gen_body = _generate_response(expected)
+        db = tmp_path / "llm_cache.db"
+
+        client = LLMClient(provider="auto", model=DEFAULT_MODEL, cache=_LLMCache(db))
+        client._available = True  # noqa: SLF001
+
+        with patch("urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)) as mock_open:
+            result1 = client.generate_json(system="s", user="u")
+
+        assert mock_open.call_count == 1
+        assert result1 == expected
+
+        # Verify the cache was populated by reading it directly.
+        cache_direct = _LLMCache(db)
+        cached = cache_direct.get(model=DEFAULT_MODEL, system="s", user="u", schema_json=None)
+        assert cached == expected
+
+        # Second call from the same client — no new network call.
+        with patch("urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)) as mock_open2:
+            result2 = client.generate_json(system="s", user="u")
+
+        assert mock_open2.call_count == 0
+        assert result2 == expected
+
+    def test_cache_none_does_not_break_generate(self, tmp_path: Path):
+        """Client with cache=None works exactly as before (no AttributeError)."""
+        expected = {"key": "val"}
+        gen_body = _generate_response(expected)
+
+        client = LLMClient(provider="auto", model=DEFAULT_MODEL, cache=None)
+        client._available = True  # noqa: SLF001
+
+        with patch("urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)):
+            result = client.generate_json(system="sys", user="u")
+
+        assert result == expected
+
+    def test_different_args_are_separate_cache_entries(self, tmp_path: Path):
+        """Two calls with different user prompts each hit the network."""
+        expected_a = {"x": 1}
+        expected_b = {"x": 2}
+
+        call_count = 0
+
+        def fake_urlopen(req, timeout=None):  # noqa: ANN001
+            nonlocal call_count
+            call_count += 1
+            body = _generate_response(expected_a if call_count == 1 else expected_b)
+            return _make_urlopen_response(body)
+
+        client = self._client_available_with_cache(tmp_path)
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            r1 = client.generate_json(system="sys", user="prompt-A")
+            r2 = client.generate_json(system="sys", user="prompt-B")
+
+        assert call_count == 2
+        assert r1 == expected_a
+        assert r2 == expected_b
+
+
+# ---------------------------------------------------------------------------
 # LLMCache
 # ---------------------------------------------------------------------------
 

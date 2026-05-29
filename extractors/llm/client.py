@@ -16,7 +16,10 @@ import os
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
+
+from .cache import LLMCache
 
 log = logging.getLogger(__name__)
 
@@ -52,12 +55,14 @@ class LLMClient:
         model: str | None = None,
         base_url: str | None = None,
         timeout: float | None = None,
+        cache: LLMCache | None = None,
     ) -> None:
         self._provider = provider.lower() if provider else "auto"
         self._model = model or DEFAULT_MODEL
         self._base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self._timeout = timeout if timeout is not None else DEFAULT_TIMEOUT_S
         self._available: bool | None = None  # None = not yet probed
+        self._cache = cache
 
     # ------------------------------------------------------------------
     # Properties
@@ -191,6 +196,13 @@ class LLMClient:
         if not self.available:
             return None
 
+        schema_json: str | None = json.dumps(schema, sort_keys=True) if schema is not None else None
+
+        if self._cache is not None:
+            cached = self._cache.get(self._model, system, user, schema_json)
+            if cached is not None:
+                return cached
+
         payload: dict[str, Any] = {
             "model": self._model,
             "prompt": user,
@@ -261,6 +273,9 @@ class LLMClient:
             log.warning("LLMClient: model response is not a JSON object (got %s)", type(result).__name__)
             return None
 
+        if self._cache is not None:
+            self._cache.put(self._model, system, user, schema_json, result)
+
         return result
 
 
@@ -279,8 +294,24 @@ def get_default_client() -> LLMClient:
 
     The returned client's ``.available`` reflects whether the daemon is
     reachable and the model is pulled.
+
+    A SQLite LLM result cache is constructed automatically and injected into
+    the client.  Cache construction errors are non-fatal (cache=None).
     """
     provider = os.environ.get("TOTAL_RECALL_LLM_PROVIDER", "auto")
     model = os.environ.get("TOTAL_RECALL_LLM_MODEL") or DEFAULT_MODEL
     base_url = os.environ.get("TOTAL_RECALL_LLM_BASE_URL") or DEFAULT_BASE_URL
-    return LLMClient(provider=provider, model=model, base_url=base_url)
+
+    cache: LLMCache | None = None
+    plugin_data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if plugin_data:
+        cache_path = Path(plugin_data) / "total-recall" / "llm_cache.db"
+    else:
+        cache_path = Path.home() / ".local" / "share" / "total-recall-88plug" / "total-recall" / "llm_cache.db"
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache = LLMCache(cache_path)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("LLMClient: cache construction failed, running without cache — %s", exc)
+
+    return LLMClient(provider=provider, model=model, base_url=base_url, cache=cache)

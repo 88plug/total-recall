@@ -70,6 +70,11 @@ Rules:
 - Tokens with typical hostname patterns (hyphens between words, datacenter \
   abbreviations, numeric suffixes, relay/node/srv/vps/box/host in the name, \
   subdomain-style labels) are more likely to be real machines.
+- A bare single word (no dot, no hyphen) CAN still be a real hostname if the \
+  context shows it used as a machine: e.g. "ssh <name>", "on <name>", \
+  "deploy to <name>", "<name> is up/down/rebooted". KEEP it when context \
+  supports it; DROP it only when it is clearly a common English word with no \
+  machine context.
 - When in doubt, EXCLUDE.
 """
 
@@ -127,9 +132,10 @@ def _call_llm_for_chunk(
         log.debug("refine_machines: unexpected LLM response shape: %r", result)
         return set(chunk.keys())
 
-    # Subset-of-input guard: drop anything not in the original chunk keys.
-    valid = {k for k in keep_raw if k in chunk}
-    hallucinated = set(keep_raw) - valid
+    # Subset-of-input guard: drop non-strings (e.g. numbers, nulls from
+    # malformed model output) then drop anything not in the original chunk keys.
+    valid = {k for k in keep_raw if isinstance(k, str) and k in chunk}
+    hallucinated = {k for k in keep_raw if isinstance(k, str)} - valid
     if hallucinated:
         log.debug(
             "refine_machines: dropped %d hallucinated key(s): %s",

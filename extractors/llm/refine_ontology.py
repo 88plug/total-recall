@@ -10,11 +10,13 @@ Design constraints (matches the package):
 - Batched — at most 25 items per LLM request to stay within small-model context.
 - Anti-hallucination — returned items are validated against the input set;
   unknown items are dropped and overlong text (>300 chars) is rejected.
+- Anti-echo — output that parrots the input context is suppressed (set to None).
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -25,6 +27,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "refine_vocabulary_definitions",
     "refine_project_narratives",
+    "_is_echo",
 ]
 
 # ---------------------------------------------------------------------------
@@ -33,24 +36,59 @@ __all__ = [
 
 _BATCH_SIZE: int = 25
 _MAX_DEF_LEN: int = 300
+_ECHO_THRESHOLD: float = 0.75
+# Minimum chars required in both strings before the verbatim-substring check fires.
+# Short sources (e.g. a single letter "z") would otherwise match any word that starts
+# with that letter, causing false positives.
+_VERBATIM_MIN_LEN: int = 10
 
-_VOCAB_SYSTEM_PROMPT = (
-    "Given a list of terms and a short context snippet from the operator's own "
-    "session transcripts, write ONE concise sentence defining what THIS operator "
-    "uses each term to mean. Use only what is in the snippet — do NOT fall back "
-    "to general knowledge. If the snippet is too vague to form a confident "
-    "definition, return null for that term. "
-    'Output JSON only: {"definitions": [{"term": "<str>", "definition": "<str>|null"}, ...]}'
-)
+_VOCAB_SYSTEM_PROMPT = """\
+You are a terminology extractor. Your job is to write a SHORT definition of what \
+a term means in THIS operator's context.
 
-_NARRATIVE_SYSTEM_PROMPT = (
-    "Given a project identifier and a list of short context snippets from the "
-    "operator's own session transcripts, write ONE or TWO concise sentences "
-    "describing what this project is or does, grounded strictly in the snippets. "
-    "Do not invent capabilities not evidenced in the snippets. If there is "
-    "insufficient information, return null for that project. "
-    'Output JSON only: {"narratives": [{"cwd": "<str>", "narrative": "<str>|null"}, ...]}'
-)
+RULES:
+1. Do NOT copy, quote, or repeat the context text. Restate the meaning in your OWN words as one short sentence.
+2. Use only the information in the provided snippet — do not add general knowledge.
+3. If the snippet is too vague, ambiguous, or off-topic to form a confident definition, return null for that term.
+
+EXAMPLES:
+  term: "sharechain"
+  snippet: "the sharechain links p2pool shares together so payouts are verifiable"
+  → definition: "A linked sequence of p2pool shares that enables verifiable miner payouts."
+
+  term: "fan-out"
+  snippet: "fan-out parallel agents research wave then build wave non-overlapping files"
+  → definition: "A workflow pattern where multiple agents work in parallel on separate subtasks before merging results."
+
+  term: "xyzzy"
+  snippet: "xyzzy"
+  → definition: null  (snippet gives no usable information)
+
+Output JSON only — no prose before or after:
+{"definitions": [{"term": "<str>", "definition": "<str>|null"}, ...]}\
+"""
+
+_NARRATIVE_SYSTEM_PROMPT = """\
+You are a project summariser. Your job is to write a SHORT description of what a \
+project does based on the provided context snippets.
+
+RULES:
+1. Do NOT copy, quote, or repeat text from the snippets. Write in your OWN words as 1-2 sentences.
+2. Only describe capabilities that are clearly evidenced in the snippets — do not invent features.
+3. If the snippets are too sparse or unclear, return null for that project.
+
+EXAMPLES:
+  cwd: "ip-service-for-docker"
+  snippets: ["returns the real client IP even behind NAT", "tiny Go HTTP service", "used by sidecar relay fleet"]
+  → narrative: "A lightweight Go HTTP service that reports the real client IP address, used by the sidecar relay infrastructure."
+
+  cwd: "temp-scratch"
+  snippets: ["scratch", "testing stuff"]
+  → narrative: null  (insufficient information to describe the project)
+
+Output JSON only — no prose before or after:
+{"narratives": [{"cwd": "<str>", "narrative": "<str>|null"}, ...]}\
+"""
 
 _VOCAB_SCHEMA = {
     "type": "object",
@@ -92,6 +130,37 @@ _NARRATIVE_SCHEMA = {
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+_TOKEN_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _tokenize(text: str) -> set[str]:
+    """Lowercase and split on non-alphanumeric; drop tokens shorter than 3 chars."""
+    return {tok for tok in _TOKEN_RE.split(text.lower()) if len(tok) >= 3}
+
+
+def _is_echo(output: str, source: str, threshold: float = _ECHO_THRESHOLD) -> bool:
+    """Return True if *output* is essentially a copy of *source*.
+
+    Two signals:
+    - Verbatim substring: output is contained in source (or vice versa).
+    - Token-level containment: overlap = |out_tokens ∩ src_tokens| / max(1, |out_tokens|)
+      >= threshold.  A high ratio means most of what the model wrote came straight
+      from the source text — i.e. it echoed rather than synthesised.
+    """
+    if not output or not source:
+        return False
+    out_lower = output.lower().strip()
+    src_lower = source.lower().strip()
+    # Only apply verbatim check when both strings are long enough to avoid
+    # false positives from single-char / very short sources.
+    if len(out_lower) >= _VERBATIM_MIN_LEN and len(src_lower) >= _VERBATIM_MIN_LEN:
+        if out_lower in src_lower or src_lower in out_lower:
+            return True
+    out_tokens = _tokenize(output)
+    src_tokens = _tokenize(source)
+    overlap = len(out_tokens & src_tokens) / max(1, len(out_tokens))
+    return overlap >= threshold
 
 
 def _get_client(client: "LLMClient | None") -> "LLMClient | None":
@@ -225,6 +294,12 @@ def refine_vocabulary_definitions(
             defn = entry.get("definition")
             if isinstance(defn, str):
                 defn = _truncate_or_none(defn)
+            # Anti-echo: suppress definitions that are just the context parroted back.
+            if isinstance(defn, str):
+                snippet = input_index[key].get("context_snippet") or ""
+                if _is_echo(defn, snippet):
+                    log.debug("Echo detected for term %r — suppressing definition", returned_term)
+                    defn = None
             result_map[key] = defn
 
     # Build output preserving input order.
@@ -300,6 +375,14 @@ def refine_project_narratives(
             narrative = entry.get("narrative")
             if isinstance(narrative, str):
                 narrative = _truncate_or_none(narrative)
+            # Anti-echo: suppress narratives that are just the snippets parroted back.
+            if isinstance(narrative, str):
+                joined_snippets = " ".join(
+                    input_index[returned_cwd].get("context_snippets") or []
+                )
+                if _is_echo(narrative, joined_snippets):
+                    log.debug("Echo detected for cwd %r — suppressing narrative", returned_cwd)
+                    narrative = None
             result_map[returned_cwd] = narrative
 
     out: list[dict] = []
