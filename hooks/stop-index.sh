@@ -53,38 +53,12 @@ if recall::bootstrap_in_progress; then
   exit 0
 fi
 
-# Decide which python invocation to use: WT-8's CLI if importable, else the
-# inline fallback that drives ingest_all directly. Both paths are wrapped in a
-# 55s timeout (slightly under the 60s hook budget to give us a clean exit).
-TIMEOUT_BIN=""
-if command -v timeout >/dev/null 2>&1; then
-  TIMEOUT_BIN="timeout 55s"
-fi
-
-rc=0
-if "$RECALL_PY" -c 'import total_recall' >/dev/null 2>&1; then
-  # shellcheck disable=SC2086
-  $TIMEOUT_BIN "$RECALL_PY" -m total_recall index --since-last-tick \
-    >/dev/null 2>&1 || rc=$?
-else
-  # shellcheck disable=SC2086
-  $TIMEOUT_BIN "$RECALL_PY" - <<'PY' >/dev/null 2>&1 || rc=$?
-import sys
-try:
-    from index.db import connect
-    from index.ingest import ingest_all  # type: ignore[import-not-found]
-except Exception:
-    sys.exit(0)
-try:
-    ingest_all(connect())
-except Exception:
-    sys.exit(0)
-PY
-fi
-
-if [ "$rc" -ne 0 ]; then
-  recall::log "stop-index: indexer rc=$rc (timeout=$([ -n "$TIMEOUT_BIN" ] && echo on || echo off))"
-fi
-recall::log "stop-index: tick complete"
-recall::log_json hook.stop elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="false" rc="$rc"
+# Detach the incremental ingest so the Stop event returns immediately and the
+# indexer is never raced against the 60s hook deadline. The old foreground
+# `timeout 55s ... index --since-last-tick` SIGTERM'd heavy scans mid-write,
+# stalling the ingest_state watermark — see recall::start_incremental_index.
+# PYTHONPATH (exported above) is inherited by the detached child.
+recall::start_incremental_index "$RECALL_PY" "Stop"
+recall::log "stop-index: detached tick dispatched"
+recall::log_json hook.stop elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="false" detached="true"
 exit 0

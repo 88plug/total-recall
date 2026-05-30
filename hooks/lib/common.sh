@@ -412,6 +412,44 @@ recall::start_bootstrap() {
   recall::start_llm_provision
 }
 
+# Detach an incremental ingest tick (Stop / PostCompact). Returns immediately.
+#
+# Replaces the old foreground `timeout 55s ... index --since-last-tick`: a scan
+# that ran past 55s was SIGTERM'd mid-write, so the ingest transaction never
+# committed and ingest_state never advanced — the next tick re-scanned the same
+# (growing) backlog and timed out again, a death spiral that pinned the index
+# far below the on-disk corpus. Detaching (setsid+nohup, exactly like
+# recall::start_bootstrap) removes the race entirely; an flock inside the child
+# collapses overlapping ticks to one instead of letting them pile up.
+#
+#   $1 = resolved python invocation (the recall::python shim)
+#   $2 = invoking hook event label (logs only)
+#
+# PYTHONPATH is exported by the caller, so the detached child inherits it.
+recall::start_incremental_index() {
+  local py="${1:-}"
+  local evt="${2:-?}"
+  [ -n "$py" ] || { recall::log "start_incremental_index: no python; skipping"; return 1; }
+
+  mkdir -p "$RECALL_DATA_ROOT" 2>/dev/null || true
+  local lock="${RECALL_DATA_ROOT}/.incremental.lock"
+
+  local launcher="nohup"
+  if command -v setsid >/dev/null 2>&1; then launcher="setsid nohup"; fi
+
+  # RECALL_INCR_PY is passed through the environment so we avoid nested quoting
+  # of the shim path inside the single-quoted child script.
+  RECALL_INCR_PY="$py" $launcher bash -c '
+    if command -v flock >/dev/null 2>&1; then
+      exec 9>"$1" 2>/dev/null || exit 0
+      flock -n 9 || exit 0   # another tick is already ingesting; let it finish
+    fi
+    "$RECALL_INCR_PY" -m total_recall index --since-last-tick >/dev/null 2>&1
+  ' tr-incr "$lock" >/dev/null 2>&1 < /dev/null &
+  disown 2>/dev/null || true
+  recall::log "start_incremental_index: detached tick (hook=${evt}, lock=${lock})"
+}
+
 # === ollama resolver + LLM provision (v0.9.1) =================================
 # Mirrors the recall::uv pattern exactly: resolve, then auto-fetch if absent.
 # Every function is safe to call repeatedly (idempotent). Any failure logs +
