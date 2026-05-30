@@ -54,17 +54,17 @@ RULES:
 EXAMPLES:
   term: "sharechain"
   snippet: "the sharechain links p2pool shares together so payouts are verifiable"
-  → definition: "A linked sequence of p2pool shares that enables verifiable miner payouts."
+  -> definition: "A linked sequence of p2pool shares that enables verifiable miner payouts."
 
   term: "fan-out"
   snippet: "fan-out parallel agents research wave then build wave non-overlapping files"
-  → definition: "A workflow pattern where multiple agents work in parallel on separate subtasks before merging results."
+  -> definition: "A workflow pattern where multiple agents work in parallel on separate subtasks before merging results."
 
   term: "xyzzy"
   snippet: "xyzzy"
-  → definition: null  (snippet gives no usable information)
+  -> definition: null  (snippet gives no usable information)
 
-Output JSON only — no prose before or after:
+Output JSON only -- no prose before or after:
 {"definitions": [{"term": "<str>", "definition": "<str>|null"}, ...]}\
 """
 
@@ -74,19 +74,19 @@ project does based on the provided context snippets.
 
 RULES:
 1. Do NOT copy, quote, or repeat text from the snippets. Write in your OWN words as 1-2 sentences.
-2. Only describe capabilities that are clearly evidenced in the snippets — do not invent features.
+2. Only describe capabilities that are clearly evidenced in the snippets -- do not invent features.
 3. If the snippets are too sparse or unclear, return null for that project.
 
 EXAMPLES:
   cwd: "ip-service-for-docker"
   snippets: ["returns the real client IP even behind NAT", "tiny Go HTTP service", "used by sidecar relay fleet"]
-  → narrative: "A lightweight Go HTTP service that reports the real client IP address, used by the sidecar relay infrastructure."
+  -> narrative: "A lightweight Go HTTP service that reports the real client IP address, used by the sidecar relay infrastructure."
 
   cwd: "temp-scratch"
   snippets: ["scratch", "testing stuff"]
-  → narrative: null  (insufficient information to describe the project)
+  -> narrative: null  (insufficient information to describe the project)
 
-Output JSON only — no prose before or after:
+Output JSON only -- no prose before or after:
 {"narratives": [{"cwd": "<str>", "narrative": "<str>|null"}, ...]}\
 """
 
@@ -144,9 +144,9 @@ def _is_echo(output: str, source: str, threshold: float = _ECHO_THRESHOLD) -> bo
 
     Two signals:
     - Verbatim substring: output is contained in source (or vice versa).
-    - Token-level containment: overlap = |out_tokens ∩ src_tokens| / max(1, |out_tokens|)
+    - Token-level containment: overlap = |out_tokens & src_tokens| / max(1, |out_tokens|)
       >= threshold.  A high ratio means most of what the model wrote came straight
-      from the source text — i.e. it echoed rather than synthesised.
+      from the source text -- i.e. it echoed rather than synthesised.
     """
     if not output or not source:
         return False
@@ -188,6 +188,102 @@ def _truncate_or_none(text: str | None) -> str | None:
     return stripped
 
 
+# ---------------------------------------------------------------------------
+# Shape-tolerant response normalizers
+# ---------------------------------------------------------------------------
+
+
+def _coerce_vocab_entry(entry: dict) -> dict:
+    """Normalise 'description'/'meaning' aliases to 'definition'."""
+    defn = entry.get("definition")
+    if defn is None:
+        defn = entry.get("description")
+    if defn is None:
+        defn = entry.get("meaning")
+    return {"term": entry.get("term"), "definition": defn}
+
+
+def _normalize_vocab_raw(raw: object) -> list[dict]:
+    """Normalize the many JSON shapes a model may emit into a list of {term, definition} dicts.
+
+    Accepted shapes:
+    - {"definitions": [{"term": T, "definition": D}, ...]}        (canonical)
+    - {"definitions": {"term1": "def1", "term2": "def2"}}         (dict under "definitions")
+    - {"term1": "def1", "term2": "def2"}                          (flat top-level map)
+    - {"term": T, "definition": D}                                (single-object, batch=1)
+    - "definition" key may also appear as "description" or "meaning"
+    """
+    if not isinstance(raw, dict):
+        return []
+
+    # Canonical: {"definitions": [...]}
+    defs = raw.get("definitions")
+    if isinstance(defs, list):
+        return [_coerce_vocab_entry(e) for e in defs if isinstance(e, dict)]
+
+    # Dict-under-definitions: {"definitions": {"term1": "def1", ...}}
+    if isinstance(defs, dict):
+        return [{"term": k, "definition": v} for k, v in defs.items()]
+
+    # Single-object shorthand: {"term": "...", "definition"/"description"/"meaning": "..."}
+    if "term" in raw:
+        return [_coerce_vocab_entry(raw)]
+
+    # Flat top-level map: {"term1": "def1", "term2": "def2"}
+    # Exclude known structural keys to avoid misreading schema noise.
+    _STRUCTURAL = {"definitions", "narratives", "type", "properties", "required"}
+    entries = {k: v for k, v in raw.items() if k not in _STRUCTURAL}
+    if entries and all(isinstance(v, (str, type(None))) for v in entries.values()):
+        return [{"term": k, "definition": v} for k, v in entries.items()]
+
+    return []
+
+
+def _coerce_narrative_entry(entry: dict) -> dict:
+    """Normalise 'summary'/'description' aliases to 'narrative'."""
+    narrative = entry.get("narrative")
+    if narrative is None:
+        narrative = entry.get("summary")
+    if narrative is None:
+        narrative = entry.get("description")
+    return {"cwd": entry.get("cwd"), "narrative": narrative}
+
+
+def _normalize_narrative_raw(raw: object) -> list[dict]:
+    """Normalize model response shapes for narratives into a list of {cwd, narrative} dicts.
+
+    Accepted shapes:
+    - {"narratives": [{"cwd": C, "narrative": N}, ...]}           (canonical)
+    - {"narratives": {"cwd1": "narrative1", ...}}                 (dict under "narratives")
+    - {"cwd1": "narrative1", "cwd2": "narrative2"}               (flat top-level map)
+    - {"cwd": C, "narrative": N}                                  (single-object)
+    - "narrative" key may also appear as "summary" or "description"
+    """
+    if not isinstance(raw, dict):
+        return []
+
+    # Canonical: {"narratives": [...]}
+    narrs = raw.get("narratives")
+    if isinstance(narrs, list):
+        return [_coerce_narrative_entry(e) for e in narrs if isinstance(e, dict)]
+
+    # Dict-under-narratives: {"narratives": {"cwd1": "n1", ...}}
+    if isinstance(narrs, dict):
+        return [{"cwd": k, "narrative": v} for k, v in narrs.items()]
+
+    # Single-object shorthand: {"cwd": "...", "narrative"/"summary"/"description": "..."}
+    if "cwd" in raw:
+        return [_coerce_narrative_entry(raw)]
+
+    # Flat top-level map
+    _STRUCTURAL = {"definitions", "narratives", "type", "properties", "required"}
+    entries = {k: v for k, v in raw.items() if k not in _STRUCTURAL}
+    if entries and all(isinstance(v, (str, type(None))) for v in entries.values()):
+        return [{"cwd": k, "narrative": v} for k, v in entries.items()]
+
+    return []
+
+
 def _build_vocab_user_prompt(batch: list[dict]) -> str:
     lines = []
     for item in batch:
@@ -197,7 +293,12 @@ def _build_vocab_user_prompt(batch: list[dict]) -> str:
         freq = item.get("frequency", 0)
         meta = f"category={cat}, frequency={freq}" if cat else f"frequency={freq}"
         lines.append(f'- term: "{term}" ({meta})\n  snippet: "{snippet}"')
-    return "Terms to define:\n\n" + "\n\n".join(lines)
+    header = (
+        "Define each term in your OWN words (do NOT copy the snippet text). "
+        "Return null if the snippet gives insufficient information. "
+        'Return JSON: {"definitions": [{"term": "...", "definition": "...|null"}, ...]}\n\n'
+    )
+    return header + "Terms to define:\n\n" + "\n\n".join(lines)
 
 
 def _build_narrative_user_prompt(batch: list[dict]) -> str:
@@ -261,7 +362,7 @@ def refine_vocabulary_definitions(
 
     # Index input by term (lower-cased) for O(1) lookup.
     input_index: dict[str, dict] = {t["term"].lower(): t for t in terms}
-    result_map: dict[str, str | None] = {}  # term_lower → definition
+    result_map: dict[str, str | None] = {}  # term_lower -> definition
 
     for batch_start in range(0, len(terms), _BATCH_SIZE):
         batch = terms[batch_start : batch_start + _BATCH_SIZE]
@@ -280,16 +381,14 @@ def refine_vocabulary_definitions(
         if raw is None:
             continue
 
-        for entry in raw.get("definitions") or []:
-            if not isinstance(entry, dict):
-                continue
+        for entry in _normalize_vocab_raw(raw):
             returned_term = entry.get("term")
             if not isinstance(returned_term, str):
                 continue
             key = returned_term.lower()
             if key not in input_index:
                 # Anti-hallucination: drop terms not in the input set.
-                log.debug("LLM returned unknown term %r — dropped", returned_term)
+                log.debug("LLM returned unknown term %r -- dropped", returned_term)
                 continue
             defn = entry.get("definition")
             if isinstance(defn, str):
@@ -298,7 +397,7 @@ def refine_vocabulary_definitions(
             if isinstance(defn, str):
                 snippet = input_index[key].get("context_snippet") or ""
                 if _is_echo(defn, snippet):
-                    log.debug("Echo detected for term %r — suppressing definition", returned_term)
+                    log.debug("Echo detected for term %r -- suppressing definition", returned_term)
                     defn = None
             result_map[key] = defn
 
@@ -343,7 +442,7 @@ def refine_project_narratives(
         return [dict(p) for p in projects]
 
     input_index: dict[str, dict] = {p["cwd"]: p for p in projects}
-    result_map: dict[str, str | None] = {}  # cwd → narrative
+    result_map: dict[str, str | None] = {}  # cwd -> narrative
 
     for batch_start in range(0, len(projects), _BATCH_SIZE):
         batch = projects[batch_start : batch_start + _BATCH_SIZE]
@@ -362,15 +461,13 @@ def refine_project_narratives(
         if raw is None:
             continue
 
-        for entry in raw.get("narratives") or []:
-            if not isinstance(entry, dict):
-                continue
+        for entry in _normalize_narrative_raw(raw):
             returned_cwd = entry.get("cwd")
             if not isinstance(returned_cwd, str):
                 continue
             if returned_cwd not in input_index:
                 # Anti-hallucination: drop projects not in the input set.
-                log.debug("LLM returned unknown cwd %r — dropped", returned_cwd)
+                log.debug("LLM returned unknown cwd %r -- dropped", returned_cwd)
                 continue
             narrative = entry.get("narrative")
             if isinstance(narrative, str):
@@ -381,7 +478,7 @@ def refine_project_narratives(
                     input_index[returned_cwd].get("context_snippets") or []
                 )
                 if _is_echo(narrative, joined_snippets):
-                    log.debug("Echo detected for cwd %r — suppressing narrative", returned_cwd)
+                    log.debug("Echo detected for cwd %r -- suppressing narrative", returned_cwd)
                     narrative = None
             result_map[returned_cwd] = narrative
 

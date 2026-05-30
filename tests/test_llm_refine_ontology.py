@@ -1,11 +1,12 @@
 """Tests for extractors/llm/refine_ontology.py.
 
-All tests are hermetic — no real ollama, no real network. The LLM client is
+All tests are hermetic -- no real ollama, no real network. The LLM client is
 always mocked via ``unittest.mock.MagicMock`` or ``pytest.importorskip``.
 """
 
 from __future__ import annotations
 
+import inspect
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,6 +20,9 @@ refine_ontology = pytest.importorskip(
 refine_vocabulary_definitions = refine_ontology.refine_vocabulary_definitions
 refine_project_narratives = refine_ontology.refine_project_narratives
 _is_echo = refine_ontology._is_echo
+_build_vocab_user_prompt = refine_ontology._build_vocab_user_prompt
+_normalize_vocab_raw = refine_ontology._normalize_vocab_raw
+_normalize_narrative_raw = refine_ontology._normalize_narrative_raw
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +72,275 @@ def _sample_projects(n: int = 2) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# refine_vocabulary_definitions
+# Structural: only one _build_vocab_user_prompt definition
+# ---------------------------------------------------------------------------
+
+
+class TestSingleBuildVocabUserPromptDef:
+    def test_only_one_definition_in_module(self):
+        """There must be exactly one _build_vocab_user_prompt in the module source."""
+        source = inspect.getsource(refine_ontology)
+        count = source.count("def _build_vocab_user_prompt(")
+        assert count == 1, f"Expected 1 def, found {count}"
+
+    def test_prompt_contains_anti_echo_instruction(self):
+        """The built user prompt must contain the anti-echo/own-words instruction."""
+        batch = [
+            {"term": "foo", "frequency": 1, "category": "x", "context_snippet": "foo does bar"},
+            {"term": "baz", "frequency": 2, "category": "y", "context_snippet": "baz is a thing"},
+        ]
+        prompt = _build_vocab_user_prompt(batch)
+        # Must contain anti-echo guidance
+        assert "OWN words" in prompt or "own words" in prompt, (
+            "Prompt must instruct model to define in its own words"
+        )
+        # Must list both terms
+        assert '"foo"' in prompt
+        assert '"baz"' in prompt
+        # Must specify return format
+        assert "definitions" in prompt
+
+
+# ---------------------------------------------------------------------------
+# _normalize_vocab_raw: shape-variant tests
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeVocabRaw:
+    def test_canonical_array_shape(self):
+        raw = {"definitions": [{"term": "foo", "definition": "A def."}]}
+        result = _normalize_vocab_raw(raw)
+        assert result == [{"term": "foo", "definition": "A def."}]
+
+    def test_dict_under_definitions(self):
+        """{"definitions": {"term1": "def1", "term2": "def2"}} -> list of {term, definition}"""
+        raw = {"definitions": {"alpha": "First def.", "beta": "Second def."}}
+        result = _normalize_vocab_raw(raw)
+        terms = {e["term"]: e["definition"] for e in result}
+        assert terms == {"alpha": "First def.", "beta": "Second def."}
+
+    def test_flat_top_level_map(self):
+        """{"term1": "def1", "term2": "def2"} -> list of {term, definition}"""
+        raw = {"sharechain": "A p2pool share chain.", "fan-out": "Parallel agent pattern."}
+        result = _normalize_vocab_raw(raw)
+        terms = {e["term"]: e["definition"] for e in result}
+        assert terms == {"sharechain": "A p2pool share chain.", "fan-out": "Parallel agent pattern."}
+
+    def test_single_object_shape(self):
+        """{"term": "foo", "definition": "A def."} -> [{term, definition}]"""
+        raw = {"term": "singleton", "definition": "Only one."}
+        result = _normalize_vocab_raw(raw)
+        assert result == [{"term": "singleton", "definition": "Only one."}]
+
+    def test_description_alias(self):
+        """'description' key accepted as alias for 'definition'."""
+        raw = {"definitions": [{"term": "wingscale", "description": "A VPN solution."}]}
+        result = _normalize_vocab_raw(raw)
+        assert result[0]["definition"] == "A VPN solution."
+
+    def test_meaning_alias(self):
+        """'meaning' key accepted as alias for 'definition'."""
+        raw = {"definitions": [{"term": "sharechain", "meaning": "Links p2pool shares."}]}
+        result = _normalize_vocab_raw(raw)
+        assert result[0]["definition"] == "Links p2pool shares."
+
+    def test_non_dict_returns_empty(self):
+        assert _normalize_vocab_raw(None) == []
+        assert _normalize_vocab_raw([]) == []
+        assert _normalize_vocab_raw("string") == []
+
+    def test_flat_map_excludes_structural_keys(self):
+        """Structural keys like 'definitions' must not appear as terms in the flat map path."""
+        raw = {"definitions": None, "realterm": "A real definition."}
+        # 'definitions' is None (not list/dict), 'realterm' is a string value
+        # Should not blow up and should handle gracefully
+        result = _normalize_vocab_raw(raw)
+        # definitions=None doesn't match list or dict paths, falls to flat-map check
+        # but 'definitions' is excluded by _STRUCTURAL, so only 'realterm' survives
+        term_names = [e["term"] for e in result]
+        assert "definitions" not in term_names
+
+
+# ---------------------------------------------------------------------------
+# _normalize_narrative_raw: shape-variant tests
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeNarrativeRaw:
+    def test_canonical_array_shape(self):
+        raw = {"narratives": [{"cwd": "myproj", "narrative": "Does X."}]}
+        result = _normalize_narrative_raw(raw)
+        assert result == [{"cwd": "myproj", "narrative": "Does X."}]
+
+    def test_dict_under_narratives(self):
+        raw = {"narratives": {"proj-a": "Project A summary.", "proj-b": "Project B summary."}}
+        result = _normalize_narrative_raw(raw)
+        cwds = {e["cwd"]: e["narrative"] for e in result}
+        assert cwds == {"proj-a": "Project A summary.", "proj-b": "Project B summary."}
+
+    def test_flat_top_level_map(self):
+        raw = {"ip-service": "A Go HTTP service.", "miner": "A crypto miner."}
+        result = _normalize_narrative_raw(raw)
+        cwds = {e["cwd"]: e["narrative"] for e in result}
+        assert cwds == {"ip-service": "A Go HTTP service.", "miner": "A crypto miner."}
+
+    def test_single_object_shape(self):
+        raw = {"cwd": "only-proj", "narrative": "The one project."}
+        result = _normalize_narrative_raw(raw)
+        assert result == [{"cwd": "only-proj", "narrative": "The one project."}]
+
+    def test_summary_alias(self):
+        """'summary' key accepted as alias for 'narrative'."""
+        raw = {"narratives": [{"cwd": "myproj", "summary": "A summary."}]}
+        result = _normalize_narrative_raw(raw)
+        assert result[0]["narrative"] == "A summary."
+
+    def test_description_alias(self):
+        """'description' key accepted as alias for 'narrative'."""
+        raw = {"narratives": [{"cwd": "myproj", "description": "A description."}]}
+        result = _normalize_narrative_raw(raw)
+        assert result[0]["narrative"] == "A description."
+
+    def test_non_dict_returns_empty(self):
+        assert _normalize_narrative_raw(None) == []
+        assert _normalize_narrative_raw([]) == []
+        assert _normalize_narrative_raw("string") == []
+
+
+# ---------------------------------------------------------------------------
+# refine_vocabulary_definitions: shape-variant end-to-end tests
+# ---------------------------------------------------------------------------
+
+
+class TestRefineVocabShapeVariants:
+    """Verify that a capable model emitting a non-canonical shape is not scored 0."""
+
+    def _term(self, name: str) -> dict:
+        return {
+            "term": name,
+            "frequency": 5,
+            "category": "concept",
+            "context_snippet": f"{name} is a component used in this project.",
+        }
+
+    def test_dict_under_definitions_shape(self):
+        """{"definitions": {"termA": "def A", "termB": "def B"}} -> both terms defined."""
+        terms = [self._term("terma"), self._term("termb")]
+        payload = {"definitions": {"terma": "Definition for A.", "termb": "Definition for B."}}
+        client = _client_returning(payload)
+        result = refine_vocabulary_definitions(terms, client=client)
+        assert result[0]["definition"] == "Definition for A."
+        assert result[1]["definition"] == "Definition for B."
+
+    def test_flat_top_level_map_shape(self):
+        """{"term1": "def1", "term2": "def2"} -> both terms defined."""
+        terms = [self._term("alpha"), self._term("beta")]
+        payload = {"alpha": "Alpha definition.", "beta": "Beta definition."}
+        client = _client_returning(payload)
+        result = refine_vocabulary_definitions(terms, client=client)
+        defs = {r["term"]: r.get("definition") for r in result}
+        assert defs["alpha"] == "Alpha definition."
+        assert defs["beta"] == "Beta definition."
+
+    def test_single_object_shape_batch1(self):
+        """{"term": "foo", "definition": "..."} for a batch-of-1 -> term defined."""
+        terms = [self._term("singleton")]
+        payload = {"term": "singleton", "definition": "A single component."}
+        client = _client_returning(payload)
+        result = refine_vocabulary_definitions(terms, client=client)
+        assert result[0]["definition"] == "A single component."
+
+    def test_description_alias_end_to_end(self):
+        """Model uses 'description' instead of 'definition' -> still parsed."""
+        terms = [self._term("wingscale")]
+        payload = {"definitions": [{"term": "wingscale", "description": "A VPN platform."}]}
+        client = _client_returning(payload)
+        result = refine_vocabulary_definitions(terms, client=client)
+        assert result[0]["definition"] == "A VPN platform."
+
+    def test_meaning_alias_end_to_end(self):
+        """Model uses 'meaning' instead of 'definition' -> still parsed."""
+        terms = [self._term("p2pool")]
+        payload = {"definitions": [{"term": "p2pool", "meaning": "A distributed mining pool."}]}
+        client = _client_returning(payload)
+        result = refine_vocabulary_definitions(terms, client=client)
+        assert result[0]["definition"] == "A distributed mining pool."
+
+    def test_unknown_term_still_dropped_in_all_shapes(self):
+        """Anti-hallucination guard survives shape normalization."""
+        terms = [self._term("known")]
+        payload = {"known": "Known definition.", "phantom": "Should be dropped."}
+        client = _client_returning(payload)
+        result = refine_vocabulary_definitions(terms, client=client)
+        assert len(result) == 1
+        assert result[0]["definition"] == "Known definition."
+
+
+# ---------------------------------------------------------------------------
+# refine_project_narratives: shape-variant end-to-end tests
+# ---------------------------------------------------------------------------
+
+
+class TestRefineNarrativesShapeVariants:
+    def _proj(self, cwd: str) -> dict:
+        return {
+            "cwd": cwd,
+            "display_name": cwd.replace("-", " ").title(),
+            # Use a snippet whose tokens don't overlap with the short test narratives.
+            "context_snippets": [f"The operator built this tool to automate {cwd} workflows."],
+        }
+
+    def test_dict_under_narratives_shape(self):
+        projects = [self._proj("proj-a"), self._proj("proj-b")]
+        payload = {"narratives": {"proj-a": "Summary A.", "proj-b": "Summary B."}}
+        client = _client_returning(payload)
+        result = refine_project_narratives(projects, client=client)
+        narrs = {r["cwd"]: r.get("narrative") for r in result}
+        assert narrs["proj-a"] == "Summary A."
+        assert narrs["proj-b"] == "Summary B."
+
+    def test_flat_top_level_map_shape(self):
+        projects = [self._proj("svc-a"), self._proj("svc-b")]
+        payload = {"svc-a": "Service A narrative.", "svc-b": "Service B narrative."}
+        client = _client_returning(payload)
+        result = refine_project_narratives(projects, client=client)
+        narrs = {r["cwd"]: r.get("narrative") for r in result}
+        assert narrs["svc-a"] == "Service A narrative."
+        assert narrs["svc-b"] == "Service B narrative."
+
+    def test_single_object_shape(self):
+        projects = [self._proj("only-svc")]
+        payload = {"cwd": "only-svc", "narrative": "The single service."}
+        client = _client_returning(payload)
+        result = refine_project_narratives(projects, client=client)
+        assert result[0]["narrative"] == "The single service."
+
+    def test_summary_alias_end_to_end(self):
+        projects = [self._proj("go-service")]
+        # Use a narrative that clearly differs from the snippet to avoid the echo filter.
+        payload = {"narratives": [{"cwd": "go-service", "summary": "A lightweight HTTP router that proxies requests to backend pods."}]}
+        client = _client_returning(payload)
+        result = refine_project_narratives(projects, client=client)
+        assert result[0]["narrative"] == "A lightweight HTTP router that proxies requests to backend pods."
+
+    def test_description_alias_end_to_end(self):
+        projects = [self._proj("relay")]
+        payload = {"narratives": [{"cwd": "relay", "description": "A WireGuard relay."}]}
+        client = _client_returning(payload)
+        result = refine_project_narratives(projects, client=client)
+        assert result[0]["narrative"] == "A WireGuard relay."
+
+    def test_unknown_cwd_still_dropped_in_all_shapes(self):
+        projects = [self._proj("real-proj")]
+        payload = {"real-proj": "Real narrative.", "phantom-proj": "Should be dropped."}
+        client = _client_returning(payload)
+        result = refine_project_narratives(projects, client=client)
+        assert len(result) == 1
+        assert result[0]["narrative"] == "Real narrative."
+
+
+# ---------------------------------------------------------------------------
+# refine_vocabulary_definitions: original tests (kept green)
 # ---------------------------------------------------------------------------
 
 
@@ -88,7 +360,6 @@ class TestRefineVocabularyDefinitions:
     def test_none_client_falls_back_to_get_default_unavailable(self):
         """When client=None and get_default_client() is unavailable, input unchanged."""
         terms = _sample_terms(2)
-        mock_client = _unavailable_client()
         with patch(
             "extractors.llm.refine_ontology._get_client", return_value=None
         ):
@@ -114,7 +385,7 @@ class TestRefineVocabularyDefinitions:
         assert result[2]["definition"] is None
 
     def test_unknown_term_from_llm_dropped(self):
-        """LLM returns a term not in the input — anti-hallucination guard."""
+        """LLM returns a term not in the input -- anti-hallucination guard."""
         terms = [{"term": "alpha", "frequency": 5, "category": "concept", "context_snippet": "Alpha is X."}]
         payload = {
             "definitions": [
@@ -142,7 +413,7 @@ class TestRefineVocabularyDefinitions:
         assert result[0].get("definition") is None
 
     def test_llm_returns_none_payload_input_unchanged(self):
-        """generate_json returning None → terms returned unchanged."""
+        """generate_json returning None -> terms returned unchanged."""
         terms = _sample_terms(2)
         client = _client_returning(None)
         result = refine_vocabulary_definitions(terms, client=client)
@@ -169,7 +440,7 @@ class TestRefineVocabularyDefinitions:
         assert result[1]["definition"] == "Alpha def."
 
     def test_no_new_terms_added(self):
-        """Output must be same length as input — no phantom entries."""
+        """Output must be same length as input -- no phantom entries."""
         terms = _sample_terms(2)
         payload = {
             "definitions": [
@@ -209,7 +480,7 @@ class TestRefineVocabularyDefinitions:
         assert client.generate_json.call_count == 2
 
     def test_case_insensitive_term_matching(self):
-        """LLM may return the term in a different case — should still match."""
+        """LLM may return the term in a different case -- should still match."""
         terms = [{"term": "FooBar", "frequency": 3, "category": "concept", "context_snippet": "FooBar does X."}]
         payload = {"definitions": [{"term": "foobar", "definition": "Lowercase match."}]}
         client = _client_returning(payload)
@@ -236,7 +507,7 @@ class TestRefineVocabularyDefinitions:
 
 
 # ---------------------------------------------------------------------------
-# refine_project_narratives
+# refine_project_narratives: original tests (kept green)
 # ---------------------------------------------------------------------------
 
 
@@ -306,7 +577,7 @@ class TestRefineProjectNarratives:
         assert result == [dict(p) for p in projects]
 
     def test_null_narrative_propagated(self):
-        """LLM returning null means low confidence — propagate None."""
+        """LLM returning null means low confidence -- propagate None."""
         projects = [{"cwd": "sparse", "display_name": "Sparse", "context_snippets": []}]
         payload = {"narratives": [{"cwd": "sparse", "narrative": None}]}
         client = _client_returning(payload)
@@ -395,7 +666,7 @@ class TestIsEcho:
 
     def test_high_token_overlap_is_echo(self):
         source = "the operator uses sharechain to link p2pool shares for payouts"
-        # Definition is a near-copy with minimal rearrangement — high overlap
+        # Definition is a near-copy with minimal rearrangement -- high overlap
         output = "the operator uses sharechain link p2pool shares payouts"
         assert _is_echo(output, source) is True
 
@@ -412,11 +683,11 @@ class TestIsEcho:
 
     def test_threshold_boundary(self):
         # Construct tokens so overlap is exactly at threshold.
-        # output has 5 tokens, 3 shared with source → overlap = 3/5 = 0.6 (== threshold)
+        # output has 5 tokens, 3 shared with source -> overlap = 3/5 = 0.6 (== threshold)
         output = "alpha beta gamma delta epsilon"
         source = "alpha beta gamma other stuff here"
         assert _is_echo(output, source, threshold=0.6) is True
-        # One fewer shared token → 2/5 = 0.4 < 0.6
+        # One fewer shared token -> 2/5 = 0.4 < 0.6
         output2 = "alpha beta zeta delta epsilon"
         assert _is_echo(output2, source, threshold=0.6) is False
 
@@ -428,7 +699,7 @@ class TestIsEcho:
 
 class TestAntiEchoVocabulary:
     def test_echo_definition_suppressed(self):
-        """Model returns the input snippet as the definition — must be nulled."""
+        """Model returns the input snippet as the definition -- must be nulled."""
         snippet = "The operator uses sharechain to link p2pool shares together for payouts."
         terms = [
             {
@@ -438,7 +709,7 @@ class TestAntiEchoVocabulary:
                 "context_snippet": snippet,
             }
         ]
-        # Model parrots the snippet almost verbatim — high token overlap
+        # Model parrots the snippet almost verbatim -- high token overlap
         echo_definition = "The operator uses sharechain to link p2pool shares together for payouts."
         payload = {"definitions": [{"term": "sharechain", "definition": echo_definition}]}
         client = _client_returning(payload)
@@ -450,7 +721,7 @@ class TestAntiEchoVocabulary:
         )
 
     def test_synthesised_definition_kept(self):
-        """Model returns a genuinely different sentence — must be kept."""
+        """Model returns a genuinely different sentence -- must be kept."""
         snippet = "fan-out parallel agents research wave then build wave non-overlapping files"
         terms = [
             {
@@ -460,7 +731,7 @@ class TestAntiEchoVocabulary:
                 "context_snippet": snippet,
             }
         ]
-        # Genuinely synthesised — different vocabulary, low token overlap
+        # Genuinely synthesised -- different vocabulary, low token overlap
         synthesised = "A workflow pattern where multiple agents work in parallel on separate subtasks."
         payload = {"definitions": [{"term": "fan-out", "definition": synthesised}]}
         client = _client_returning(payload)
@@ -479,7 +750,7 @@ class TestAntiEchoVocabulary:
 
 class TestAntiEchoNarratives:
     def test_echo_narrative_suppressed(self):
-        """Model returns the input snippets as the narrative — must be nulled."""
+        """Model returns the input snippets as the narrative -- must be nulled."""
         snippets = [
             "returns the real client IP even behind NAT",
             "tiny Go HTTP service used by sidecar relay fleet",
@@ -503,7 +774,7 @@ class TestAntiEchoNarratives:
         )
 
     def test_synthesised_narrative_kept(self):
-        """Model returns a genuine 1-2 sentence summary — must be kept."""
+        """Model returns a genuine 1-2 sentence summary -- must be kept."""
         snippets = [
             "returns the real client IP even behind NAT",
             "tiny Go HTTP service used by sidecar relay fleet",
