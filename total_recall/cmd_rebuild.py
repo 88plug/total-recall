@@ -382,15 +382,13 @@ def rebuild_cmd(
 
             # Vocabulary definitions + project narratives refinement.
             #
-            # WHY gated: small CPU models (e.g. gemma4:e2b, 2.3B default) do
+            # WHY gated: small CPU models (default: qwen3.5:2b, 2B) do
             # classification near-perfectly (machines keep/drop: measured P/R
-            # 1.0/1.0) but are weak at GENERATION (definitions, narratives).
-            # As of v0.9.5 the anti-echo detector + few-shot prompts eliminate
-            # the verbatim-parroting failure (measured echo_rate 0.0 on e2b) —
-            # output is now clean defs or null, never garbage — but coverage is
-            # sparse on a 2B model (~20% of definable terms get a real def; the
-            # rest correctly return null).  Text-gen is therefore SAFE but
-            # LOW-YIELD on small models, so it stays opt-in for the latency
+            # 1.0/1.0) but are weaker at GENERATION (definitions, narratives).
+            # qwen3.5:2b reaches ~0.60 define_coverage (vs ~0.20 on gemma4) and
+            # echo_rate 0.14 — clean output, but coverage is still sparse at 2B
+            # (the rest correctly return null).  Text-gen is therefore SAFE but
+            # LOW-YIELD on the default model, so it stays opt-in for the latency
             # cost; a larger model (>=7B) raises coverage.  Machines refinement
             # above is classification-only and stays always-on.
             _refine_text_raw = os.environ.get("TOTAL_RECALL_LLM_REFINE_TEXT", "").strip().lower()

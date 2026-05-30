@@ -4,11 +4,11 @@
 #
 # 1. install ollama if missing (uses the official installer; needs sudo)
 # 2. start the daemon if it isn't already running
-# 3. pull the configured model (default: gemma4:e2b, ~7 GB)
+# 3. pull the configured model (default: qwen3.5:2b)
 # 4. drop a sentinel so the SessionStart detector stops nagging
 #
 # Env overrides:
-#   TOTAL_RECALL_LLM_MODEL    — model tag to pull (default gemma4:e2b)
+#   TOTAL_RECALL_LLM_MODEL    — model tag to pull (default qwen3.5:2b)
 #   TOTAL_RECALL_LLM_BASE_URL — daemon URL (default http://localhost:11434)
 #
 # Privacy: this script only runs ollama / curl / sudo. It does NOT send any
@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-MODEL="${TOTAL_RECALL_LLM_MODEL:-gemma4:e2b}"
+MODEL="${TOTAL_RECALL_LLM_MODEL:-qwen3.5:2b}"
 BASE_URL="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
 DATA_ROOT="${CLAUDE_PLUGIN_DATA:-${HOME}/.local/share/total-recall-88plug}"
 DATA_ROOT="${DATA_ROOT%/}/total-recall"

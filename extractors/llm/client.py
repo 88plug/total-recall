@@ -23,13 +23,69 @@ from .cache import LLMCache
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "gemma4:e2b"
+DEFAULT_MODEL = "qwen3.5:2b"
 DEFAULT_BASE_URL = "http://localhost:11434"
 DEFAULT_TIMEOUT_S = 180.0  # cold-load + first inference can take >60s on CPU
 
 _PROBE_TIMEOUT_S = 10.0  # generous: probe competes with CPU-heavy ingest on rebuild
 _PROBE_RETRIES = 3       # transient post-ingest load can lose the race; retry before False
 _PROBE_BACKOFF_S = 1.5
+
+
+# Per-model-family sampling profiles. Different model families need very
+# different sampling settings — what's right for one actively hurts another.
+#
+# * gemma / default: greedy deterministic (temp 0, top_k 1). Verified good
+#   for gemma's classification + (weak) generation; what we shipped first.
+# * qwen3 / qwen3.5: the official model-card recommendations (non-thinking /
+#   instruct mode, general text). Greedy (top_k=1, temp=0) is NOT recommended
+#   for qwen — it wants temp 0.7, top_k 20, top_p 0.8, presence_penalty 1.5.
+#   We keep a fixed ``seed`` so runs stay reproducible despite temp>0 (ollama
+#   pins the sampler RNG to the seed), and disable thinking via the top-level
+#   ``think: false`` so it doesn't emit <think> blocks that break JSON.
+#
+# Source: HuggingFace Qwen/Qwen3.5-4B + Qwen3.5-2B model cards (non-thinking
+# text-task recommendations); ollama api.md (think param, >= 0.9).
+_SAMPLING_PROFILES: dict[str, dict[str, Any]] = {
+    "gemma": {
+        "temperature": 0.0, "top_k": 1, "top_p": 1.0,
+        "repeat_penalty": 1.0, "seed": 42, "think": None,
+    },
+    "qwen": {
+        "temperature": 0.7, "top_k": 20, "top_p": 0.8, "min_p": 0.0,
+        "presence_penalty": 1.5, "repeat_penalty": 1.0, "seed": 42,
+        "think": False,
+    },
+    "default": {
+        "temperature": 0.0, "top_k": 1, "top_p": 1.0,
+        "repeat_penalty": 1.0, "seed": 42, "think": None,
+    },
+}
+
+
+def _resolve_sampling(
+    model: str, temperature_override: float | None
+) -> tuple[dict[str, Any], bool | None]:
+    """Return ``(options_dict, think)`` for *model*.
+
+    Picks the family profile by model-name substring, applies an explicit
+    ``temperature_override`` when the caller passed one (e.g. forcing greedy
+    determinism for a classification task), and splits the ``think`` flag out
+    of the options block (it's a top-level request field, not an option).
+    """
+    name = (model or "").lower()
+    if "qwen" in name:
+        profile = _SAMPLING_PROFILES["qwen"]
+    elif "gemma" in name:
+        profile = _SAMPLING_PROFILES["gemma"]
+    else:
+        profile = _SAMPLING_PROFILES["default"]
+
+    opts = {k: v for k, v in profile.items() if k != "think"}
+    think = profile.get("think")
+    if temperature_override is not None:
+        opts["temperature"] = temperature_override
+    return opts, think
 
 
 class LLMClient:
@@ -148,7 +204,7 @@ class LLMClient:
         system: str,
         user: str,
         schema: dict | None = None,
-        temperature: float = 0.0,
+        temperature: float | None = None,
         num_predict: int = 512,
         num_ctx: int = 4096,
     ) -> dict | None:
@@ -161,22 +217,21 @@ class LLMClient:
         decoding — the model literally cannot emit a key not in the schema);
         otherwise falls back to ``format="json"`` and post-validates.
 
-        CPU-tuned defaults (verified against the ollama Go source
-        ``api/types.go DefaultOptions``):
+        Sampling is **model-family aware** (see :func:`_resolve_sampling` and
+        ``_SAMPLING_PROFILES``): gemma/default use greedy determinism (temp 0,
+        top_k 1); qwen3/qwen3.5 use the official model-card recommendations
+        (temp 0.7, top_k 20, top_p 0.8, presence_penalty 1.5) plus a top-level
+        ``think: false`` so qwen doesn't emit ``<think>`` blocks that break the
+        JSON parse. A fixed ``seed`` keeps even temp>0 runs reproducible.
 
-        * ``temperature=0.0``: deterministic.
-        * ``top_k=1`` + ``top_p=1.0``: greedy; nucleus/top-k disabled.
-        * ``seed=42``: reproducible across retries/debugging.
-        * ``repeat_penalty=1.0``: disabled — at temp=0 the repeat penalty
-          penalises repeated JSON keys like ``"name"`` and hurts structure.
+        Other fixed knobs:
+
         * ``num_ctx=4096``: explicit small KV cache. ollama's default of 0
-          negotiates the model's training max (128K for gemma4:e2b) which
-          allocates a huge KV cache on first load — slow on CPU. 4096 is
-          plenty for our ≤2k-token prompts and dramatically faster on CPU.
-        * ``num_predict=512``: hard ceiling on output length so the model
-          can't run away. Tune down to 256 if your outputs are always short.
-        * ``keep_alive="15m"``: keep the model resident across the
-          rebuild's many sequential calls; auto-evict afterwards.
+          negotiates the model's training max which allocates a huge KV cache
+          on first load — slow on CPU. 4096 covers our ≤2k-token prompts.
+        * ``num_predict=512``: hard output ceiling so the model can't run away.
+        * ``keep_alive="15m"``: keep the model resident across the rebuild's
+          many sequential calls; auto-evict afterwards.
 
         Parameters
         ----------
@@ -187,7 +242,9 @@ class LLMClient:
         schema:
             Optional JSON Schema dict for structured output (ollama >= 0.5).
         temperature:
-            Sampling temperature; 0.0 for deterministic output (default).
+            Optional override of the family-profile temperature. ``None``
+            (default) uses the family default; pass ``0.0`` to force greedy
+            determinism for a classification task regardless of family.
         num_predict:
             Max output tokens (default 512).
         num_ctx:
@@ -203,22 +260,24 @@ class LLMClient:
             if cached is not None:
                 return cached
 
+        opts, think = _resolve_sampling(self._model, temperature)
+        opts["num_ctx"] = num_ctx
+        opts["num_predict"] = num_predict
+
         payload: dict[str, Any] = {
             "model": self._model,
             "prompt": user,
             "system": system,
             "stream": False,
             "keep_alive": "15m",
-            "options": {
-                "temperature": temperature,
-                "top_k": 1,
-                "top_p": 1.0,
-                "seed": 42,
-                "repeat_penalty": 1.0,
-                "num_ctx": num_ctx,
-                "num_predict": num_predict,
-            },
+            "options": opts,
         }
+        # Thinking-capable models (qwen3/qwen3.5, deepseek-r1, …) emit
+        # <think> blocks by default — wasteful and they break JSON parsing.
+        # ``think`` is a TOP-LEVEL request field (ollama >= 0.9), not an
+        # option. None → leave default (non-thinking models ignore it).
+        if think is False:
+            payload["think"] = False
 
         if schema is not None:
             # Structured output: pass schema dict as format value.

@@ -2,6 +2,55 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.9] - 2026-05-30
+
+### Changed — default local model → qwen3.5:2b (won a live head-to-head eval)
+
+Replaced the default refinement model gemma4:e2b with **qwen3.5:2b**, chosen
+by running the eval harness against both on real fixtures (gemma4 deleted
+from disk). Measured, not assumed:
+
+| metric | gemma4:e2b | qwen3.5:2b | qwen3.5:4b |
+|---|---|---|---|
+| machines precision/recall | 1.0 / 1.0 | **1.0 / 1.0** | 1.0 / 1.0 |
+| vocab define_coverage | 0.20 | **0.60** | 0.60 |
+| vocab echo_rate | (weak) | **0.14** | 0.25 |
+| machines latency | ~82s | **19s** | 33s |
+
+qwen3.5:2b matches 4b on coverage with lower echo + faster machines, so it's
+the default. Text-gen (definitions/narratives) is now genuinely usable (0.60
+coverage, real synthesis not parroting) but stays opt-in via
+`TOTAL_RECALL_LLM_REFINE_TEXT` for the per-rebuild latency; machines
+refinement stays always-on.
+
+### Fixed — model-family-aware sampling (qwen needs different settings than gemma)
+
+The client previously hardcoded gemma-greedy options (`temperature=0`,
+`top_k=1`) for every model. Qwen's official model cards explicitly recommend
+against greedy decoding — it wants `temperature=0.7, top_k=20, top_p=0.8,
+presence_penalty=1.5` (non-thinking/instruct, general text). Added
+`_SAMPLING_PROFILES` + `_resolve_sampling(model)`: qwen models get the
+card-recommended sampling, gemma/unknown stay greedy. A fixed `seed` keeps
+runs reproducible despite `temperature>0`. Qwen3/3.5 also default to a
+`<think>` reasoning mode that emits blocks which break JSON parsing — disabled
+via the top-level `think: false` request field (ollama ≥ 0.9). Source: HF
+Qwen3.5-2B / 3.5-4B model cards + ollama api.md.
+
+### Fixed — recall-cli wrapper wrote the index to the wrong dir
+
+`scripts/recall-cli.sh` runs from a slash-command shell that does not inherit
+`CLAUDE_PLUGIN_DATA`, so `resolve_db_path()` fell back to
+`~/.claude/plugins/data/total-recall/` — a different dir than the
+harness-scoped `…/data/total-recall-88plug/total-recall/` the MCP server and
+hooks read. A `rebuild` via the command wrote a phantom index the live plugin
+never saw. The wrapper now derives `CLAUDE_PLUGIN_DATA` from its own install
+path (`…/plugins/cache/<owner>/<name>/<ver>/` → `…/plugins/data/<name>-<owner>`)
+when that data dir exists, so CLI + MCP + hooks all share one index. Dev /
+source-repo runs (no `cache/` path) keep their existing fallback.
+
+Full unit suite: 1163 passed. Live eval: qwen3.5:2b machines 1.0/1.0,
+echo_rate 0.14, define_coverage 0.60.
+
 ## [0.9.8] - 2026-05-29
 
 ### Fixed — multi-source collector tags records with their origin

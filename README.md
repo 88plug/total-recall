@@ -224,14 +224,14 @@ Install ollama + pull the default model:
 
 ```bash
 # ollama install: https://ollama.com
-ollama pull gemma4:e2b   # small CPU-friendly default
+ollama pull qwen3.5:2b   # validated default: machines P/R 1.0, definition coverage ~0.60
 ```
 
 Enable refinement (env vars; off by default):
 
 ```bash
 export TOTAL_RECALL_LLM_PROVIDER=auto   # or 'ollama' to force; 'none' to disable
-export TOTAL_RECALL_LLM_MODEL=gemma4:e2b
+export TOTAL_RECALL_LLM_MODEL=qwen3.5:2b
 export TOTAL_RECALL_LLM_BASE_URL=http://localhost:11434
 total-recall rebuild --yes
 ```
@@ -251,7 +251,7 @@ heuristic baseline remains authoritative.
 | Env var | Default | Description |
 |---|---|---|
 | `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `auto` probes the daemon; `ollama` forces; `none` disables. |
-| `TOTAL_RECALL_LLM_MODEL` | `gemma4:e2b` | Model tag to use. Any ollama-pulled model works. |
+| `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Model tag to use. Any ollama-pulled model works. |
 | `TOTAL_RECALL_LLM_BASE_URL` | `http://localhost:11434` | Ollama API endpoint. |
 
 ## Relation to amnesia

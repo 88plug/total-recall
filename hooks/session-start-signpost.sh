@@ -112,7 +112,7 @@ fi
 LLM_PROVIDER="${TOTAL_RECALL_LLM_PROVIDER:-auto}"
 LLM_NOTICE_MARK="${RECALL_DATA_ROOT}/.ollama_notice_shown"
 if [ "$LLM_PROVIDER" != "none" ] && [ ! -f "$LLM_NOTICE_MARK" ]; then
-  LLM_MODEL_TAG="${TOTAL_RECALL_LLM_MODEL:-gemma4:e2b}"
+  LLM_MODEL_TAG="${TOTAL_RECALL_LLM_MODEL:-qwen3.5:2b}"
   LLM_BASE_URL="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
   LLM_NOTICE=""
   if ! command -v ollama >/dev/null 2>&1; then
