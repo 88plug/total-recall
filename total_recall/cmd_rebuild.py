@@ -42,12 +42,21 @@ def _text_refine_enabled(env_value: str | None) -> bool:
     is_flag=True,
     help="Drop tables instead of deleting the DB file. Preserves perms / inode.",
 )
+@click.option(
+    "--jobs",
+    "-j",
+    type=int,
+    default=None,
+    help="Worker processes for parsing JSONL. Default: min(cpu_count, 8). "
+    "Parsing is CPU-bound and parallelizes well; DB writes stay single-threaded.",
+)
 @click.pass_context
 def rebuild_cmd(
     ctx: click.Context,
     yes: bool,
     projects_root: str | None,
     keep_file: bool,
+    jobs: int | None,
 ) -> None:
     db_path = resolve_db_path(ctx.obj.get("db_path"))
     verbose = bool(ctx.obj.get("verbose"))
@@ -91,8 +100,18 @@ def rebuild_cmd(
         # Recreate schema by opening a fresh connection.
         connect(db_path).close()
 
+    # Resolve --jobs: explicit wins, else min(cpu_count, 8) — a full rebuild is
+    # a from-scratch backfill, so default to parallel (mirrors `index --full`).
+    # Without this the ingest defaulted to jobs=1 and pinned a single core.
+    jobs_resolved = jobs
+    if jobs_resolved is None:
+        jobs_resolved = min(os.cpu_count() or 4, 8)
+    job_count = max(1, int(jobs_resolved))
+
     if verbose:
-        click.echo(f"[rebuild] full ingest into {db_path}", err=True)
+        click.echo(
+            f"[rebuild] full ingest into {db_path} (jobs={job_count})", err=True
+        )
     started = time.monotonic()
     result = ingest_all(
         db_path=db_path,
@@ -100,6 +119,7 @@ def rebuild_cmd(
         cwd_filter=None,
         projects_root=Path(projects_root).expanduser() if projects_root else None,
         dry_run=False,
+        jobs=job_count,
     )
     # Consolidation pass (cold path). The per-file incremental merge that
     # runs during ingest can freeze an early, non-global winner for
