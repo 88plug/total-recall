@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.1] - 2026-05-30
+
+### Validated — 6-model bake-off confirms qwen3.5:2b as the default
+
+Ran the eval harness across six local models (each with its OWN card-correct
+sampling, not one profile forced on all). qwen3.5:2b wins — the default is
+unchanged, now data-justified:
+
+| model | machines P/R | echo_rate | define_coverage | machines latency |
+|---|---|---|---|---|
+| **qwen3.5:2b** (default) | 1.0 / 1.0 | **0.14** | **0.60** | 18s |
+| qwen3.5:4b | 1.0 / 1.0 | 0.25 | 0.60 | 33s |
+| nemotron-3-nano:4b | 1.0 / 1.0 | 0.17 | 0.40 | 22s |
+| gemma4:e2b | 1.0 / 1.0 | weak | 0.20 | 82s |
+| granite4.1:3b | 1.0 / 0.75 | 0.25 | 0.00 | 5.6s |
+| qwen3.5:9b | 1.0 / 1.0 | 0.60 | 0.00 | 41s |
+
+Bigger/newer did not win: nemotron 0.40 and granite 0.00 (+drops a real host)
+both trail qwen3.5:2b's 0.60 coverage; granite is fastest but lowest quality.
+
+### Added — nemotron sampling profile + machines fair-fight context
+
+- `_SAMPLING_PROFILES["nemotron"]`: temp 0.6 / top_p 0.95 / top_k 20 + ollama
+  `think:false` (nemotron is a reasoning model; verified the trace is cleanly
+  suppressed — no `<think>` leak into JSON, unlike qwen3.5:9b). Activated for
+  any `nemotron*` model via `TOTAL_RECALL_LLM_MODEL`. Granite/unknown models
+  correctly fall to the greedy `default` profile (their cards specify no
+  custom sampling, no reasoning mode).
+- `refine_machines` now passes per-host context snippets so the classifier
+  judges hostnames with real surrounding evidence (improves recall on bare
+  single-word hosts).
+
+Note on context windows: all candidates have 128K–262K native context, but
+the refinement client pins `num_ctx=4096` deliberately — refinement inputs
+are tiny (distilled tokens + ≤300-char snippets, never raw transcripts), and
+a large KV cache only slows CPU inference. Native context is a non-factor in
+the model choice for this task.
+
+Full unit suite: 1186 passed.
+
 ## [0.10.0] - 2026-05-30
 
 ### Added — zero-config local-LLM: auto-provision + text-gen on by default

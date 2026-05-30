@@ -78,6 +78,13 @@ _SAMPLING_PROFILES: dict[str, dict[str, Any]] = {
         "presence_penalty": 1.5, "repeat_penalty": 1.0, "seed": 42,
         "think": False,
     },
+    # nvidia nemotron nano: reasoning model. Card recommends temp 0.6 / top_p
+    # 0.95; ollama `think:false` cleanly disables the reasoning trace (verified
+    # — no <think> leak into the JSON, unlike qwen3.5:9b).
+    "nemotron": {
+        "temperature": 0.6, "top_p": 0.95, "top_k": 20,
+        "repeat_penalty": 1.0, "seed": 42, "think": False,
+    },
     "default": {
         "temperature": 0.0, "top_k": 1, "top_p": 1.0,
         "repeat_penalty": 1.0, "seed": 42, "think": None,
@@ -98,6 +105,8 @@ def _resolve_sampling(
     name = (model or "").lower()
     if "qwen" in name:
         profile = _SAMPLING_PROFILES["qwen"]
+    elif "nemotron" in name:
+        profile = _SAMPLING_PROFILES["nemotron"]
     elif "gemma" in name:
         profile = _SAMPLING_PROFILES["gemma"]
     else:
