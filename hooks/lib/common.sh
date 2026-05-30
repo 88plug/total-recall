@@ -406,6 +406,266 @@ recall::start_bootstrap() {
 
   recall::log "bootstrap started: pid=$pid hook=${1:-?}"
   recall::log_json total_recall.bootstrap.start pid="$pid" hook="${1:-?}"
+
+  # Fire LLM provision as a separate, independently-failable sidecar so it
+  # can never slow or crash the transcript backfill above.
+  recall::start_llm_provision
+}
+
+# === ollama resolver + LLM provision (v0.9.1) =================================
+# Mirrors the recall::uv pattern exactly: resolve, then auto-fetch if absent.
+# Every function is safe to call repeatedly (idempotent). Any failure logs +
+# returns non-zero; callers treat non-zero as "LLM unavailable" and continue.
+
+RECALL_OLLAMA_CACHED=""
+
+recall::_can_run_ollama() {
+  local bin="$1"
+  [ -x "$bin" ] && "$bin" --version >/dev/null 2>&1
+}
+
+# Detect CPU arch and map to the ollama tarball suffix (amd64 / arm64).
+recall::_ollama_arch() {
+  local m; m="$(uname -m 2>/dev/null || echo unknown)"
+  case "$m" in
+    x86_64)          printf 'amd64' ;;
+    aarch64|arm64)   printf 'arm64' ;;
+    *)               printf 'unsupported'; return 1 ;;
+  esac
+}
+
+# Download the CPU-only ollama tarball into ${RECALL_DATA_ROOT}/bin/ — no sudo.
+# The tarball layout is bin/ollama (+ optional lib/). We extract so the binary
+# lands at ${RECALL_DATA_ROOT}/bin/ollama.
+recall::_install_ollama() {
+  local dest_bin="${RECALL_DATA_ROOT}/bin"
+  mkdir -p "$dest_bin" 2>/dev/null || { recall::log "install_ollama: can't create $dest_bin"; return 1; }
+  if ! command -v curl >/dev/null 2>&1; then
+    recall::log "install_ollama: curl not on PATH — install curl, or install ollama manually (https://ollama.com)"
+    return 1
+  fi
+  local arch; arch="$(recall::_ollama_arch)" || {
+    recall::log "install_ollama: unsupported arch $(uname -m) — install ollama manually"
+    return 1
+  }
+  local url="https://ollama.com/download/ollama-linux-${arch}.tgz"
+  local tmp; tmp="$(mktemp --suffix=.tgz 2>/dev/null || mktemp /tmp/ollama.tgz.XXXXXX)"
+  trap 'rm -f "$tmp"' RETURN
+  recall::log "install_ollama: downloading ${url} (~38MB CPU tarball, no sudo needed)"
+  if ! curl -fsSL --retry 3 -o "$tmp" "$url" 2>>"$RECALL_LOG_FILE"; then
+    recall::log "install_ollama: download failed; see hooks.log"
+    return 1
+  fi
+  # The tarball contains bin/ollama (relative path); extract into dest_bin
+  # parent so it becomes dest_bin/ollama.
+  local extract_root; extract_root="$(dirname "$dest_bin")"
+  if ! tar -xzf "$tmp" -C "$extract_root" 2>>"$RECALL_LOG_FILE"; then
+    recall::log "install_ollama: tar extract failed; see hooks.log"
+    return 1
+  fi
+  if [ ! -x "$dest_bin/ollama" ]; then
+    # Some releases ship as a flat binary rather than bin/ollama inside the tar.
+    # If the binary landed directly in extract_root, move it.
+    if [ -x "$extract_root/ollama" ]; then
+      mv "$extract_root/ollama" "$dest_bin/ollama"
+    else
+      recall::log "install_ollama: extracted but $dest_bin/ollama not found"
+      return 1
+    fi
+  fi
+  recall::log "install_ollama: ollama ready at $dest_bin/ollama ($("$dest_bin/ollama" --version 2>&1 || echo '?'))"
+  return 0
+}
+
+# Resolve a usable ollama binary. Resolution order:
+#   1. $RECALL_OLLAMA env override
+#   2. ollama on PATH
+#   3. /snap/bin/ollama (Ubuntu snap install)
+#   4. ${RECALL_DATA_ROOT}/bin/ollama (our previously-bootstrapped copy)
+#   5. auto-fetch (downloads CPU tarball, no sudo)
+# Prints the resolved path to stdout; returns non-zero if none found/fetchable.
+recall::ollama() {
+  if [ -n "$RECALL_OLLAMA_CACHED" ]; then
+    printf '%s' "$RECALL_OLLAMA_CACHED"
+    return 0
+  fi
+
+  # 1. Explicit env override.
+  if [ -n "${RECALL_OLLAMA:-}" ] && recall::_can_run_ollama "$RECALL_OLLAMA"; then
+    RECALL_OLLAMA_CACHED="$RECALL_OLLAMA"
+    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+  fi
+
+  # 2. ollama on PATH.
+  if command -v ollama >/dev/null 2>&1 && recall::_can_run_ollama "$(command -v ollama)"; then
+    RECALL_OLLAMA_CACHED="$(command -v ollama)"
+    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+  fi
+
+  # 3. Snap install.
+  if recall::_can_run_ollama "/snap/bin/ollama"; then
+    RECALL_OLLAMA_CACHED="/snap/bin/ollama"
+    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+  fi
+
+  # 4. Previously-bootstrapped copy.
+  local bundled="${RECALL_DATA_ROOT}/bin/ollama"
+  if recall::_can_run_ollama "$bundled"; then
+    RECALL_OLLAMA_CACHED="$bundled"
+    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+  fi
+
+  # 5. Auto-fetch (no sudo, writes to plugin data dir).
+  if recall::_install_ollama && recall::_can_run_ollama "$bundled"; then
+    RECALL_OLLAMA_CACHED="$bundled"
+    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+  fi
+
+  return 1
+}
+
+# Start the ollama daemon if not already reachable. Detaches via setsid/nohup
+# (same pattern as recall::start_bootstrap). Idempotent — no-op if port up.
+# Logs to ${RECALL_LOG_DIR}/llm-provision.log.
+recall::ollama_serve() {
+  local base_url="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
+  if curl -sf "${base_url}/api/tags" >/dev/null 2>&1; then
+    recall::log "ollama_serve: daemon already reachable at ${base_url}"
+    return 0
+  fi
+  local ollama_bin; ollama_bin="$(recall::ollama)" || return 1
+  local log_file="${RECALL_LOG_DIR}/llm-provision.log"
+  mkdir -p "$RECALL_LOG_DIR" 2>/dev/null || true
+  local launcher="nohup"
+  if command -v setsid >/dev/null 2>&1; then launcher="setsid nohup"; fi
+  recall::log "ollama_serve: starting daemon (log: $log_file)"
+  $launcher "$ollama_bin" serve >>"$log_file" 2>&1 < /dev/null &
+  local daemon_pid=$!
+  disown 2>/dev/null || true
+  # Wait up to 10s for the port to open.
+  local i=0
+  while [ $i -lt 10 ]; do
+    i=$(( i + 1 ))
+    sleep 1
+    if curl -sf "${base_url}/api/tags" >/dev/null 2>&1; then
+      recall::log "ollama_serve: daemon up (pid=$daemon_pid, waited ${i}s)"
+      return 0
+    fi
+  done
+  recall::log "ollama_serve: daemon still not reachable after 10s — continuing anyway"
+  return 1
+}
+
+# Pull a model if it is not already present. Idempotent.
+recall::ollama_pull() {
+  local model="$1"
+  local ollama_bin; ollama_bin="$(recall::ollama)" || return 1
+  if "$ollama_bin" list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "${model}\(:latest\)\?"; then
+    recall::log "ollama_pull: model ${model} already present"
+    return 0
+  fi
+  recall::log "ollama_pull: pulling ${model} — may be several minutes / GB-scale download"
+  local log_file="${RECALL_LOG_DIR}/llm-provision.log"
+  "$ollama_bin" pull "${model}" >> "$log_file" 2>&1
+}
+
+# Orchestrator: respects opt-out, calls ollama→serve→pull, drops sentinel.
+# Safe to call repeatedly — exits immediately if sentinel exists.
+# NEVER fatal: every failure path returns 0 (LLM is optional).
+recall::provision_llm() {
+  local log_file="${RECALL_LOG_DIR}/llm-provision.log"
+  mkdir -p "$RECALL_LOG_DIR" 2>/dev/null || true
+
+  # Opt-out: TOTAL_RECALL_LLM_PROVIDER=none means "user doesn't want LLM".
+  local provider="${TOTAL_RECALL_LLM_PROVIDER:-auto}"
+  if [ "$provider" = "none" ]; then
+    return 0
+  fi
+
+  local sentinel="${RECALL_DATA_ROOT}/.ollama_ready"
+  if [ -f "$sentinel" ]; then
+    return 0
+  fi
+
+  local model="${TOTAL_RECALL_LLM_MODEL:-qwen3.5:2b}"
+
+  {
+    printf '[llm-provision] %s starting (model=%s)\n' "$(date -Iseconds 2>/dev/null || date)" "$model"
+
+    # Step 1: resolve (or fetch) ollama.
+    local ollama_bin
+    if ! ollama_bin="$(recall::ollama)"; then
+      printf '[llm-provision] WARN: could not resolve or fetch ollama; LLM refinement disabled\n'
+      return 0
+    fi
+    printf '[llm-provision] ollama binary: %s\n' "$ollama_bin"
+
+    # Step 2: start daemon if needed.
+    if ! recall::ollama_serve; then
+      printf '[llm-provision] WARN: daemon start failed; LLM refinement disabled\n'
+      return 0
+    fi
+
+    # Step 3: pull model if needed.
+    if ! recall::ollama_pull "$model"; then
+      printf '[llm-provision] WARN: model pull failed; LLM refinement disabled\n'
+      return 0
+    fi
+
+    # Step 4: sentinel.
+    touch "$sentinel" 2>/dev/null || true
+    printf '[llm-provision] done — sentinel written: %s\n' "$sentinel"
+  } >> "$log_file" 2>&1
+
+  recall::log "provision_llm: complete (model=$model)"
+  return 0
+}
+
+# Launch recall::provision_llm as a fully-detached sidecar process. Returns
+# immediately — the LLM provision cannot slow or block the caller.
+recall::start_llm_provision() {
+  local provider="${TOTAL_RECALL_LLM_PROVIDER:-auto}"
+  [ "$provider" = "none" ] && return 0
+
+  local sentinel="${RECALL_DATA_ROOT}/.ollama_ready"
+  [ -f "$sentinel" ] && return 0
+
+  mkdir -p "$RECALL_DATA_ROOT" "$RECALL_LOG_DIR" 2>/dev/null || return 0
+
+  local launcher="nohup"
+  if command -v setsid >/dev/null 2>&1; then launcher="setsid nohup"; fi
+
+  # Re-run this script (common.sh) is not executable — we need a small inline
+  # bash wrapper that sources common.sh and calls provision_llm.
+  local script_path="${BASH_SOURCE[0]}"
+  $launcher bash -c "
+    source $(printf '%q' "$script_path") 2>/dev/null || exit 0
+    recall::provision_llm
+  " > /dev/null 2>&1 < /dev/null &
+  local sidecar_pid=$!
+  disown 2>/dev/null || true
+  recall::log "start_llm_provision: sidecar launched pid=$sidecar_pid"
+}
+
+# Return the model tag that get_default_client() will use.
+# Resolution order: TOTAL_RECALL_LLM_MODEL env → CLI → hardcoded floor.
+# Prints a single non-empty string; never fails or returns empty.
+recall::llm_model() {
+  if [ -n "${TOTAL_RECALL_LLM_MODEL:-}" ]; then
+    printf '%s' "$TOTAL_RECALL_LLM_MODEL"
+    return 0
+  fi
+  local uv root tag
+  uv="$(recall::uv 2>/dev/null)" || uv=""
+  root="$(recall::_plugin_root 2>/dev/null)" || root=""
+  if [ -n "$uv" ] && [ -n "$root" ]; then
+    tag="$("$uv" run --project "$root" --python ">=3.10" python -m total_recall llm-model 2>/dev/null || true)"
+  fi
+  if [ -n "${tag:-}" ]; then
+    printf '%s' "$tag"
+  else
+    printf 'qwen3.5:2b'
+  fi
 }
 
 # Standard banner-style envelope text for the "bootstrap in progress" case.

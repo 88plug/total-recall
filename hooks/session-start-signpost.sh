@@ -104,23 +104,30 @@ if [ -z "${CTX// }" ]; then
   exit 0
 fi
 
-# v0.9.0: LLM refinement detection — emit a one-time notice if ollama or
-# the configured model is absent. Reads TOTAL_RECALL_LLM_PROVIDER env: skip
-# silently when set to "none" (operator explicitly disabled). The sentinel
-# at ${RECALL_DATA_ROOT}/.ollama_notice_shown suppresses the notice after
-# it has been shown once.
+# v0.9.0+: LLM refinement status notice — shown at most once per install.
+# Auto-provisioning runs in the background on first install; if it hasn't
+# finished yet, or if something went wrong, we emit a single informational
+# message. Reads TOTAL_RECALL_LLM_PROVIDER env: skip silently when set to
+# "none" (operator explicitly disabled). The sentinel at
+# ${RECALL_DATA_ROOT}/.ollama_notice_shown suppresses the notice once emitted.
 LLM_PROVIDER="${TOTAL_RECALL_LLM_PROVIDER:-auto}"
 LLM_NOTICE_MARK="${RECALL_DATA_ROOT}/.ollama_notice_shown"
+LLM_PROVISION_MARK="${RECALL_DATA_ROOT}/.llm_provisioning"
 if [ "$LLM_PROVIDER" != "none" ] && [ ! -f "$LLM_NOTICE_MARK" ]; then
   LLM_MODEL_TAG="${TOTAL_RECALL_LLM_MODEL:-qwen3.5:2b}"
   LLM_BASE_URL="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
   LLM_NOTICE=""
-  if ! command -v ollama >/dev/null 2>&1; then
-    LLM_NOTICE="[total-recall] Optional local-LLM refinement layer is OFF: ollama not installed. To enable: run /total-recall:llm-setup (one-time). To suppress this notice: set TOTAL_RECALL_LLM_PROVIDER=none."
+  if [ -f "$LLM_PROVISION_MARK" ]; then
+    # Auto-provisioning is in progress (started by bootstrap).
+    LLM_NOTICE="[total-recall] Setting up local-LLM refinement in the background (${LLM_MODEL_TAG}, ~2.7 GB, local-only, one-time). Future sessions will have sharper machine-name extraction and vocabulary definitions. Disable with TOTAL_RECALL_LLM_PROVIDER=none."
+  elif ! command -v ollama >/dev/null 2>&1; then
+    # Provisioning finished but ollama still not on PATH — may need a shell reload,
+    # or the install failed. Point at the manual fallback.
+    LLM_NOTICE="[total-recall] Local-LLM refinement setup did not complete (ollama not found). Run /total-recall:llm-setup to retry, or set TOTAL_RECALL_LLM_PROVIDER=none to disable."
   elif ! curl -sf "${LLM_BASE_URL}/api/tags" >/dev/null 2>&1; then
-    LLM_NOTICE="[total-recall] Optional local-LLM refinement layer is OFF: ollama daemon not reachable at ${LLM_BASE_URL}. Start it with 'ollama serve' or run /total-recall:llm-setup."
+    LLM_NOTICE="[total-recall] Local-LLM refinement: ollama installed but daemon not reachable at ${LLM_BASE_URL}. Run 'ollama serve' to start it, or /total-recall:llm-setup to repair."
   elif ! ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "${LLM_MODEL_TAG}\(:latest\)\?"; then
-    LLM_NOTICE="[total-recall] Optional local-LLM refinement layer is OFF: model ${LLM_MODEL_TAG} not pulled. Run /total-recall:llm-setup to pull it, or 'ollama pull ${LLM_MODEL_TAG}' manually."
+    LLM_NOTICE="[total-recall] Local-LLM refinement: model ${LLM_MODEL_TAG} not pulled. Run /total-recall:llm-setup, or 'ollama pull ${LLM_MODEL_TAG}' manually."
   fi
   if [ -n "$LLM_NOTICE" ]; then
     CTX="${CTX}"$'\n\n'"${LLM_NOTICE}"

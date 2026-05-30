@@ -20,12 +20,20 @@ Public API::
 """
 
 from extractors.llm.cache import LLMCache
-from extractors.llm.client import DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_TIMEOUT_S, LLMClient, get_default_client
+from extractors.llm.client import (
+    DEFAULT_BASE_URL,
+    DEFAULT_MODEL,
+    DEFAULT_TIMEOUT_S,
+    LLMClient,
+    autoselect_model,
+    get_default_client,
+)
 
 __all__ = [
     "LLMClient",
     "LLMCache",
     "get_default_client",
+    "autoselect_model",
     "DEFAULT_MODEL",
     "DEFAULT_BASE_URL",
     "DEFAULT_TIMEOUT_S",

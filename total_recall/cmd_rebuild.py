@@ -18,6 +18,17 @@ import click
 from .util import resolve_db_path
 
 
+def _text_refine_enabled(env_value: str | None) -> bool:
+    """Return True unless the env var is explicitly set to a falsy value.
+
+    Unset / "1" / "true" / "yes" / "on" → enabled (default-on).
+    "0" / "false" / "no" / "off" → disabled (opt-out).
+    """
+    if env_value is None:
+        return True
+    return env_value.strip().lower() not in ("0", "false", "no", "off")
+
+
 @click.command(help="DESTRUCTIVE: drop the index, recreate the schema, then full ingest.")
 @click.option("--yes", is_flag=True, help="Skip the y/N prompt.")
 @click.option(
@@ -382,28 +393,33 @@ def rebuild_cmd(
 
             # Vocabulary definitions + project narratives refinement.
             #
-            # WHY gated: small CPU models (default: qwen3.5:2b, 2B) do
-            # classification near-perfectly (machines keep/drop: measured P/R
-            # 1.0/1.0) but are weaker at GENERATION (definitions, narratives).
-            # qwen3.5:2b reaches ~0.60 define_coverage (vs ~0.20 on gemma4) and
-            # echo_rate 0.14 — clean output, but coverage is still sparse at 2B
-            # (the rest correctly return null).  Text-gen is therefore SAFE but
-            # LOW-YIELD on the default model, so it stays opt-in for the latency
-            # cost; a larger model (>=7B) raises coverage.  Machines refinement
-            # above is classification-only and stays always-on.
-            _refine_text_raw = os.environ.get("TOTAL_RECALL_LLM_REFINE_TEXT", "").strip().lower()
-            _refine_text = _refine_text_raw in ("1", "true", "yes")
+            # ON by default.  qwen3.5:2b (the default model) reaches
+            # define_coverage ~0.60 / echo_rate 0.14 — real synthesis, no
+            # echo garbage.  Machines refinement (classification-only, above)
+            # is also always-on.  Text-gen runs on the cold rebuild path only
+            # (never the Stop-hook hot path) and is cache-backed, so repeat
+            # rebuilds are cheap.  A larger model (>=7B) raises coverage
+            # further.  To skip text-gen only (keeping machines refinement),
+            # set TOTAL_RECALL_LLM_REFINE_TEXT=0.  To disable all LLM
+            # refinement, set TOTAL_RECALL_LLM_PROVIDER=none.
+            _refine_text = _text_refine_enabled(
+                os.environ.get("TOTAL_RECALL_LLM_REFINE_TEXT")
+            )
 
             if not _refine_text:
                 if verbose:
                     click.echo(
                         "[rebuild] LLM text refinement (vocab/narratives) off"
-                        " — clean but low-yield on small models; set"
-                        " TOTAL_RECALL_LLM_REFINE_TEXT=1 to enable (a >=7B model"
-                        " gives better coverage)",
+                        " (TOTAL_RECALL_LLM_REFINE_TEXT=0)",
                         err=True,
                     )
             else:
+                if verbose:
+                    click.echo(
+                        f"[rebuild] LLM text refinement (vocab/narratives) on"
+                        f" (model={_llm.model})",
+                        err=True,
+                    )
                 try:
                     from extractors.llm.refine_ontology import (  # type: ignore[import-not-found]
                         refine_project_narratives,

@@ -27,6 +27,28 @@ DEFAULT_MODEL = "qwen3.5:2b"
 DEFAULT_BASE_URL = "http://localhost:11434"
 DEFAULT_TIMEOUT_S = 180.0  # cold-load + first inference can take >60s on CPU
 
+# ---------------------------------------------------------------------------
+# Auto-selection
+# ---------------------------------------------------------------------------
+
+
+def autoselect_model() -> str:
+    """Return the default LLM model for total-recall refinement.
+
+    Head-to-head CPU eval results (no GPU):
+      qwen3.5:2b  define_coverage 0.60  echo_rate 0.14  ~19s  ← WINNER
+      qwen3.5:4b  define_coverage 0.60  echo_rate 0.25  ~33s  (same coverage, worse echo, slower)
+      qwen3.5:9b  define_coverage 0.00  echo_rate 0.60  ~41s  (think-mode leak → all-null defs)
+
+    Bigger models do NOT help on CPU for this task — qwen3.5:2b is always
+    returned. If the machine can't run it the availability probe + heuristic
+    fallback handle it gracefully; we never silently pick something worse.
+
+    Override with TOTAL_RECALL_LLM_MODEL for a different model.
+    Never raises.
+    """
+    return DEFAULT_MODEL
+
 _PROBE_TIMEOUT_S = 10.0  # generous: probe competes with CPU-heavy ingest on rebuild
 _PROBE_RETRIES = 3       # transient post-ingest load can lose the race; retry before False
 _PROBE_BACKOFF_S = 1.5
@@ -358,7 +380,7 @@ def get_default_client() -> LLMClient:
     the client.  Cache construction errors are non-fatal (cache=None).
     """
     provider = os.environ.get("TOTAL_RECALL_LLM_PROVIDER", "auto")
-    model = os.environ.get("TOTAL_RECALL_LLM_MODEL") or DEFAULT_MODEL
+    model = os.environ.get("TOTAL_RECALL_LLM_MODEL") or autoselect_model()
     base_url = os.environ.get("TOTAL_RECALL_LLM_BASE_URL") or DEFAULT_BASE_URL
 
     cache: LLMCache | None = None

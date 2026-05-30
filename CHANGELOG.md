@@ -2,6 +2,55 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-05-30
+
+### Added — zero-config local-LLM: auto-provision + text-gen on by default
+
+The optional LLM refinement now "just works" on a fresh install with no user
+steps and no sudo.
+
+- **Auto-provision (no sudo).** First-run bootstrap now fetches the ollama
+  binary (~38 MB CPU build) into the plugin data dir — no system install, no
+  root — starts a localhost daemon, and pulls the model, all in the
+  background as a setsid-detached sidecar that can't slow or break the
+  transcript backfill. New `recall::ollama` / `recall::ollama_serve` /
+  `recall::ollama_pull` / `recall::provision_llm` / `recall::start_llm_provision`
+  in `hooks/lib/common.sh`, mirroring the existing `uv` auto-install pattern.
+  Every failure logs + returns 0 (LLM is optional, never fatal).
+- **Default model qwen3.5:2b — and that's deliberately NOT resource-scaled.**
+  A four-model eval (gemma4:e2b, qwen3.5 2b/4b/9b) on a real CPU box showed
+  bigger is NOT better for this task: vocab define_coverage 2b=0.60, 4b=0.60,
+  **9b=0.00** (9b leaks `<think>` despite `think:false`, producing all-null
+  defs); echo_rate 2b=0.14 < 4b=0.25 < 9b=0.60. So **2b wins outright** and
+  `autoselect_model()` always returns it (a downward floor only — never sizes
+  up). `total-recall llm-model` is the single source of truth the bash
+  provisioner calls (so it pulls exactly what Python requests — no drift);
+  `TOTAL_RECALL_LLM_MODEL` overrides for advanced users who've tested another.
+- **Model-family-aware sampling + think-off.** Qwen needs different sampling
+  than gemma (temp 0.7 / top_k 20 / top_p 0.8 / presence_penalty 1.5 per the
+  model card, NOT greedy) and `think:false` to stop `<think>` blocks breaking
+  JSON. `_SAMPLING_PROFILES` + `_resolve_sampling(model)` apply the right
+  family profile; fixed seed keeps temp>0 reproducible.
+- **Text-gen refinement ON by default.** Vocabulary definitions + project
+  narratives now run by default (was opt-in) — the eval shows clean synthesis
+  on the default 2b (coverage 0.60 / echo 0.14), not the garbage-echo gemma
+  produced. Opt out of text-gen with `TOTAL_RECALL_LLM_REFINE_TEXT=0`; opt out
+  of the whole LLM layer with `TOTAL_RECALL_LLM_PROVIDER=none`. Machines
+  refinement stays always-on. Cold-rebuild path only; cache-backed.
+- **recall-cli DB-path fix.** A slash-command shell doesn't inherit
+  `CLAUDE_PLUGIN_DATA`, so the CLI wrote the index to a phantom
+  `~/.claude/plugins/data/total-recall/` instead of the harness path the MCP
+  reads. The wrapper now derives `CLAUDE_PLUGIN_DATA` from its install path.
+- **Docs + banner.** README "Optional local-LLM refinement" rewritten for the
+  zero-config story (privacy-first: on-device, transcripts never leave the
+  machine); new `docs/llm-refinement.md`; SessionStart banner announces the
+  one-time background setup + the opt-out.
+
+### Tests
++ model-autoselect, text-gen gate, ollama-provision (bash, hermetic — no
+network/ollama). Full unit suite: 1185 passed, 12 skipped. Eval is the
+authority on the model choice; numbers above are measured, not assumed.
+
 ## [0.9.9] - 2026-05-30
 
 ### Changed — default local model → qwen3.5:2b (won a live head-to-head eval)

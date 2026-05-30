@@ -367,6 +367,7 @@ class TestGetDefaultClient:
             client = get_default_client()
 
         assert client.provider == "auto"
+        # autoselect_model() always returns DEFAULT_MODEL ("qwen3.5:2b").
         assert client.model == DEFAULT_MODEL
         assert client.base_url == DEFAULT_BASE_URL
 

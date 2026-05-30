@@ -211,48 +211,46 @@ The session JSONLs themselves are never written to.
 
 ## Optional local-LLM refinement
 
-By default, total-recall is 100% deterministic heuristics — zero model calls,
-zero network egress. For operators who want sharper machine-name extraction,
-vocabulary definitions, and per-project narratives, an OPT-IN refinement
-layer can call a LOCAL LLM via ollama.
+**It just works.** On first install, total-recall automatically sets up a small
+local model (qwen3.5:2b) in the background — nothing for you to do.
 
-**Privacy stays intact**: transcripts never leave the machine. The cloud-API
-path is deliberately not supported because it would break the no-reupload
-guarantee.
+The bootstrap process (which runs once, detached, when you install the plugin)
+fetches the ollama binary (~38 MB, no `sudo`, into the plugin data dir) and
+pulls the default model (~2.7 GB). A one-time banner in your first session
+announces that setup is in progress. Subsequent sessions get the benefit
+automatically.
 
-Install ollama + pull the default model:
+**Privacy is unchanged and paramount.** Everything stays on your machine:
+the model runs on-device via ollama, and your transcripts are never uploaded
+anywhere. Cloud APIs are deliberately not supported — they would break the
+no-reupload guarantee.
 
-```bash
-# ollama install: https://ollama.com
-ollama pull qwen3.5:2b   # validated default: machines P/R 1.0, definition coverage ~0.60
-```
+### What refinement improves
 
-Enable refinement (env vars; off by default):
+Refinement runs on the cold path only (during `rebuild`). If ollama is not yet
+ready, the heuristic baseline runs instead and nothing breaks.
 
-```bash
-export TOTAL_RECALL_LLM_PROVIDER=auto   # or 'ollama' to force; 'none' to disable
-export TOTAL_RECALL_LLM_MODEL=qwen3.5:2b
-export TOTAL_RECALL_LLM_BASE_URL=http://localhost:11434
-total-recall rebuild --yes
-```
+| What gets refined | Heuristic baseline | With qwen3.5:2b |
+|---|---|---|
+| Machine-name extraction | Pattern-based NER | Precision 1.0, Recall 1.0 |
+| Vocabulary definitions | Absent (terms listed, undefined) | ~60% coverage |
+| Project narratives | N/A | Short, accurate summaries |
 
-Install the optional Python client conveniences alongside the `[vec]` extra:
-
-```bash
-pip install -e .[llm]
-# or both at once:
-pip install -e .[llm,vec]
-```
-
-Refinement runs ONLY during `rebuild` (cold path). If ollama isn't running
-or the model isn't pulled, refinement is skipped silently and the
-heuristic baseline remains authoritative.
+### Opt-outs and overrides
 
 | Env var | Default | Description |
 |---|---|---|
-| `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `auto` probes the daemon; `ollama` forces; `none` disables. |
-| `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Model tag to use. Any ollama-pulled model works. |
+| `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `none` disables the entire LLM layer (no download, no daemon, no refinement). `ollama` forces the ollama path. |
+| `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Override the model. `qwen3.5:4b` or larger (e.g. a ≥9B model) gives higher vocabulary coverage at the cost of more RAM and slower runs. |
+| `TOTAL_RECALL_LLM_REFINE_TEXT` | `1` | Set to `0` to disable text-gen refinement (vocab + narratives) while keeping machine-name extraction. |
 | `TOTAL_RECALL_LLM_BASE_URL` | `http://localhost:11434` | Ollama API endpoint. |
+
+To disable everything: add `TOTAL_RECALL_LLM_PROVIDER=none` to your environment
+before the plugin starts. No download, no daemon, no refinement — pure heuristics.
+
+The `/total-recall:llm-setup` slash command still exists as a manual fallback if
+auto-provisioning fails (e.g. disk space constraints, network issue during install).
+See [`docs/llm-refinement.md`](docs/llm-refinement.md) for troubleshooting.
 
 ## Relation to amnesia
 

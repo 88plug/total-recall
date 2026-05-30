@@ -59,6 +59,7 @@ from .cmd_metrics import metrics_cmd  # noqa: E402
 from .cmd_adaptive import adaptive_cmd  # noqa: E402
 from .cmd_consolidate import consolidate_cmd  # noqa: E402
 from .cmd_sources import sources_cmd  # noqa: E402
+from .cmd_llm import llm_model_cmd  # noqa: E402
 
 cli.add_command(index_cmd, name="index")
 cli.add_command(query_cmd, name="query")
@@ -71,6 +72,7 @@ cli.add_command(metrics_cmd, name="metrics")
 cli.add_command(adaptive_cmd, name="adaptive")
 cli.add_command(consolidate_cmd, name="consolidate")
 cli.add_command(sources_cmd, name="sources")
+cli.add_command(llm_model_cmd, name="llm-model")
 
 
 @cli.command("version", help="Print the total-recall version.")
