@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "total-recall": {
+      "command": "uv",
+      "args": ["run", "--directory", "${CLAUDE_PLUGIN_ROOT}", "python", "-m", "mcp_server"],
+      "env": {
+        "TOTAL_RECALL_DB_DIR": "${CLAUDE_PLUGIN_DATA}/total-recall"
+      }
+    }
+  }
+}
