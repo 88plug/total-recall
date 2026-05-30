@@ -32,3 +32,9 @@ data/*.db-journal
 # Local-only backtest (real-corpus, PII-bearing — never tracked)
 tests/local/
 
+# Local model bake-off / diagnostic scratch (regenerable, machine-specific)
+.bench_*
+.diag_*
+.olga_*
+.fair_bench_*
+
