@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-05-30
+
+### Fixed — LLM refinement no longer drops rows on truncated JSON
+
+Full rebuilds with `--llm` occasionally logged `model response not valid JSON
+— Unterminated string` and silently dropped the affected vocabulary/machine
+row. Root cause: the model's output hit the `num_predict` ceiling mid-JSON.
+
+- `extractors/llm/client.py`: raised default `num_predict` 512 → 1024 and added
+  a truncation-aware retry — a JSON parse failure (the truncation signature)
+  retries once at 2× the output budget before giving up, instead of returning
+  None and dropping the row. Network/timeout errors still fail fast (no retry).
+- The rebuild vocab upsert already preserves the prior DB definition when a
+  refiner returns a falsy value, so a single bad call never erases a good row.
+
+### Added — regression tests
+
+- `tests/test_llm_client.py`: retry-on-truncation succeeds, retry is bounded
+  (no infinite loop), and a valid first response issues no second call.
+- `tests/test_incremental_flock.py`: drives the real `recall::start_incremental_index`
+  bash helper — asserts a tick detaches a worker, and a second tick is skipped
+  via `flock -n` while the lock is held. Locks the v0.10.1 watermark-stall fix.
+
 ## [0.10.1] - 2026-05-30
 
 ### Validated — 6-model bake-off confirms qwen3.5:2b as the default

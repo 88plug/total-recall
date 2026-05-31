@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "total-recall",
   "displayName": "Total Recall",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 8 supported CLI clients. Surfaces operator identity / decisions / bans / corrections / goals / voice via 26 MCP tools, 5 hooks (SessionStart signpost + UserPromptSubmit retrieval + Stop/PostCompact re-index + PreCompact seed), 15 slash commands, and 2 skills. Optional local-LLM refinement layer ([llm] extra, ollama, off by default). The operator becomes the source of truth; the model stops re-asking what they already told it.",
   "author": {
     "name": "88plug",

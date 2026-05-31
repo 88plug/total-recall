@@ -236,7 +236,7 @@ class LLMClient:
         user: str,
         schema: dict | None = None,
         temperature: float | None = None,
-        num_predict: int = 512,
+        num_predict: int = 1024,
         num_ctx: int = 4096,
     ) -> dict | None:
         """Call the model and return a parsed JSON dict.
@@ -260,7 +260,9 @@ class LLMClient:
         * ``num_ctx=4096``: explicit small KV cache. ollama's default of 0
           negotiates the model's training max which allocates a huge KV cache
           on first load — slow on CPU. 4096 covers our ≤2k-token prompts.
-        * ``num_predict=512``: hard output ceiling so the model can't run away.
+        * ``num_predict=1024``: output ceiling. On a JSON parse failure (almost
+          always truncation at this ceiling) the call retries once at 2× before
+          giving up — see the retry loop below.
         * ``keep_alive="15m"``: keep the model resident across the rebuild's
           many sequential calls; auto-evict afterwards.
 
@@ -277,7 +279,7 @@ class LLMClient:
             (default) uses the family default; pass ``0.0`` to force greedy
             determinism for a classification task regardless of family.
         num_predict:
-            Max output tokens (default 512).
+            Max output tokens (default 1024; auto-retried at 2× on truncation).
         num_ctx:
             KV-cache context length in tokens (default 4096; see note above).
         """
@@ -293,74 +295,105 @@ class LLMClient:
 
         opts, think = _resolve_sampling(self._model, temperature)
         opts["num_ctx"] = num_ctx
-        opts["num_predict"] = num_predict
 
-        payload: dict[str, Any] = {
-            "model": self._model,
-            "prompt": user,
-            "system": system,
-            "stream": False,
-            "keep_alive": "15m",
-            "options": opts,
-        }
-        # Thinking-capable models (qwen3/qwen3.5, deepseek-r1, …) emit
-        # <think> blocks by default — wasteful and they break JSON parsing.
-        # ``think`` is a TOP-LEVEL request field (ollama >= 0.9), not an
-        # option. None → leave default (non-thinking models ignore it).
-        if think is False:
-            payload["think"] = False
+        # Truncation-aware retry: a parse failure on the model's response is
+        # almost always the output hitting the num_predict ceiling mid-JSON
+        # (an unterminated string / missing closing brace). Rather than logging
+        # a warning and dropping the row, retry once with a doubled output
+        # budget. This is the v0.11.0 hardening for the "Unterminated string"
+        # warnings seen during full rebuilds. Network/timeout errors are NOT
+        # retried here (they fail fast and return None as before).
+        attempts = [num_predict, num_predict * 2]
+        result: dict[str, Any] | None = None
+        for attempt_idx, np in enumerate(attempts):
+            attempt_opts = dict(opts)
+            attempt_opts["num_predict"] = np
 
-        if schema is not None:
-            # Structured output: pass schema dict as format value.
-            # Older ollama versions ignore unknown format shapes gracefully.
-            payload["format"] = schema
-        else:
-            payload["format"] = "json"
+            payload: dict[str, Any] = {
+                "model": self._model,
+                "prompt": user,
+                "system": system,
+                "stream": False,
+                "keep_alive": "15m",
+                "options": attempt_opts,
+            }
+            # Thinking-capable models (qwen3/qwen3.5, deepseek-r1, …) emit
+            # <think> blocks by default — wasteful and they break JSON parsing.
+            # ``think`` is a TOP-LEVEL request field (ollama >= 0.9), not an
+            # option. None → leave default (non-thinking models ignore it).
+            if think is False:
+                payload["think"] = False
 
-        url = f"{self._base_url}/api/generate"
-        body = json.dumps(payload).encode()
-        req = urllib.request.Request(
-            url,
-            data=body,
-            method="POST",
-            headers={"Content-Type": "application/json"},
-        )
+            if schema is not None:
+                # Structured output: pass schema dict as format value.
+                # Older ollama versions ignore unknown format shapes gracefully.
+                payload["format"] = schema
+            else:
+                payload["format"] = "json"
 
-        try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-                raw = resp.read()
-        except urllib.error.URLError as exc:
-            log.warning("LLMClient: generate request failed — %s", exc)
-            return None
-        except TimeoutError as exc:
-            log.warning("LLMClient: generate timed out after %.0fs — %s", self._timeout, exc)
-            return None
-        except Exception as exc:  # noqa: BLE001
-            log.warning("LLMClient: unexpected generate error — %s", exc)
-            return None
+            url = f"{self._base_url}/api/generate"
+            body = json.dumps(payload).encode()
+            req = urllib.request.Request(
+                url,
+                data=body,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
 
-        # ollama generate response: {"response": "<json string>", "done": true, ...}
-        try:
-            outer: dict[str, Any] = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            log.warning("LLMClient: outer response not valid JSON — %s", exc)
-            return None
+            try:
+                with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                    raw = resp.read()
+            except urllib.error.URLError as exc:
+                log.warning("LLMClient: generate request failed — %s", exc)
+                return None
+            except TimeoutError as exc:
+                log.warning("LLMClient: generate timed out after %.0fs — %s", self._timeout, exc)
+                return None
+            except Exception as exc:  # noqa: BLE001
+                log.warning("LLMClient: unexpected generate error — %s", exc)
+                return None
 
-        response_text: str = outer.get("response", "")
-        if not response_text:
-            log.warning("LLMClient: empty response from model")
-            return None
+            # ollama generate response: {"response": "<json string>", "done": true, ...}
+            try:
+                outer: dict[str, Any] = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                log.warning("LLMClient: outer response not valid JSON — %s", exc)
+                return None
 
-        log.debug("LLMClient: raw model response (truncated): %.200s", response_text)
+            response_text: str = outer.get("response", "")
+            if not response_text:
+                log.warning("LLMClient: empty response from model")
+                return None
 
-        try:
-            result: dict[str, Any] = json.loads(response_text)
-        except json.JSONDecodeError as exc:
-            log.warning("LLMClient: model response not valid JSON — %s", exc)
-            return None
+            log.debug("LLMClient: raw model response (truncated): %.200s", response_text)
 
-        if not isinstance(result, dict):
-            log.warning("LLMClient: model response is not a JSON object (got %s)", type(result).__name__)
+            try:
+                parsed: Any = json.loads(response_text)
+            except json.JSONDecodeError as exc:
+                # Likely truncation (hit num_predict mid-JSON). Retry with a
+                # bigger budget if we have an attempt left; only warn once we've
+                # exhausted retries.
+                if attempt_idx + 1 < len(attempts):
+                    log.info(
+                        "LLMClient: response not valid JSON (likely truncated at "
+                        "num_predict=%d) — retrying with %d",
+                        np, attempts[attempt_idx + 1],
+                    )
+                    continue
+                log.warning("LLMClient: model response not valid JSON — %s", exc)
+                return None
+
+            if not isinstance(parsed, dict):
+                log.warning(
+                    "LLMClient: model response is not a JSON object (got %s)",
+                    type(parsed).__name__,
+                )
+                return None
+
+            result = parsed
+            break
+
+        if result is None:
             return None
 
         if self._cache is not None:
