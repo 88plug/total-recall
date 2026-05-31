@@ -14,6 +14,11 @@ import click
 
 from .util import resolve_db_path
 
+try:  # index lives at repo root; import lazily-tolerant for partial checkouts
+    from index.db import connect  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - exercised only in a broken checkout
+    connect = None  # type: ignore[assignment]
+
 
 @click.command(help="Run a continuous polling-mode ingest. Use Ctrl-C to stop.")
 @click.option(
@@ -58,18 +63,24 @@ def tail_cmd(
     except ImportError:
         tail_loop = None
 
-    if tail_loop is not None and not once:
+    if tail_loop is not None and connect is not None and not once:
         if verbose:
             click.echo(f"[tail] using index.tail.tail_loop interval={interval}s", err=True)
+        # tail_loop owns a long-lived connection; it takes (conn, interval,
+        # projects_root, max_iterations) — NOT db_path/cwd_filter. Open the conn
+        # here and pass only the kwargs the helper actually accepts. cwd_filter
+        # is not supported by the loop helper; it's honored only on the fallback
+        # path below.
+        conn = connect(db_path)
         try:
-            tail_loop(
-                db_path=db_path,
-                interval=interval,
-                cwd_filter=cwd_filter,
-                projects_root=Path(projects_root).expanduser() if projects_root else None,
-            )
+            kwargs: dict = {"interval": int(interval)}
+            if projects_root:
+                kwargs["projects_root"] = Path(projects_root).expanduser()
+            tail_loop(conn, **kwargs)
         except KeyboardInterrupt:
             click.echo("\nstopped.", err=True)
+        finally:
+            conn.close()
         return
 
     # Fallback loop.
@@ -85,16 +96,13 @@ def tail_cmd(
 
     def _tick() -> None:
         started = time.monotonic()
-        try:
-            result = ingest_all(
-                db_path=db_path,
-                full=False,
-                cwd_filter=cwd_filter,
-                projects_root=Path(projects_root).expanduser() if projects_root else None,
-                dry_run=False,
-            )
-        except TypeError:
-            result = ingest_all(db_path=db_path, full=False)  # type: ignore[call-arg]
+        result = ingest_all(
+            db_path=db_path,
+            force_full=False,
+            cwd_filter=cwd_filter,
+            projects_root=Path(projects_root).expanduser() if projects_root else None,
+            dry_run=False,
+        )
         elapsed = time.monotonic() - started
         files = _result_get(result, "files", 0)
         messages = _result_get(result, "messages", 0)
