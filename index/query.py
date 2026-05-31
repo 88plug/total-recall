@@ -93,6 +93,28 @@ def _fts_match_quote(query: str) -> str:
     return " ".join(quoted)
 
 
+def _fts_match_quote_or(query: str) -> str:
+    """Like :func:`_fts_match_quote` but OR-joins the terms.
+
+    A space between quoted FTS5 phrases is an implicit AND — every term must
+    appear, so a multi-word topic only matches a row that contains *all* of its
+    words. That silently returns zero hits for natural phrasings like
+    ``recall("docker deployment decision")`` when the stored extraction reads
+    "decided to use docker for all deployments" (no standalone "decision",
+    "deployment" vs "deployments"). OR-joining matches a row containing *any*
+    term and lets BM25/score ranking surface the best — the same approach the
+    UserPromptSubmit hook's ``_prompt_to_fts_query`` already uses in production.
+    Single-term queries are identical to :func:`_fts_match_quote`.
+    """
+    if not query:
+        return ""
+    terms = [t for t in _FTS_SPLIT.split(query.strip()) if t]
+    if not terms:
+        return ""
+    quoted = [f'"{t.replace(chr(34), chr(34) * 2)}"' for t in terms]
+    return " OR ".join(quoted)
+
+
 def _to_dt(ts: Any) -> datetime:
     """Cast a unix-epoch int / ISO string back to an aware datetime."""
     if ts is None:
@@ -181,7 +203,7 @@ def search_extractions(
         where.append("e.ts >= ?")
         params.append(since_int)
 
-    match = _fts_match_quote(query) if query else ""
+    match = _fts_match_quote_or(query) if query else ""
 
     if match:
         sql = """
@@ -237,7 +259,7 @@ def search_messages(
     because the schema is different and callers tend to need ``parent_uuid``
     / ``message_uuid`` to re-link to the source DAG.
     """
-    match = _fts_match_quote(query)
+    match = _fts_match_quote_or(query)
     if not match:
         return []
 

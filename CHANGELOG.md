@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-05-31
+
+### Improved — multi-word recall: OR-join queries (accuracy/results)
+
+Multi-word recall queries used FTS5 implicit-AND, requiring EVERY term to appear
+in a stored row. Natural phrasings silently returned zero hits — e.g.
+`recall("docker deployment decision")` matched nothing when the stored extraction
+read "decided to use docker for all deployments" (no standalone "decision",
+"deployment" vs "deployments"). This hit the entire MCP tool surface (recall,
+find_failed_attempts, find_user_preferences, recall_targeted,
+recall_corrections_about — all route through search_extractions).
+
+- `index/query.py`: new `_fts_match_quote_or` OR-joins quoted terms; both
+  `search_extractions` and `search_messages` now use it. A row matching ANY term
+  is retrieved, and BM25 + composite score rank the best to the top. Single-term
+  queries are unchanged; the AND quoter (`_fts_match_quote`) is retained.
+  Mirrors the OR approach the UserPromptSubmit hook already used in production.
+- Verified delta on a controlled corpus: `"docker deployment decision"` went
+  from 0 hits (AND) to 1 (OR). Tests: `tests/test_index.py` adds 4 cases
+  (multi-word OR for extractions + messages, single-term unchanged, OR broadens
+  recall without losing rank ordering).
+
+Deferred (effectiveness-council follow-ups): composite recency/kind re-rank with
+BM25 over-fetch; near-duplicate dedup + score floor. Rejected for now: default-on
+vec hybrid (needs a measurement harness first).
+
+Gate: pytest tests/ exit 0 — 1317 passed, 10 skipped.
+
 ## [1.2.0] - 2026-05-31
 
 ### Validated — default ollama qwen3.5:2b refinement on CPU, live-tested
