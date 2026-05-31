@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-05-30
+
+### Stable release
+
+total-recall is now 1.0. The full-surface verification sweep (v0.12.0) and its
+follow-up releases (v0.13.0 → v0.14.1) closed all 17 found defects — 3
+crash-on-use bugs (tail, partial-schema CLI, bans read-only MCP), plus schema,
+hook-coverage, machine-NER, doc, and version-drift issues — each with a
+regression test. Dev-status classifier moved Beta → Production/Stable.
+
+Stability commitments from this point:
+
+- **Versioning**: semver. Breaking changes (schema column removal, MCP tool
+  signature changes, Python-version floor bumps) wait for 2.0.
+- **Test discipline**: `pytest tests/` must exit 0 before any tag — enforced
+  after three botched 0.13.x point releases taught the lesson the hard way.
+- **Surfaces covered by automated tests**: CLI subcommand contracts
+  (`test_cli_contracts.py`), cross-file version coherence
+  (`test_version_consistency.py`), partial-schema degradation
+  (`test_partial_schema.py`), read-only MCP paths (`test_bans_readonly.py`),
+  UserPromptSubmit hook dispatch (`test_hooks_dispatch.py`), and machine-NER
+  slug rejection (`test_ontology_hostname.py`).
+
+No code changes in this release beyond the version bump and classifier — it is a
+stability marker on the green v0.14.1 tree (1254 tests passing).
+
 ## [0.14.1] - 2026-05-30
 
 ### Fixed — v0.14.0 shipped with a broken test import (suite could not collect)
