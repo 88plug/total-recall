@@ -74,6 +74,24 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(BANS_SCHEMA + FAILED_ATTEMPTS_SCHEMA)
 
 
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    """True if *name* is a table in the connected DB.
+
+    Read paths use this instead of :func:`ensure_schema` — the MCP server opens
+    the index ``mode=ro``, so a CREATE TABLE (even ``IF NOT EXISTS``) raises
+    ``attempt to write a readonly database``. A read against a not-yet-created
+    table simply means "no bans / no failed attempts recorded".
+    """
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            (name,),
+        ).fetchone()
+        return row is not None
+    except sqlite3.Error:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

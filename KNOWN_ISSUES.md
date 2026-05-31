@@ -37,16 +37,15 @@ doc↔code drift were all invisible. v0.13.0 added `test_cli_contracts.py` and
   `qwen3.5:2b`.
 - ✅ Removed leftover executable `hooks/session-start-signpost-v1.sh.bak`.
 
+## Fixed in v0.13.3
+
+- ✅ **HIGH** MCP `check_banned` / `list_failed_attempts` crashed on the
+  read-only conn (`ensure_schema` CREATE on `mode=ro`). Read paths now use a
+  `_table_exists` guard, never write. Test: `tests/test_bans_readonly.py`.
+  (Verified no other index module has the same read-path-writes-schema pattern —
+  `bans.py` was the only one.)
+
 ## Open — real, ranked
-
-### HIGH
-
-2. **MCP `check_banned` / `list_failed_attempts` fail on the read-only conn.**
-   `index/bans.py` calls `ensure_schema()` (a `CREATE TABLE IF NOT EXISTS`) at
-   the top of every read fn. The MCP server opens `mode=ro` → `attempt to write
-   a readonly database`. The error is swallowed and `banned=False` returned, so
-   the model can't tell "not banned" from "query failed". Fix: skip schema
-   creation on read paths / detect read-only and no-op.
 
 ### MEDIUM
 

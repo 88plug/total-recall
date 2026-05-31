@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.3] - 2026-05-30
+
+### Fixed — bans read paths crash on the read-only MCP connection
+
+`check_banned` and `list_failed_attempts` called `ensure_schema()` (CREATE TABLE)
+on every invocation. The MCP server opens the index `mode=ro`, so the create
+raised `attempt to write a readonly database`; the error was swallowed and a
+misleading "not banned" / empty result returned — the model could not tell
+"not banned" from "query failed". Read paths now use a `_table_exists` guard and
+never write; an absent table correctly means "nothing recorded". Writers keep
+`ensure_schema`. Regression: `tests/test_bans_readonly.py` (real mode=ro conn).
+
 ## [0.13.2] - 2026-05-30
 
 ### Fixed — v0.13.1 shipped with a NameError in the partial-schema handler
