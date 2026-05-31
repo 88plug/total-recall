@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-05-30
+
+### Added — doc/code drift linter (tests/test_command_docs.py)
+
+A static test over every `commands/*.md` and `skills/*/SKILL.md` that fails CI on
+the drift classes that caused repeated bugs this cycle:
+
+1. Every `${CLAUDE_PLUGIN_ROOT}/<path>` and `docs/<file>.md` reference must point
+   at a file that exists (catches dead links like the old
+   `docs/install/llm-refinement.md`).
+2. Every `recall-cli.sh <subcmd>` / `total-recall <subcmd>` must name a real CLI
+   subcommand — derived live from the Click group, so new/renamed subcommands are
+   covered automatically.
+3. The group-level `--json` flag must precede the subcommand (placing it after
+   raises "No such option: --json" — the exact recall-status/recall-inspect bug).
+
+54 parametrized checks, all green; verified discriminating (catches a planted bad
+subcommand and a `stats --json` ordering, passes `--json stats`).
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+## [1.0.0] - 2026-05-30
+
+### Stable release
+
+total-recall is now 1.0. The full-surface verification sweep (v0.12.0) and its
+follow-up releases (v0.13.0 → v0.14.1) closed all 17 found defects — 3
+crash-on-use bugs (tail, partial-schema CLI, bans read-only MCP), plus schema,
+hook-coverage, machine-NER, doc, and version-drift issues — each with a
+regression test. Dev-status classifier moved Beta → Production/Stable.
+
+Stability commitments from this point:
+
+- **Versioning**: semver. Breaking changes (schema column removal, MCP tool
+  signature changes, Python-version floor bumps) wait for 2.0.
+- **Test discipline**: `pytest tests/` must exit 0 before any tag — enforced
+  after three botched 0.13.x point releases taught the lesson the hard way.
+- **Surfaces covered by automated tests**: CLI subcommand contracts
+  (`test_cli_contracts.py`), cross-file version coherence
+  (`test_version_consistency.py`), partial-schema degradation
+  (`test_partial_schema.py`), read-only MCP paths (`test_bans_readonly.py`),
+  UserPromptSubmit hook dispatch (`test_hooks_dispatch.py`), and machine-NER
+  slug rejection (`test_ontology_hostname.py`).
+
+No code changes in this release beyond the version bump and classifier — it is a
+stability marker on the green v0.14.1 tree (1254 tests passing).
+
 ## [0.14.1] - 2026-05-30
 
 ### Fixed — v0.14.0 shipped with a broken test import (suite could not collect)
