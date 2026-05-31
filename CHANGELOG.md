@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-05-31
+
+### Improved — composite re-rank: recency + kind priority over raw BM25
+
+`search_extractions` truncated by raw BM25 `LIMIT` before any recency/kind
+scoring, so a recent high-value correction or ban could be cut off by older
+keyword-dense `domain_fact` rows. Now the text-query path over-fetches `limit*5`
+BM25 candidates, then composite-sorts in Python before slicing to `limit`:
+
+    composite = 0.5*relevance + 0.3*recency + 0.2*kind_priority
+
+- recency: 90-day half-life (1.0 now, 0.5 at 90d, 0.25 at 180d), matching
+  `index.decay.HALF_LIFE_DAYS`.
+- kind_priority: correction/ban 1.0, decision 0.9, goal 0.85, ... domain_fact
+  0.6, away_summary 0.5 (unlisted = 0.6).
+- No-query path (already ts-DESC ordered) and single-hit results are untouched.
+  QueryHit shape is unchanged — callers see better-ordered rows transparently.
+
+Tests (tests/test_index.py): recent correction outranks a 200-day domain_fact
+at equal relevance; ban outranks progress at equal age; a recent correction is
+not truncated away by 5 older facts (over-fetch proof). Verified on the live
+index — multi-word recall returns composite-ordered hits.
+
+Gate: pytest tests/ exit 0 — 1320 passed, 10 skipped.
+
 ## [1.3.0] - 2026-05-31
 
 ### Improved — multi-word recall: OR-join queries (accuracy/results)

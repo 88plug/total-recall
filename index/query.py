@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -163,6 +164,70 @@ def _bm25_to_score(rank: float | None, base: float) -> float:
         fts_norm = 0.0 if rank > 0 else 1.0
     combined = 0.5 * fts_norm + 0.5 * float(base)
     return max(0.0, min(1.0, combined))
+
+
+# Kind priority for the composite re-rank (v1.4.0). A recent correction/ban is
+# worth surfacing above a stale domain_fact even at slightly lower keyword
+# relevance — the operator's standing rules are the highest-value memories.
+_KIND_PRIORITY: dict[str, float] = {
+    "correction": 1.0,
+    "ban": 1.0,
+    "decision": 0.9,
+    "goal": 0.85,
+    "self_correction": 0.75,
+    "truth_assertion": 0.75,
+    "progress": 0.7,
+    "domain_fact": 0.6,
+    "model_correction": 0.6,
+    "away_summary": 0.5,
+}
+_KIND_PRIORITY_DEFAULT = 0.6
+
+# How many BM25 candidates to pull per requested result before composite
+# re-ranking. 5x gives the recency/kind re-rank room to promote a recent
+# correction that BM25 alone would have ranked just outside the window.
+_OVERFETCH = 5
+
+# Recency half-life for the composite re-rank, matching index.decay.HALF_LIFE_DAYS
+# (the confidence-decay policy). 1.0 at age 0, 0.5 at 90 days, 0.25 at 180 days.
+_RECENCY_HALF_LIFE_DAYS = 90.0
+_SECONDS_PER_DAY = 86400.0
+
+
+def _recency_factor(ts_epoch: float, now: float) -> float:
+    """Half-life recency weight in [0, 1]: 1.0 now, 0.5 at 90 days, etc.
+
+    A future timestamp (clock skew / bad stamp) clamps to 1.0 rather than
+    exceeding it. Mirrors the decay shape used by ``index.decay``.
+    """
+    age_days = max(0.0, (now - ts_epoch) / _SECONDS_PER_DAY)
+    return math.exp(-math.log(2) * age_days / _RECENCY_HALF_LIFE_DAYS)
+
+
+def _composite_score(relevance: float, ts: Any, kind: str, now: float) -> float:
+    """Blend keyword relevance, recency, and kind priority into a sort key.
+
+    composite = 0.5*relevance + 0.3*recency + 0.2*kind_priority
+
+    * ``relevance`` is the normalized BM25+confidence blend from
+      :func:`_bm25_to_score` (already in [0, 1]).
+    * recency is :func:`_recency_factor` (90-day half-life) so a fresh signal
+      outranks a stale one at equal relevance.
+    * kind priority lifts standing rules (correction/ban) over facts.
+
+    This runs only on the BM25-shortlist (over-fetched ``limit*5``) so the SQL
+    LIMIT no longer truncates high-value-but-moderate-keyword rows before
+    Python ever scores them.
+    """
+    if isinstance(ts, datetime):
+        ts_epoch: float | None = ts.timestamp()
+    elif isinstance(ts, (int, float)):
+        ts_epoch = float(ts)
+    else:
+        ts_epoch = None
+    rec = _recency_factor(ts_epoch, now) if ts_epoch is not None else 0.5
+    kp = _KIND_PRIORITY.get(kind, _KIND_PRIORITY_DEFAULT)
+    return 0.5 * float(relevance) + 0.3 * float(rec) + 0.2 * kp
 
 
 # ---------------------------------------------------------------------------
