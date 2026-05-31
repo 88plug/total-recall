@@ -183,6 +183,39 @@ _KIND_PRIORITY: dict[str, float] = {
 }
 _KIND_PRIORITY_DEFAULT = 0.6
 
+# Minimum composite-input relevance for a hit to survive (v1.5.0). Real FTS5
+# matches score well above this; the floor only drops broad-OR tail garbage.
+MIN_RECALL_SCORE = 0.05
+
+# Collapse runs of whitespace + lowercase for dedup keying. Deliberately NOT
+# stemming or stripping trigger words (that would over-merge distinct rules) —
+# this only catches the same text reasserted across sessions.
+_WS_RE = re.compile(r"\s+")
+
+
+def _normalize_content(content: str) -> str:
+    """Normalize for dedup: lowercase + whitespace-collapse, nothing fancier."""
+    return _WS_RE.sub(" ", (content or "").strip().lower())
+
+
+def _dedup_hits(hits: list["QueryHit"]) -> list["QueryHit"]:
+    """Keep the first hit per (kind, normalized_content), preserving order.
+
+    Callers pass an already-ranked list, so "first" == "highest-ranked". Two
+    rows of different ``kind`` with identical text are NOT merged (a banned
+    thing and a decision about it are distinct memories).
+    """
+    seen: set[tuple[str, str]] = set()
+    out: list[QueryHit] = []
+    for h in hits:
+        key = (h.kind, _normalize_content(h.content))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(h)
+    return out
+
+
 # How many BM25 candidates to pull before composite re-ranking. We over-fetch
 # limit*_OVERFETCH but never fewer than _OVERFETCH_FLOOR, so even a small
 # ``limit`` (e.g. the hook's limit=1/3) still draws a real candidate pool —
@@ -315,16 +348,29 @@ def search_extractions(
             )
         )
 
+    # Score floor (v1.5.0): drop near-zero-relevance noise before ranking. The
+    # OR-join (v1.3.0) widens recall; the floor keeps a row that barely matches
+    # one rare term from displacing a real hit. Conservative — real matches
+    # score well above it.
+    hits = [h for h in hits if h.score >= MIN_RECALL_SCORE]
+
     # Composite re-rank only the text-query path (the no-query path is already
     # ordered ts DESC, score DESC by SQL and was not over-fetched). Sort by the
-    # blended relevance+recency+kind score, then slice to the requested limit.
+    # blended relevance+recency+kind score.
     if match and len(hits) > 1:
         now = datetime.now(timezone.utc).timestamp()
         hits.sort(
             key=lambda h: _composite_score(h.score, h.ts, h.kind, now),
             reverse=True,
         )
-        hits = hits[:limit]
+
+    # Dedup (v1.5.0): the same standing rule is often paraphrased near-
+    # identically across many sessions; without this they fill every slot and
+    # bury distinct memories. Keep the highest-ranked hit per
+    # (kind, normalized_content); order is already best-first from the sort
+    # (match path) or ts DESC (no-query path).
+    hits = _dedup_hits(hits)
+    hits = hits[:limit]
     return hits
 
 

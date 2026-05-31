@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-05-31
+
+### Improved — near-duplicate dedup + score floor
+
+The same standing rule is often paraphrased near-identically across many
+sessions; recall would return 5 copies of "use uv, not pip" and bury distinct
+corrections. search_extractions now:
+
+- drops hits below MIN_RECALL_SCORE (0.05) — broad-OR tail garbage, before ranking;
+- after the composite sort, collapses to the highest-ranked hit per
+  (kind, normalized_content) where normalized = lowercase + whitespace-collapse.
+  Different kinds with identical text are kept (a ban and a decision about the
+  same thing are distinct memories). No stemming/trigger-stripping — that would
+  over-merge distinct rules. QueryHit shape unchanged; callers just get fewer,
+  more distinct rows.
+
+Tests (tests/test_index.py): 5 paraphrases collapse to 1 while a distinct
+correction survives; same text under ban vs decision is NOT merged;
+whitespace/case variants collapse; _normalize_content unit. Verified
+discriminating — the collapse tests fail when dedup is disabled.
+
+Gate: pytest tests/ exit 0 — 1317 passed, 15 skipped.
+
 ## [1.4.1] - 2026-05-31
 
 ### Fixed — v1.4.0 composite re-rank was inert (helpers added but never wired)

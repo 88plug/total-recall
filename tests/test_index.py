@@ -1360,3 +1360,66 @@ def test_rerank_over_fetch_surfaces_correction_past_many_facts(
     hits = search_extractions(conn, query="redis", limit=1, cwd="/proj/of")
     assert len(hits) == 1
     assert hits[0].kind == "correction"
+
+
+# ---------------------------------------------------------------------------
+# Dedup + score floor (v1.5.0)
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_collapses_paraphrased_correction(conn: sqlite3.Connection) -> None:
+    """The same correction stored across many sessions collapses to one hit."""
+    for i in range(5):
+        _insert_extraction(
+            conn, kind="correction", content="use uv, not pip",
+            session_id=f"s{i}", cwd="/proj/d", ts=_recent_ts(10 + i),
+            source_uuid=f"dup{i}", score=0.5,
+        )
+    _insert_extraction(
+        conn, kind="correction", content="never use sudo with pip",
+        session_id="s9", cwd="/proj/d", ts=_recent_ts(3), source_uuid="distinct",
+        score=0.5,
+    )
+    hits = search_extractions(conn, query="pip", limit=5, cwd="/proj/d")
+    contents = [h.content for h in hits]
+    # The 5 identical "use uv, not pip" collapse to 1; the distinct one survives.
+    assert contents.count("use uv, not pip") == 1
+    assert "never use sudo with pip" in contents
+
+
+def test_dedup_keeps_distinct_kinds_with_same_text(conn: sqlite3.Connection) -> None:
+    """Same text under different kinds is NOT merged (distinct memories)."""
+    ts = _recent_ts(5)
+    _insert_extraction(
+        conn, kind="ban", content="docker compose v1",
+        session_id="s1", cwd="/proj/k", ts=ts, source_uuid="b", score=0.5,
+    )
+    _insert_extraction(
+        conn, kind="decision", content="docker compose v1",
+        session_id="s2", cwd="/proj/k", ts=ts, source_uuid="d", score=0.5,
+    )
+    hits = search_extractions(conn, query="docker", limit=5, cwd="/proj/k")
+    kinds = {h.kind for h in hits}
+    assert kinds == {"ban", "decision"}, "different kinds must not be deduped"
+
+
+def test_dedup_normalizes_whitespace_and_case(conn: sqlite3.Connection) -> None:
+    """Whitespace/case variants of the same correction collapse."""
+    _insert_extraction(
+        conn, kind="correction", content="Use   Edit  not Write",
+        session_id="s1", cwd="/proj/w", ts=_recent_ts(4), source_uuid="a", score=0.5,
+    )
+    _insert_extraction(
+        conn, kind="correction", content="use edit not write",
+        session_id="s2", cwd="/proj/w", ts=_recent_ts(3), source_uuid="b", score=0.5,
+    )
+    hits = search_extractions(conn, query="edit", limit=5, cwd="/proj/w")
+    assert len(hits) == 1, "whitespace/case variants should collapse to one"
+
+
+def test_normalize_content_unit() -> None:
+    from index.query import _normalize_content
+
+    assert _normalize_content("Use   Edit  not Write") == "use edit not write"
+    assert _normalize_content("  TRIM  ME  ") == "trim me"
+    assert _normalize_content("") == ""
