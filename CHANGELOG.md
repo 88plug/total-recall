@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.1] - 2026-05-30
+
+### Fixed — v0.14.0 shipped with a broken test import (suite could not collect)
+
+v0.14.0 added `tests/test_ontology_hostname.py` importing `_is_cwd_slug`, but the
+edit adding that function to `extractors/ontology.py` had silently failed to
+apply, so the committed code lacked it. The whole test suite errored on
+collection (`ImportError: cannot import name '_is_cwd_slug'`). This release
+actually adds `_is_cwd_slug` + `_SLUG_WORDS` (now including filesystem path roots
+home/usr/tmp/var/etc/opt/mnt/srv/root) and the guard in
+`_extract_machines_from_text`. Full suite green again (1242 passed). The defect-4
+machine-NER fix is now genuinely in effect.
+
 ## [0.14.0] - 2026-05-30
 
 ### Fixed — machine inventory no longer mistakes cwd slugs for hostnames (defect 4)

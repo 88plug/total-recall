@@ -839,6 +839,43 @@ def _is_likely_public_ip(ip: str) -> bool:
     return True
 
 
+# Plain-English / path-prose words that betray a cwd directory-slug rather than
+# a real hostname. A hyphenated token containing any of these (or one that is
+# long / many-segmented) is almost certainly a project slug
+# (``a-conversation-with-daniel-kahneman-about-noise``,
+# ``claude-code-session-logs-data-mining``) — NOT a machine. Real hosts use
+# terse role/region/index segments (relay, eu, west, prod, db, 01), not prose.
+# v0.14.0 fix for the ~61k garbage ``machines`` rows.
+_SLUG_WORDS: frozenset[str] = frozenset(
+    {
+        "a", "an", "the", "and", "or", "of", "to", "for", "with", "about",
+        "from", "into", "this", "that", "these", "those", "is", "are", "be",
+        "conversation", "session", "sessions", "logs", "log", "data", "mining",
+        "code", "project", "projects", "notes", "draft", "review", "analysis",
+        "summary", "report", "guide", "plan", "how", "what", "why", "when",
+        "claude", "chat", "thread", "transcript", "doc", "docs", "readme",
+        # Universal filesystem path roots — a hostname never starts with these.
+        "home", "usr", "tmp", "var", "etc", "opt", "mnt", "srv", "root",
+    }
+)
+
+
+def _is_cwd_slug(token: str) -> bool:
+    """True if *token* looks like a cwd directory slug, not a hostname.
+
+    A real hostname is terse. A directory slug is long, has many hyphen
+    segments, or contains plain-English / path-prose words. Used to keep cwd
+    path components out of the ``machines`` table.
+    """
+    f = token.strip().strip(",.;:!?()[]{}\"'")
+    if len(f) > 30:
+        return True
+    segments = f.replace(".", "-").split("-")
+    if len(segments) >= 5:
+        return True
+    return any(seg.lower() in _SLUG_WORDS for seg in segments)
+
+
 def _extract_machines_from_text(
     text: str, ts: int, machines: dict[str, MachineRecord]
 ) -> None:
@@ -847,6 +884,9 @@ def _extract_machines_from_text(
         host = m.group(0)
         # Canonicalise hostname casing for keys (lower-case).
         key = host.lower()
+        # Skip cwd directory-slugs misdetected as hostnames (v0.14.0).
+        if _is_cwd_slug(key):
+            continue
         start = max(0, m.start() - _CONTEXT_WINDOW)
         end = min(len(text), m.end() + _CONTEXT_WINDOW)
         window = text[start:end]
