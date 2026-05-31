@@ -45,6 +45,50 @@ def _vec_refine_enabled(env_value: str | None) -> bool:
     return env_value.strip().lower() not in ("0", "false", "no", "off")
 
 
+def _backfill_vectors(db_path: str, verbose: bool) -> None:
+    """Dense-vector backfill (v2.0) — cold path only.
+
+    Runs once at the end of a full rebuild, NOT on every Stop/PostCompact tick
+    (that would add embedding latency to the operator's live session). Optional:
+    if the [vec] extra (sqlite-vec + fastembed) is absent, skip silently and
+    recall stays FTS5-only. Never fatal — a backfill failure must not fail the
+    rebuild, whose primary product (the FTS index) is already committed.
+
+    Set ``TOTAL_RECALL_VEC=0`` to skip even when the extra is installed.
+    """
+    if not _vec_refine_enabled(os.environ.get("TOTAL_RECALL_VEC")):
+        return
+    try:
+        from index.db import connect  # type: ignore[import-not-found]
+        from vec.store import apply_vec_schema, backfill_all  # type: ignore[import-not-found]
+
+        conn = connect(db_path)
+        try:
+            apply_vec_schema(conn)
+            report = backfill_all(conn)
+            conn.commit()
+        finally:
+            conn.close()
+        if verbose:
+            click.echo(
+                f"[rebuild] vec backfill: embedded {report.extractions_embedded} "
+                "extraction(s)",
+                err=True,
+            )
+    except ImportError:
+        if verbose:
+            click.echo(
+                "[rebuild] vec extra not installed; skipping dense backfill "
+                "(recall stays FTS5-only)",
+                err=True,
+            )
+    except Exception as exc:  # noqa: BLE001
+        click.echo(
+            f"total-recall: vec backfill failed (recall stays FTS5-only): {exc}",
+            err=True,
+        )
+
+
 @click.command(help="DESTRUCTIVE: drop the index, recreate the schema, then full ingest.")
 @click.option("--yes", is_flag=True, help="Skip the y/N prompt.")
 @click.option(
@@ -582,6 +626,8 @@ def rebuild_cmd(
             )
     except Exception as exc:  # noqa: BLE001
         click.echo(f"total-recall: LLM layer load failed ({exc})", err=True)
+
+    _backfill_vectors(db_path, verbose=verbose)
 
     elapsed = time.monotonic() - started
 
