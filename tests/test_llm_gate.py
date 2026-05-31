@@ -19,3 +19,22 @@ def test_enabled_by_default_and_truthy_values(env_value: str | None) -> None:
 @pytest.mark.parametrize("env_value", ["0", "false", "False", "FALSE", "no", "off"])
 def test_disabled_by_explicit_falsy_value(env_value: str) -> None:
     assert _text_refine_enabled(env_value) is False
+
+
+# ---------------------------------------------------------------------------
+# _vec_refine_enabled — TOTAL_RECALL_VEC gate (v2.0)
+# ---------------------------------------------------------------------------
+
+
+def test_vec_refine_gate_default_on_and_truthy() -> None:
+    from total_recall.cmd_rebuild import _vec_refine_enabled
+
+    for v in (None, "1", "true", "True", "yes", "on"):
+        assert _vec_refine_enabled(v) is True
+
+
+def test_vec_refine_gate_explicit_off() -> None:
+    from total_recall.cmd_rebuild import _vec_refine_enabled
+
+    for v in ("0", "false", "False", "no", "off"):
+        assert _vec_refine_enabled(v) is False

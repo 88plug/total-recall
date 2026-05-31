@@ -61,6 +61,11 @@ class QueryHit:
     # fusion layer (``vec/rrf.py``) so FTS-vs-vec lanes can dedupe on the
     # same extraction surfacing through both retrievers.
     extraction_id: int = 0
+    # The blended relevance+recency+kind score used to order text-query
+    # results (v2.0). 0.0 on the no-query path (rows come back ts-ordered).
+    # Additive field — existing callers reading kind/content/score are
+    # unaffected; new callers can threshold/display the composite directly.
+    composite_score: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -355,14 +360,14 @@ def search_extractions(
     hits = [h for h in hits if h.score >= MIN_RECALL_SCORE]
 
     # Composite re-rank only the text-query path (the no-query path is already
-    # ordered ts DESC, score DESC by SQL and was not over-fetched). Sort by the
-    # blended relevance+recency+kind score.
-    if match and len(hits) > 1:
+    # ordered ts DESC, score DESC by SQL and was not over-fetched). Compute the
+    # blended relevance+recency+kind score once, store it on each hit (v2.0
+    # exposes it as QueryHit.composite_score), then sort by it.
+    if match and hits:
         now = datetime.now(timezone.utc).timestamp()
-        hits.sort(
-            key=lambda h: _composite_score(h.score, h.ts, h.kind, now),
-            reverse=True,
-        )
+        for h in hits:
+            h.composite_score = _composite_score(h.score, h.ts, h.kind, now)
+        hits.sort(key=lambda h: h.composite_score, reverse=True)
 
     # Dedup (v1.5.0): the same standing rule is often paraphrased near-
     # identically across many sessions; without this they fill every slot and

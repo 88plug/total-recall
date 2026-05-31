@@ -29,6 +29,22 @@ def _text_refine_enabled(env_value: str | None) -> bool:
     return env_value.strip().lower() not in ("0", "false", "no", "off")
 
 
+def _vec_refine_enabled(env_value: str | None) -> bool:
+    """Whether to run the dense-vector backfill at the end of a rebuild.
+
+    Default-on (matching ``_text_refine_enabled``): the backfill is a no-op when
+    the optional [vec] extra is absent, so defaulting on is safe — installs with
+    sqlite-vec + fastembed get hybrid recall, everyone else stays FTS5-only.
+    Set ``TOTAL_RECALL_VEC=0`` to skip even when the extra is installed.
+
+    Unset / "1" / "true" / "yes" / "on" → enabled.
+    "0" / "false" / "no" / "off" → disabled.
+    """
+    if env_value is None:
+        return True
+    return env_value.strip().lower() not in ("0", "false", "no", "off")
+
+
 @click.command(help="DESTRUCTIVE: drop the index, recreate the schema, then full ingest.")
 @click.option("--yes", is_flag=True, help="Skip the y/N prompt.")
 @click.option(

@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-05-31
+
+### Added — hybrid (dense-vector) recall by default
+
+The +0.800 P@5 win measured in v1.6.0 is now produced by a normal
+`total-recall rebuild` — no manual backfill step.
+
+- **Vector backfill wired into `rebuild`** (`total_recall/cmd_rebuild.py`,
+  `_backfill_vectors`): after ingest + consolidation, a full rebuild applies the
+  sqlite-vec schema and embeds every extraction (`vec.store.apply_vec_schema` +
+  `backfill_all`). Cold path only — runs once per rebuild, NOT on every
+  Stop/PostCompact tick, so the operator's live session pays no embedding
+  latency. E2E test: `tests/integration/test_vec_eval.py::
+  test_rebuild_populates_vec_embeddings` asserts `chunk_embeddings` is populated.
+- **`QueryHit.composite_score`** (`index/query.py`): the blended
+  relevance+recency+kind score that orders text-query results is now an explicit
+  field on each hit (0.0 on the no-query path). Additive — existing callers
+  reading `kind`/`content`/`score` are unaffected.
+- **`TOTAL_RECALL_VEC` gate** (default-on): set `=0` to skip the rebuild backfill
+  even when the `[vec]` extra is installed.
+
+### Notes
+
+- Optional + non-fatal: if the `[vec]` extra (sqlite-vec + fastembed) is absent,
+  rebuild skips the backfill silently and recall stays FTS5-only; a backfill
+  error logs a warning but never fails the rebuild (the FTS index, rebuild's
+  primary product, is already committed by then).
+- Non-destructive: the vec schema is created `IF NOT EXISTS`; no existing table
+  is altered or dropped. The major-version bump marks the milestone (hybrid is
+  now the default-produced index shape), not an API break.
+- Python floor stays 3.10 (per council chair: zero gain, would drop real users).
+
 ## [1.6.0] - 2026-05-31
 
 ### Added — vec hybrid recall eval harness (go/no-go for v2.0)

@@ -1423,3 +1423,29 @@ def test_normalize_content_unit() -> None:
     assert _normalize_content("Use   Edit  not Write") == "use edit not write"
     assert _normalize_content("  TRIM  ME  ") == "trim me"
     assert _normalize_content("") == ""
+
+
+# ---------------------------------------------------------------------------
+# composite_score field exposed on QueryHit (v2.0)
+# ---------------------------------------------------------------------------
+
+
+def test_composite_score_field_populated_on_text_query(conn: sqlite3.Connection) -> None:
+    """Text-query hits carry a populated composite_score; it drives the order."""
+    _insert_extraction(
+        conn, kind="domain_fact", content="alpha alpha alpha old fact",
+        session_id="s1", cwd="/proj/cs", ts=_recent_ts(220), source_uuid="old",
+        score=0.5,
+    )
+    _insert_extraction(
+        conn, kind="correction", content="alpha is now banned",
+        session_id="s2", cwd="/proj/cs", ts=_recent_ts(2), source_uuid="new",
+        score=0.5,
+    )
+    hits = search_extractions(conn, query="alpha", limit=2, cwd="/proj/cs")
+    assert len(hits) == 2
+    # Every hit has a real composite score, and the list is sorted by it desc.
+    assert all(h.composite_score > 0 for h in hits)
+    assert hits[0].composite_score >= hits[1].composite_score
+    # The recent correction (higher composite) leads.
+    assert hits[0].kind == "correction"
