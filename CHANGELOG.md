@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.6] - 2026-05-30
+
+### Added — end-to-end coverage for the UserPromptSubmit hook (defect 6)
+
+`tests/test_hooks_dispatch.py` drives the real `user-prompt-retrieve.sh`
+subprocess against a synthetic >100KB index.db so the hook takes the populated
+(decide_and_format) path instead of the fresh-install bootstrap branch — the
+path the legacy `test_hooks.sh` [4]/[6] sections never reached (they used a
+0-byte DB that trips `is_fresh_install`). Asserts: populated DB does NOT emit
+the bootstrap banner / log bootstrap="started"; short (<10 char) and `<`-stub
+prompts are skipped with empty stdout. Verified discriminating (a 0-byte DB does
+log the bootstrap branch).
+
 ## [0.13.5] - 2026-05-30
 
 ### Fixed — schema/test/config hygiene (verify-sweep follow-up, defects 5/10/11)

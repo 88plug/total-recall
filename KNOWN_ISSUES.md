@@ -56,6 +56,13 @@ doc↔code drift were all invisible. v0.13.0 added `test_cli_contracts.py` and
   `session-start-signpost.sh`; both run + pass.
 - ✅ #11 `hooks.json` uses `${CLAUDE_PLUGIN_ROOT:-.}` in all 6 command paths.
 
+## Fixed in v0.13.6
+
+- ✅ #6 UserPromptSubmit hook populated-DB path now has real e2e coverage
+  (`tests/test_hooks_dispatch.py`) — drives the hook subprocess against a
+  >100KB synthetic DB so the decide_and_format dispatch path runs, replacing the
+  structurally-broken `test_hooks.sh` [4]/[6] sections (0-byte DB → bootstrap).
+
 ## Open — real, ranked
 
 ### MEDIUM
