@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0] - 2026-05-30
+
+### Fixed — two critical `total-recall tail` crashes + version drift
+
+A full-surface verification sweep (every CLI subcommand, MCP boot, hooks,
+config plumbing) found defects the in-process unit suite never could, because
+nothing exercised the cmd→index call sites or booted surfaces the way the
+CLI/plugin harness does.
+
+- `total-recall tail` crashed immediately: `cmd_tail` called
+  `tail_loop(db_path=, cwd_filter=, ...)` but the helper takes
+  `(conn, interval, projects_root, max_iterations)`. Now opens a connection and
+  passes only accepted kwargs.
+- `total-recall tail --once` crashed: the fallback passed `ingest_all(full=False)`
+  but the kwarg is `force_full`; both branches had it so the `except` never
+  helped. Fixed to `force_full=False`.
+- `.mcp.json`: dropped a bad `TOTAL_RECALL_DB_DIR=${CLAUDE_PLUGIN_DATA:-./data}`
+  default that pointed a dev checkout at a nonexistent `./data` and blocked the
+  server's own `~/.local/share` fallback. `${CLAUDE_PLUGIN_ROOT:-.}` retained.
+- `marketplace-entry.json` version corrected 0.9.0 → current (3-minor drift).
+
+### Added — contract + consistency tests (guard the bug class)
+
+- `tests/test_cli_contracts.py`: signature contract between `cmd_tail` and
+  `index.tail.tail_loop` / `index.ingest.ingest_all`, all-13-subcommands
+  `--help` smoke, and a bounded `tail_loop` run.
+- `tests/test_version_consistency.py`: every version-bearing file
+  (plugin.json, marketplace-entry.json, pyproject.toml, __init__.py) must agree.
+
 ## [0.12.0] - 2026-05-30
 
 ### Added — `total-recall sources verify`

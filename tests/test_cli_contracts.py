@@ -9,6 +9,7 @@ inspection + Click --help), so it runs in the normal unit suite.
 from __future__ import annotations
 
 import inspect
+import re
 
 import pytest
 from click.testing import CliRunner
@@ -90,8 +91,11 @@ def test_cmd_tail_call_site_kwargs_are_valid() -> None:
     import total_recall.cmd_tail as cmd_tail
 
     src = inspect.getsource(cmd_tail)
-    assert "full=False" not in src, "cmd_tail still passes the retired full= kwarg"
+    # Match the retired kwarg as a whole token, not the `force_full=` substring.
     assert "force_full=False" in src, "cmd_tail should pass force_full=False"
+    assert not re.search(r"(?<![\w_])full=", src), (
+        "cmd_tail still passes the retired full= kwarg"
+    )
 
 
 @pytest.mark.skipif(
