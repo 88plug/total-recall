@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-05-31
+
+### Added — vec hybrid recall eval harness (go/no-go for v2.0)
+
+`tests/integration/test_vec_eval.py`: a labeled paraphrase set (15 query/target
+pairs where the query shares MEANING but few exact tokens with its target, plus
+distractors), measuring precision@5 for FTS5-only vs dense hybrid (RRF of FTS5 +
+sqlite-vec/fastembed bge-small). Auto-skips when the [vec] extra is absent so the
+default suite stays green.
+
+MEASURED on this CPU host (first run downloads the ~130MB embedding model):
+
+    FTS5-only  P@5: 0.133
+    Hybrid     P@5: 0.933   (delta +0.800)
+
+Hybrid decisively clears the council's >=+0.05 v2.0 promotion gate — semantic
+retrieval surfaces the right extraction when the query paraphrases the stored
+text, exactly where keyword match fails. This justifies wiring vec into recall
+by default in v2.0 (the council's planned breaking window).
+
+Gate: pytest tests/ exit 0 — 1317 passed, 15 skipped; vec eval 1 passed (8.1s).
+
 ## [1.5.0] - 2026-05-31
 
 ### Improved — near-duplicate dedup + score floor
