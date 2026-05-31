@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] - 2026-05-30
+
+### Added — `total-recall sources verify`
+
+A one-shot round-trip probe of every known CLI source (adapter load +
+is_available() + session discovery count) in a single table. Fills the gap
+between `sources list` (config/registration only) and `sources test <name>`
+(one source): the single command to triage "why isn't source X showing up in
+recall?" across all eight adapters at once.
+
+- `total_recall/cmd_sources.py`: new `verify` subcommand; human table adds a
+  `sessions` column, `--json` emits the full per-source round-trip shape.
+- `tests/test_cmd_sources.py`: verify runs all known sources, JSON shape carries
+  is_available/session_count/registered, empty-registry path still succeeds.
+
 ## [0.11.0] - 2026-05-30
 
 ### Fixed — LLM refinement no longer drops rows on truncated JSON

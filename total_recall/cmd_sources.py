@@ -427,4 +427,72 @@ def sources_test(ctx: click.Context, name: str, max_count: int) -> None:
     click.echo(f"{name}: available — {count} session(s) discovered.")
 
 
+@sources_cmd.command(
+    "verify",
+    help="Round-trip probe EVERY known source (adapter load + availability + "
+    "session count) in one report. Triage when cross-CLI data is missing.",
+)
+@click.option(
+    "--max-count",
+    type=int,
+    default=10000,
+    show_default=True,
+    help="Short-circuit per-source session counting after this many.",
+)
+@click.pass_context
+def sources_verify(ctx: click.Context, max_count: int) -> None:
+    """The all-sources counterpart to ``sources test``.
+
+    ``list`` shows config/registration, ``detect`` shows only sources with
+    data; ``verify`` runs the full discover round-trip for every known source
+    and reports registered / available / session_count together — the single
+    command to answer "why is source X not showing up in recall?".
+    """
+    cfg = _load_config()
+    registry = _load_sources()
+    rows: list[dict[str, Any]] = []
+    for name in KNOWN_SOURCES:
+        src = registry.get(name)
+        available = _is_available(src)
+        count = (
+            _count_sessions(src, limit=max_count)
+            if available
+            else (0 if available is False else None)
+        )
+        rows.append(
+            {
+                "name": name,
+                "enabled": _is_enabled(name, cfg),
+                "registered": src is not None,
+                "is_available": available if available is not None else False,
+                "available_known": available is not None,
+                "session_count": count,
+            }
+        )
+
+    if bool(ctx.obj and ctx.obj.get("json")):
+        click.echo(format_json({"config_path": str(_config_path()), "sources": rows}))
+        return
+
+    click.echo(f"config: {_config_path()}")
+    table_rows = [
+        {
+            "name": r["name"],
+            "enabled": "yes" if r["enabled"] else "no",
+            "registered": "yes" if r["registered"] else "no",
+            "available": (
+                "yes" if r["is_available"] else ("no" if r["available_known"] else "?")
+            ),
+            "sessions": ("?" if r["session_count"] is None else str(r["session_count"])),
+        }
+        for r in rows
+    ]
+    click.echo(
+        format_table(
+            table_rows,
+            headers=["name", "enabled", "registered", "available", "sessions"],
+        )
+    )
+
+
 __all__ = ["sources_cmd"]

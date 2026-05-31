@@ -48,7 +48,7 @@ def test_sources_help_lists_subcommands() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["sources", "--help"])
     assert result.exit_code == 0, result.output
-    for sub in ("list", "detect", "enable", "disable", "test"):
+    for sub in ("list", "detect", "enable", "disable", "test", "verify"):
         assert sub in result.output, f"`{sub}` missing from sources --help"
 
 
@@ -60,7 +60,7 @@ def test_sources_is_in_top_level_help() -> None:
 
 
 @pytest.mark.parametrize(
-    "sub", ["list", "detect", "enable", "disable", "test"]
+    "sub", ["list", "detect", "enable", "disable", "test", "verify"]
 )
 def test_sources_subcommand_help(sub: str) -> None:
     runner = CliRunner()
@@ -160,6 +160,40 @@ def test_sources_detect_none_human(
 # --------------------------------------------------------------------------- #
 # `sources enable` / `sources disable`
 # --------------------------------------------------------------------------- #
+
+
+def test_sources_verify_runs_all_known(isolated_config: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(cli, ["sources", "verify"])
+    assert result.exit_code == 0, result.output
+    for name in cmd_sources.KNOWN_SOURCES:
+        assert name in result.output
+
+
+def test_sources_verify_json_shape(isolated_config: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--json", "sources", "verify"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert {s["name"] for s in data["sources"]} == set(cmd_sources.KNOWN_SOURCES)
+    for s in data["sources"]:
+        assert "is_available" in s
+        assert "session_count" in s
+        assert "registered" in s
+
+
+def test_sources_verify_empty_registry(
+    isolated_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No adapters registered → command still succeeds; counts unknown."""
+    monkeypatch.setattr(cmd_sources, "_load_sources", lambda: {})
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--json", "sources", "verify"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    for s in data["sources"]:
+        assert s["registered"] is False
+        assert s["is_available"] is False
 
 
 def test_sources_disable_then_enable_round_trip(isolated_config: Path) -> None:
