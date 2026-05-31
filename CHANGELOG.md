@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-05-31
+
+### Validated — default ollama qwen3.5:2b refinement on CPU, live-tested
+
+The zero-config local-LLM path (auto provider → ollama → qwen3.5:2b, CPU-only)
+is now exercised by an in-suite live test, not just mocks.
+
+- `tests/test_llm_live_cpu.py` (new): drives the REAL default client against a
+  running ollama daemon. Asserts the default resolves to qwen3.5:2b, a real
+  structured `generate_json` returns valid JSON, `refine_machines` (dict in →
+  dict out) returns a key-subset (never hallucinates a host), and a disabled
+  client fails open. Auto-SKIPS when the daemon / model are absent or
+  `TOTAL_RECALL_LLM_PROVIDER=none`, so the default `pytest` run stays green on
+  any machine. Verified both ways: 5 passed with the daemon up (~12–20s CPU),
+  5 skipped with provider=none.
+- Live eval harness re-confirmed on this CPU-only host (no GPU, 12 cores) with
+  qwen3.5:2b: MACHINES precision/recall/F1 = 1.0; VOCAB define_coverage 0.60,
+  echo_rate 0.143, null_rate 0.125 — matching the v0.10.1 6-model bake-off
+  baseline that selected qwen3.5:2b as the default. `test_llm_eval.py` 5 passed
+  in 332s.
+
+Default model is qwen3.5:2b across every surface (`extractors/llm/client.py`,
+`hooks/lib/common.sh`, `total-recall llm-model`). No behavior change — this
+release adds the live-path test coverage that proves the default works on CPU.
+
 ## [1.1.0] - 2026-05-30
 
 ### Added — doc/code drift linter (tests/test_command_docs.py)
