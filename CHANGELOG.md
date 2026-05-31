@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.0] - 2026-05-30
+
+### Fixed — machine inventory no longer mistakes cwd slugs for hostnames (defect 4)
+
+`get_machine_inventory` returned ~61k garbage rows: the ontology hostname regex
+accepted any kebab-case token, so project directory slugs like
+`a-conversation-with-daniel-kahneman-about-noise` and
+`claude-code-session-logs-data-mining` flooded the `machines` table. A new
+`_is_cwd_slug` guard in `_extract_machines_from_text` skips tokens that are long
+(>30 chars), many-segmented (>=5 hyphen parts), or contain plain-English /
+path-prose words — while still keeping terse real hosts (`relay-eu-west`,
+`node-us-east-3`, `racknerd-aa11`, `mail.acme.example`). Regression test:
+`tests/test_ontology_hostname.py` (8 real hosts kept, 6 slugs flagged,
+mixed-text extraction yields only the host).
+
+**Note:** applies to future ingest only. Run `total-recall rebuild` (or
+`total-recall index --full`) to purge the garbage rows from an existing index.
+
 ## [0.13.6] - 2026-05-30
 
 ### Added — end-to-end coverage for the UserPromptSubmit hook (defect 6)
