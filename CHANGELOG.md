@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.1] - 2026-05-30
+
+### Fixed — partial-schema CLI crashes + doc/flag drift (verify-sweep follow-up)
+
+- HIGH: `stats`, `dump`, `inspect`, `metrics summary`, `metrics sessions` exited 2
+  with an internal `no such table: messages` error when the index existed but had
+  only the `adaptive`-created `reinjection_outcomes` table. `__main__.main()` now
+  catches `sqlite3.OperationalError: no such table` centrally and emits a clean
+  "index has not been built; run `index --full`" message with exit 1.
+  Regression test: `tests/test_partial_schema.py` (4 commands).
+- Slash commands `recall-status` / `recall-inspect` put the global `--json` flag
+  after the subcommand (`No such option: --json`) — moved before it.
+- `skills/llm-setup/SKILL.md` dead link `docs/install/llm-refinement.md` →
+  `docs/llm-refinement.md`; stale `gemma4:e2b` default refs → `qwen3.5:2b`
+  (SKILL.md + pyproject `[llm]` comment).
+- Removed leftover executable `hooks/session-start-signpost-v1.sh.bak`.
+
+Added `KNOWN_ISSUES.md` tracking the remaining verify-sweep defects.
+
 ## [0.13.0] - 2026-05-30
 
 ### Fixed — two critical `total-recall tail` crashes + version drift

@@ -6,7 +6,7 @@ description: One-time setup for total-recall's optional local-LLM refinement lay
 # total-recall LLM setup
 
 Runs the operator-facing setup script that installs ollama and pulls the configured
-model (default `gemma4:e2b`). After it succeeds the refinement layer is active and
+model (default `qwen3.5:2b`). After it succeeds the refinement layer is active and
 the SessionStart hook stops emitting the "not installed" notice.
 
 Steps:
@@ -18,4 +18,4 @@ Steps:
    and recommend running `/total-recall:recall-rebuild` so the next rebuild
    picks up the LLM refinement passes.
 3. If it exits non-zero, surface the error verbatim and point at the relevant
-   line in `docs/install/llm-refinement.md`.
+   line in `docs/llm-refinement.md`.

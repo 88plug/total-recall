@@ -101,6 +101,22 @@ def main(argv: list[str] | None = None) -> int:
         return exc.exit_code
     except SystemExit as exc:  # click's --help raises SystemExit(0)
         return int(exc.code) if isinstance(exc.code, int) else 0
+    except sqlite3.OperationalError as exc:
+        # A "no such table" here means the index file exists but its core
+        # schema was never applied — e.g. a DB created only by `adaptive`
+        # (which writes just reinjection_outcomes), then read by a query
+        # command that opens read-only (so apply_schema is skipped). Treat
+        # as "index not built" rather than dumping a raw internal error.
+        msg = str(exc)
+        if "no such table" in msg:
+            click.echo(
+                "total-recall: the index has not been built yet "
+                f"({msg}). Run `total-recall index --full` first.",
+                err=True,
+            )
+            return 1
+        click.echo(f"total-recall: database error: {msg}", err=True)
+        return 2
     except Exception as exc:  # pragma: no cover - last-resort guard
         click.echo(f"total-recall: internal error: {exc}", err=True)
         return 2

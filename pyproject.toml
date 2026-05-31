@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "total-recall"
-version = "0.13.0"
+version = "0.13.1"
 description = "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 8 supported CLI clients; surfaces operator identity / decisions / bans / corrections via MCP."
 readme = "README.md"
 license = "LicenseRef-FSL-1.1-ALv2"
@@ -60,7 +60,7 @@ vec = [
 llm = [
     # Local LLM refinement (ollama). Ollama itself is a separate binary
     # the operator installs (https://ollama.com); pulling the model
-    # (default: gemma4:e2b) is also up to the operator. This extra is
+    # (default: qwen3.5:2b) is also up to the operator. This extra is
     # only the optional Python client conveniences.
     "ollama>=0.4.0",
 ]

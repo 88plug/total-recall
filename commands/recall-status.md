@@ -2,7 +2,7 @@
 description: Show total-recall index health — DB size, session count, last ingest, top topics for this cwd.
 ---
 
-Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/recall-cli.sh" stats --json` via Bash and present:
+Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/recall-cli.sh" --json stats` via Bash and present:
 - Total messages indexed, extractions per kind.
 - Last ingest timestamp + age.
 - Top 5 cwds by message volume.
