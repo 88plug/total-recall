@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-05-30
+
+### Added — doc/code drift linter (tests/test_command_docs.py)
+
+A static test over every `commands/*.md` and `skills/*/SKILL.md` that fails CI on
+the drift classes that caused repeated bugs this cycle:
+
+1. Every `${CLAUDE_PLUGIN_ROOT}/<path>` and `docs/<file>.md` reference must point
+   at a file that exists (catches dead links like the old
+   `docs/install/llm-refinement.md`).
+2. Every `recall-cli.sh <subcmd>` / `total-recall <subcmd>` must name a real CLI
+   subcommand — derived live from the Click group, so new/renamed subcommands are
+   covered automatically.
+3. The group-level `--json` flag must precede the subcommand (placing it after
+   raises "No such option: --json" — the exact recall-status/recall-inspect bug).
+
+54 parametrized checks, all green; verified discriminating (catches a planted bad
+subcommand and a `stats --json` ordering, passes `--json stats`).
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 ## [1.0.0] - 2026-05-30
 
 ### Stable release
