@@ -7,6 +7,7 @@ Click group, registers commands, and owns global flags (``--db``, ``--verbose``,
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 
 import click

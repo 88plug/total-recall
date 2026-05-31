@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.2] - 2026-05-30
+
+### Fixed — v0.13.1 shipped with a NameError in the partial-schema handler
+
+The v0.13.1 partial-schema fix referenced `sqlite3.OperationalError` in
+`total_recall/__main__.py` without importing `sqlite3`. The handler raised
+`NameError` instead of emitting the clean message (the command still exited
+non-zero, but by accident, with a confusing traceback). Added `import sqlite3`.
+`tests/test_partial_schema.py` now passes (was failing in 0.13.1 — that release
+should not have been tagged).
+
 ## [0.13.1] - 2026-05-30
 
 ### Fixed — partial-schema CLI crashes + doc/flag drift (verify-sweep follow-up)
