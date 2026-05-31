@@ -208,3 +208,73 @@ CREATE TABLE IF NOT EXISTS schema_meta (
     value TEXT NOT NULL
 );
 INSERT OR IGNORE INTO schema_meta(key, value) VALUES ('schema_version', '4');
+
+-- Operator-aware extractor tables (v0.13.5).
+-- These are also created on first write by their owning modules' ensure_schema
+-- (index/decisions.py, index/bans.py, index/goals.py). Mirroring the DDL here
+-- means a fresh or incremental-only index has them empty from the start, so the
+-- MCP read tools (list_standing_decisions, check_banned, list_goals, …) return
+-- [] instead of a "table not present; reindex" notice. DDL is verbatim from the
+-- owning modules; IF NOT EXISTS keeps it a no-op on any populated DB.
+
+CREATE TABLE IF NOT EXISTS standing_decisions (
+  id INTEGER PRIMARY KEY,
+  topic TEXT NOT NULL,
+  chose TEXT NOT NULL,
+  over TEXT,
+  rationale TEXT,
+  scope TEXT NOT NULL,
+  first_asserted_ts INTEGER,
+  last_reasserted_ts INTEGER,
+  assertion_count INTEGER DEFAULT 1,
+  is_reversed INTEGER DEFAULT 0,
+  reversed_at_ts INTEGER,
+  reversed_to TEXT,
+  money_burn_usd REAL DEFAULT 0,
+  source_session TEXT,
+  UNIQUE(topic, chose, scope)
+);
+CREATE INDEX IF NOT EXISTS idx_decisions_topic ON standing_decisions(topic);
+CREATE INDEX IF NOT EXISTS idx_decisions_count
+    ON standing_decisions(assertion_count DESC);
+
+CREATE TABLE IF NOT EXISTS bans (
+    id INTEGER PRIMARY KEY,
+    banned_thing TEXT NOT NULL,
+    category TEXT,
+    ban_strength TEXT NOT NULL,
+    ban_text TEXT NOT NULL,
+    context_clause TEXT,
+    first_banned_ts INTEGER,
+    last_reasserted_ts INTEGER,
+    reassertion_count INTEGER DEFAULT 1,
+    source_session TEXT,
+    UNIQUE(banned_thing, category, context_clause)
+);
+CREATE INDEX IF NOT EXISTS idx_bans_thing ON bans(banned_thing);
+
+CREATE TABLE IF NOT EXISTS failed_attempts (
+    id INTEGER PRIMARY KEY,
+    attempt TEXT NOT NULL,
+    replaced_by TEXT,
+    reason TEXT,
+    cwd TEXT,
+    attempted_ts INTEGER,
+    abandoned_ts INTEGER,
+    UNIQUE(attempt, cwd)
+);
+CREATE INDEX IF NOT EXISTS idx_failed_attempts_attempt ON failed_attempts(attempt);
+
+CREATE TABLE IF NOT EXISTS goal_stack (
+  id INTEGER PRIMARY KEY,
+  project TEXT NOT NULL,
+  goal_text TEXT NOT NULL,
+  declared_ts INTEGER NOT NULL,
+  last_progress_ts INTEGER,
+  status TEXT NOT NULL DEFAULT 'active',
+  related_projects TEXT,
+  source_session TEXT,
+  UNIQUE(project, goal_text)
+);
+CREATE INDEX IF NOT EXISTS idx_goals_project_status ON goal_stack(project, status);
+CREATE INDEX IF NOT EXISTS idx_goals_last_progress ON goal_stack(last_progress_ts DESC);

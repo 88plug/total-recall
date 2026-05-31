@@ -47,6 +47,17 @@ doc↔code drift were all invisible. v0.13.0 added `test_cli_contracts.py` and
 
 ## Open — real, ranked
 
+## Fixed in v0.13.5
+
+- ✅ #5 incremental-index tables (`standing_decisions`/`bans`/`failed_attempts`/
+  `goal_stack`) created empty by `apply_schema` → MCP tools return `[]` not a
+  "reindex" notice.
+- ✅ #10 retargeted 2 perma-skipped `test_operator_context` tests to the real
+  `session-start-signpost.sh`; both run + pass.
+- ✅ #11 `hooks.json` uses `${CLAUDE_PLUGIN_ROOT:-.}` in all 6 command paths.
+
+## Open — real, ranked
+
 ### MEDIUM
 
 4. **`get_machine_inventory` returns garbage.** ~61k rows of tokenized cwd path

@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.5] - 2026-05-30
+
+### Fixed — schema/test/config hygiene (verify-sweep follow-up, defects 5/10/11)
+
+- #5: `standing_decisions`, `bans`, `failed_attempts`, `goal_stack` are now
+  created (empty) by `apply_schema` via `index/schema.sql` — DDL mirrored
+  verbatim from the owning modules (decisions/bans/goals). A fresh or
+  incremental-only index now has them present, so the MCP read tools
+  (`list_standing_decisions`, `check_banned`, `list_goals`, …) return `[]`
+  instead of a "table not present; reindex" notice. IF NOT EXISTS keeps it a
+  no-op on populated DBs.
+- #10: retargeted the 2 permanently-skipped `test_operator_context` tests from
+  the nonexistent `session-start-signpost-v2.sh` to the real
+  `session-start-signpost.sh`. Both now run and pass (were silently skipping).
+- #11: `hooks/hooks.json` now uses `${CLAUDE_PLUGIN_ROOT:-.}` in all 6 command
+  paths, matching the `.mcp.json` defensive-default pattern.
+
 ## [0.13.4] - 2026-05-30
 
 ### Fixed — bans read-only fix from v0.13.3 never actually applied

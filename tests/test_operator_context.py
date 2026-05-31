@@ -459,7 +459,7 @@ def test_tool_is_registered(tmp_db_dir):
 
 def test_signpost_v2_no_db_silent(tmp_path, monkeypatch):
     """With no DB, the v2 signpost must exit 0 and produce empty stdout."""
-    script = REPO_ROOT / "hooks" / "session-start-signpost-v2.sh"
+    script = REPO_ROOT / "hooks" / "session-start-signpost.sh"
     if not script.exists() or shutil.which("bash") is None:
         pytest.skip("script or bash missing")
 
@@ -500,7 +500,7 @@ def test_signpost_v2_no_db_silent(tmp_path, monkeypatch):
 
 def test_signpost_v2_with_populated_db(tmp_path, monkeypatch):
     """With a populated DB (operator profile only), v2 emits an envelope."""
-    script = REPO_ROOT / "hooks" / "session-start-signpost-v2.sh"
+    script = REPO_ROOT / "hooks" / "session-start-signpost.sh"
     if not script.exists() or shutil.which("bash") is None:
         pytest.skip("script or bash missing")
 
