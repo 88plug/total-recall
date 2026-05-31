@@ -261,7 +261,11 @@ def check_banned(conn: sqlite3.Connection, thing: str) -> dict | None:
     "Strongest" precedence: ``absolute > context > preference``. Within the
     same strength tier the most recently reasserted row wins.
     """
-    ensure_schema(conn)
+    # Read path: never write. The MCP server opens the index mode=ro, so a
+    # CREATE TABLE (ensure_schema) raises "attempt to write a readonly
+    # database". An absent table means no bans recorded → not banned.
+    if not _table_exists(conn, "bans"):
+        return None
     norm = _normalize_thing(thing)
     if not norm:
         return None
@@ -311,7 +315,9 @@ def list_failed_attempts(
     ``topic`` is matched as a case-insensitive substring on either
     ``attempt`` or ``reason`` (operators often phrase the same idea two ways).
     """
-    ensure_schema(conn)
+    # Read path: never write (see check_banned). Absent table → no attempts.
+    if not _table_exists(conn, "failed_attempts"):
+        return []
     if topic:
         pat = f"%{topic.lower()}%"
         rows = conn.execute(

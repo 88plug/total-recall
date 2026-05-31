@@ -79,7 +79,7 @@ def test_list_failed_attempts_readonly(tmp_path: Path) -> None:
 
     ro = _ro(db)
     try:
-        rows = list_failed_attempts(ro, cwd="/proj/x")
+        rows = list_failed_attempts(ro, topic="mutex")
         assert len(rows) == 1
         assert rows[0]["attempt"] == "use a global mutex"
         # No-table case on a fresh core DB → empty list, no raise.

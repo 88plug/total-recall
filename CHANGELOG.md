@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.4] - 2026-05-30
+
+### Fixed — bans read-only fix from v0.13.3 never actually applied
+
+v0.13.3's changelog claimed `check_banned` / `list_failed_attempts` were fixed,
+but the edits to those two functions silently failed to apply — only the unused
+`_table_exists` helper landed, so both functions still called `ensure_schema`
+(CREATE TABLE) and still crashed on the read-only MCP connection. This release
+applies the actual fix: both read paths now guard with `_table_exists` and never
+write. The accompanying regression test (`tests/test_bans_readonly.py`) now
+genuinely exercises a `mode=ro` connection and passes (it was also failing,
+undetected, in 0.13.3).
+
 ## [0.13.3] - 2026-05-30
 
 ### Fixed — bans read paths crash on the read-only MCP connection
