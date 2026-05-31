@@ -1268,3 +1268,95 @@ def test_ingest_all_jobs_parallel_is_idempotent(tmp_path: Path) -> None:
 
 # Re-exported for ad-hoc debugging from `python -m pytest -k ...`.
 _ = (index_query, index_db, os)
+
+
+# ---------------------------------------------------------------------------
+# Composite re-rank: recency + kind priority over raw BM25 (v1.4.x)
+# ---------------------------------------------------------------------------
+
+
+def _recent_ts(days_ago: float) -> int:
+    """A unix ts ``days_ago`` days before now (recency-sensitive tests)."""
+    return int(datetime.now(timezone.utc).timestamp() - days_ago * 86400)
+
+
+def test_composite_score_recency_beats_stale_at_equal_relevance() -> None:
+    """Unit: at equal relevance+kind, a recent row scores above a stale one."""
+    from index.query import _composite_score
+
+    now = 1_000_000_000.0
+    recent = _composite_score(0.5, now - 3 * 86400, "domain_fact", now)
+    stale = _composite_score(0.5, now - 220 * 86400, "domain_fact", now)
+    assert recent > stale
+
+
+def test_composite_score_kind_priority_lifts_correction() -> None:
+    """Unit: at equal relevance+age, correction/ban outrank domain_fact."""
+    from index.query import _composite_score
+
+    now = 1_000_000_000.0
+    ts = now - 10 * 86400
+    correction = _composite_score(0.5, ts, "correction", now)
+    ban = _composite_score(0.5, ts, "ban", now)
+    fact = _composite_score(0.5, ts, "domain_fact", now)
+    progress = _composite_score(0.5, ts, "progress", now)
+    assert correction > fact
+    assert ban > progress
+    assert correction == ban  # correction and ban share the top tier
+
+
+def test_composite_score_unlisted_kind_uses_default() -> None:
+    """Unit: an unknown kind uses the 0.6 default (== domain_fact)."""
+    from index.query import _composite_score
+
+    now = 1_000_000_000.0
+    ts = now - 5 * 86400
+    assert _composite_score(0.5, ts, "some_new_kind", now) == _composite_score(
+        0.5, ts, "domain_fact", now
+    )
+
+
+def test_rerank_recent_correction_beats_keyworddense_stale_fact(
+    conn: sqlite3.Connection,
+) -> None:
+    """Integration: a recent correction outranks a keyword-DENSER but stale fact.
+
+    The stale domain_fact repeats the query term (higher raw BM25); the recent
+    correction mentions it once. Only the composite re-rank can put the
+    correction first — raw-BM25 order would not. Fails if re-rank is not wired.
+    """
+    _insert_extraction(
+        conn, kind="domain_fact",
+        content="psycopg2 psycopg2 psycopg2 psycopg2 old postgres driver",
+        session_id="s1", cwd="/proj/rr", ts=_recent_ts(220), source_uuid="old",
+        score=0.5,
+    )
+    _insert_extraction(
+        conn, kind="correction", content="psycopg2 is banned, use asyncpg",
+        session_id="s2", cwd="/proj/rr", ts=_recent_ts(2), source_uuid="new",
+        score=0.5,
+    )
+    hits = search_extractions(conn, query="psycopg2", limit=1, cwd="/proj/rr")
+    assert len(hits) == 1
+    assert hits[0].kind == "correction"
+
+
+def test_rerank_over_fetch_surfaces_correction_past_many_facts(
+    conn: sqlite3.Connection,
+) -> None:
+    """Over-fetch: a recent correction survives past several keyword-denser facts."""
+    for i in range(6):
+        _insert_extraction(
+            conn, kind="domain_fact",
+            content=f"redis redis redis cache note {i} redis tuning",
+            session_id="s1", cwd="/proj/of", ts=_recent_ts(150 + i),
+            source_uuid=f"f{i}", score=0.5,
+        )
+    _insert_extraction(
+        conn, kind="correction", content="redis must use TLS now",
+        session_id="s2", cwd="/proj/of", ts=_recent_ts(2), source_uuid="corr",
+        score=0.5,
+    )
+    hits = search_extractions(conn, query="redis", limit=1, cwd="/proj/of")
+    assert len(hits) == 1
+    assert hits[0].kind == "correction"

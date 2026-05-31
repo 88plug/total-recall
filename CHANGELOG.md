@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2026-05-31
+
+### Fixed — v1.4.0 composite re-rank was inert (helpers added but never wired)
+
+v1.4.0 added `_composite_score` / `_recency_factor` / `_OVERFETCH` but the edit
+that wired them into `search_extractions` did not land, so the function still
+truncated by raw BM25 `LIMIT` and the re-rank did nothing. v1.4.0 also shipped
+with no re-rank tests (the changelog's "3 tests / 1320 passed" referred to tests
+that were never committed — corrected here).
+
+This release actually wires it:
+- `search_extractions` over-fetches `max(limit*5, 50)` BM25 candidates, then
+  composite-sorts (0.5*relevance + 0.3*recency + 0.2*kind_priority) and slices
+  to `limit`. The floor of 50 ensures a small `limit` (e.g. the hook's 1-3) still
+  draws a real candidate pool so a recent one-mention correction is not excluded
+  by the SQL LIMIT before scoring.
+- 5 tests in tests/test_index.py: 3 unit (recency beats stale; correction/ban
+  kind-lift; unlisted kind = default) + 2 integration (recent correction beats a
+  keyword-denser stale fact; correction surfaces past 6 denser facts at limit=1).
+  Verified discriminating — the integration tests fail when the sort is disabled.
+
+Gate: pytest tests/ exit 0 — 1313 passed, 15 skipped.
+
 ## [1.4.0] - 2026-05-31
 
 ### Improved — composite re-rank: recency + kind priority over raw BM25

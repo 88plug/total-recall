@@ -183,10 +183,13 @@ _KIND_PRIORITY: dict[str, float] = {
 }
 _KIND_PRIORITY_DEFAULT = 0.6
 
-# How many BM25 candidates to pull per requested result before composite
-# re-ranking. 5x gives the recency/kind re-rank room to promote a recent
-# correction that BM25 alone would have ranked just outside the window.
+# How many BM25 candidates to pull before composite re-ranking. We over-fetch
+# limit*_OVERFETCH but never fewer than _OVERFETCH_FLOOR, so even a small
+# ``limit`` (e.g. the hook's limit=1/3) still draws a real candidate pool —
+# otherwise a high-value-but-low-BM25 row (a recent one-mention correction)
+# can be excluded by the SQL LIMIT before the composite re-rank ever sees it.
 _OVERFETCH = 5
+_OVERFETCH_FLOOR = 50
 
 # Recency half-life for the composite re-rank, matching index.decay.HALF_LIFE_DAYS
 # (the confidence-decay policy). 1.0 at age 0, 0.5 at 90 days, 0.25 at 180 days.
@@ -282,8 +285,12 @@ def search_extractions(
         if where:
             sql += " AND " + " AND ".join(where)
             sql_params.extend(params)
+        # Over-fetch the BM25 shortlist (v1.4.0): the raw-BM25 SQL LIMIT used to
+        # truncate high-value-but-moderate-keyword rows (a recent correction)
+        # before Python could weigh recency/kind. Pull limit*_OVERFETCH, then
+        # composite-re-rank + slice below.
         sql += " ORDER BY rank LIMIT ?"
-        sql_params.append(limit)
+        sql_params.append(max(limit * _OVERFETCH, _OVERFETCH_FLOOR))
     else:
         sql = "SELECT e.id, e.kind, e.content, e.session_id, e.cwd, e.ts, " \
               "e.score, e.context_json, NULL AS rank FROM extractions e"
@@ -307,6 +314,17 @@ def search_extractions(
                 extraction_id=int(row["id"]) if row["id"] is not None else 0,
             )
         )
+
+    # Composite re-rank only the text-query path (the no-query path is already
+    # ordered ts DESC, score DESC by SQL and was not over-fetched). Sort by the
+    # blended relevance+recency+kind score, then slice to the requested limit.
+    if match and len(hits) > 1:
+        now = datetime.now(timezone.utc).timestamp()
+        hits.sort(
+            key=lambda h: _composite_score(h.score, h.ts, h.kind, now),
+            reverse=True,
+        )
+        hits = hits[:limit]
     return hits
 
 
