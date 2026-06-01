@@ -125,6 +125,17 @@ def _register_custom_model(model: str) -> None:
             raise
 
 
+# Models that benefit from an explicit query instruction prefix. bge-class
+# models gain ~+2.3pp R@10 from this; gte-modernbert / granite / nomic are
+# deliberately absent so they get NO prefix (a no-op). Only applied when a
+# caller opts in via Embedder.embed(..., as_query=True).
+_QUERY_PREFIX: dict[str, str] = {
+    "BAAI/bge-small-en-v1.5": "Represent this sentence for searching relevant passages: ",
+    "BAAI/bge-base-en-v1.5": "Represent this sentence for searching relevant passages: ",
+    "BAAI/bge-large-en-v1.5": "Represent this sentence for searching relevant passages: ",
+}
+
+
 class Embedder:
     """Lazy fastembed wrapper. Constructing this is cheap; the model is loaded
     on first `.embed()` call so test imports and `--help` are fast.
@@ -139,6 +150,7 @@ class Embedder:
         self.cache_dir = cache_dir
         self._impl = None  # fastembed.TextEmbedding, lazy
         self._dim: int | None = _KNOWN_DIMS.get(model)
+        self._query_prefix: str = _QUERY_PREFIX.get(model, "")
 
     # ------------------------------------------------------------------ impl
 
@@ -158,10 +170,18 @@ class Embedder:
             kwargs["cache_dir"] = str(self.cache_dir)
         self._impl = TextEmbedding(**kwargs)  # type: ignore[arg-type]
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of texts. Returns a list of float vectors in input order."""
+    def embed(self, texts: list[str], as_query: bool = False) -> list[list[float]]:
+        """Embed a batch of texts. Returns a list of float vectors in input order.
+
+        When ``as_query=True`` and this model has an entry in ``_QUERY_PREFIX``
+        (bge-class only), each text is prefixed with the model's query
+        instruction. Defaults to ``False`` (passage embedding) so all existing
+        callers are byte-identical.
+        """
         if not texts:
             return []
+        if as_query and self._query_prefix:
+            texts = [self._query_prefix + t for t in texts]
         self._load()
         assert self._impl is not None
         # fastembed yields numpy arrays; convert to plain python lists so the

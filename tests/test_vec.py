@@ -388,6 +388,65 @@ class TestCustomModelPorts:
 
 
 # ----------------------------------------------------------------------------
+# Opt-in, model-aware query prefix (bge-class only) — network-free
+# ----------------------------------------------------------------------------
+
+
+class TestQueryPrefix:
+    _BGE = "Represent this sentence for searching relevant passages: "
+
+    def test_prefix_resolved_per_model(self) -> None:
+        from vec.embed import Embedder
+
+        assert Embedder(model="BAAI/bge-small-en-v1.5")._query_prefix == self._BGE
+        for name in (
+            "Alibaba-NLP/gte-modernbert-base",
+            "onnx-community/granite-embedding-small-english-r2",
+            "nomic-ai/nomic-embed-text-v1.5",
+        ):
+            assert Embedder(model=name)._query_prefix == ""
+
+    def _stub(self, monkeypatch, model):
+        from vec.embed import Embedder
+
+        emb = Embedder(model=model)
+        seen: list[list[str]] = []
+
+        class _Impl:
+            def embed(self, texts):
+                seen.append(list(texts))
+                return [[0.0] for _ in texts]
+
+        monkeypatch.setattr(emb, "_load", lambda: None)
+        emb._impl = _Impl()
+        return emb, seen
+
+    def test_bge_as_query_prepends(self, monkeypatch) -> None:
+        for mod in list(sys.modules):
+            if mod == "fastembed" or mod.startswith("fastembed."):
+                del sys.modules[mod]
+        emb, seen = self._stub(monkeypatch, "BAAI/bge-small-en-v1.5")
+        emb.embed(["nginx", "postgres"], as_query=True)
+        assert seen[-1] == [self._BGE + "nginx", self._BGE + "postgres"]
+        assert "fastembed" not in sys.modules
+
+    def test_bge_default_is_verbatim(self, monkeypatch) -> None:
+        emb, seen = self._stub(monkeypatch, "BAAI/bge-small-en-v1.5")
+        emb.embed(["nginx", "postgres"])  # as_query defaults False
+        assert seen[-1] == ["nginx", "postgres"]
+
+    def test_gte_as_query_is_verbatim(self, monkeypatch) -> None:
+        emb, seen = self._stub(monkeypatch, "Alibaba-NLP/gte-modernbert-base")
+        emb.embed(["nginx"], as_query=True)  # empty prefix -> no-op
+        assert seen[-1] == ["nginx"]
+
+    def test_empty_input_as_query(self) -> None:
+        from vec.embed import Embedder
+
+        assert Embedder(model="BAAI/bge-small-en-v1.5").embed([], as_query=True) == []
+
+
+# ----------------------------------------------------------------------------
 # Hybrid search degraded-mode test (no embedder / no sqlite_vec)
 # ----------------------------------------------------------------------------
 
