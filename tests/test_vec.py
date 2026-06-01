@@ -300,6 +300,94 @@ class TestGteCustomModels:
 
 
 # ----------------------------------------------------------------------------
+# Custom-model port regression net (clamp edge cases + offline registration)
+# ----------------------------------------------------------------------------
+
+
+class TestCustomModelPorts:
+    def test_clamp_rewrites_huge_model_max_length(self, tmp_path: Path) -> None:
+        import json
+        from vec.embed import _clamp_tokenizer_max_length
+
+        tc = tmp_path / "tokenizer_config.json"
+        tc.write_text(json.dumps({
+            "model_max_length": 1000000000000000019884624838656,
+            "max_length": 2000000000000,
+            "model_type": "modernbert",
+        }))
+        _clamp_tokenizer_max_length(tmp_path)
+        d = json.loads(tc.read_text())
+        assert d["model_max_length"] == 8192
+        assert d["max_length"] == 8192
+        assert d["model_type"] == "modernbert"
+
+    def test_clamp_noop_when_already_sane(self, tmp_path: Path) -> None:
+        import json
+        from vec.embed import _clamp_tokenizer_max_length
+
+        tc = tmp_path / "tokenizer_config.json"
+        tc.write_text(json.dumps({"model_max_length": 8192}))
+        _clamp_tokenizer_max_length(tmp_path)
+        assert json.loads(tc.read_text())["model_max_length"] == 8192
+
+    def test_clamp_missing_file_is_silent(self, tmp_path: Path) -> None:
+        from vec.embed import _clamp_tokenizer_max_length
+
+        assert _clamp_tokenizer_max_length(tmp_path) is None
+
+    def test_clamp_malformed_json_is_silent(self, tmp_path: Path) -> None:
+        from vec.embed import _clamp_tokenizer_max_length
+
+        (tmp_path / "tokenizer_config.json").write_text("{ not json")
+        # Must not raise.
+        assert _clamp_tokenizer_max_length(tmp_path) is None
+
+    def test_custom_models_have_known_dims(self) -> None:
+        from vec.embed import _KNOWN_DIMS, _CUSTOM_MODELS
+
+        assert _KNOWN_DIMS["Alibaba-NLP/gte-modernbert-base"] == 768
+        assert _KNOWN_DIMS["onnx-community/granite-embedding-small-english-r2"] == 384
+        assert set(_CUSTOM_MODELS) <= set(_KNOWN_DIMS)
+        for k in _CUSTOM_MODELS:
+            assert _CUSTOM_MODELS[k]["dim"] == _KNOWN_DIMS[k]
+
+    def test_known_dim_for_custom_models_without_loading(self) -> None:
+        for mod in list(sys.modules):
+            if mod == "fastembed" or mod.startswith("fastembed."):
+                del sys.modules[mod]
+        from vec.embed import Embedder
+
+        for name, expected in (
+            ("Alibaba-NLP/gte-modernbert-base", 768),
+            ("onnx-community/granite-embedding-small-english-r2", 384),
+        ):
+            emb = Embedder(model=name)
+            assert emb.dim() == expected
+            assert emb._impl is None
+        assert "fastembed" not in sys.modules
+
+    @pytest.mark.skipif(not HAS_FASTEMBED, reason="fastembed required")
+    def test_register_custom_model_offline_and_idempotent(self) -> None:
+        from vec.embed import _register_custom_model
+
+        _register_custom_model("Alibaba-NLP/gte-modernbert-base")
+        _register_custom_model("Alibaba-NLP/gte-modernbert-base")  # 'already' swallowed
+        # Unknown model is a no-op (spec is None -> early return).
+        assert _register_custom_model("not-a-custom-model") is None
+
+    @pytest.mark.skipif(not HAS_FASTEMBED, reason="fastembed required")
+    def test_install_tokenizer_clamp_idempotent(self) -> None:
+        from vec.embed import _install_tokenizer_clamp
+        from fastembed.text import onnx_text_model as otm
+
+        _install_tokenizer_clamp()
+        assert getattr(otm, "_tr_maxlen_clamp", False) is True
+        wrapped = otm.load_tokenizer
+        _install_tokenizer_clamp()  # guard must prevent a second wrap
+        assert otm.load_tokenizer is wrapped
+
+
+# ----------------------------------------------------------------------------
 # Hybrid search degraded-mode test (no embedder / no sqlite_vec)
 # ----------------------------------------------------------------------------
 
