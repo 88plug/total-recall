@@ -14,6 +14,7 @@ from pathlib import Path
 
 import click
 
+from .cmd_rebuild import _backfill_vectors
 from .util import resolve_db_path
 
 
@@ -126,6 +127,18 @@ def index_cmd(
         except OSError:
             pass
     elapsed = time.monotonic() - started
+
+    # Opportunistically backfill dense vectors for newly-ingested extractions.
+    # Reuses the cold-path helper: it's gated by TOTAL_RECALL_VEC, no-ops when
+    # the [vec] extra is absent, is never fatal, and backfill_all only embeds
+    # extractions missing from chunk_embeddings (incremental). Safe here because
+    # the Stop/PostCompact tick runs this CLI fully detached (setsid+nohup), so
+    # embedding never blocks the live session.
+    try:
+        if not dry_run:
+            _backfill_vectors(str(db_path), verbose=verbose)
+    except Exception:  # noqa: BLE001 - never let vec work fail an ingest tick
+        pass
 
     files = _result_get(result, "files", 0)
     messages = _result_get(result, "messages", 0)

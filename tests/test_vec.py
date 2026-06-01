@@ -447,6 +447,146 @@ class TestQueryPrefix:
 
 
 # ----------------------------------------------------------------------------
+# Incremental vec backfill on the index tick (cmd_index -> _backfill_vectors)
+# ----------------------------------------------------------------------------
+
+
+class _FakeEmbedder:
+    """Deterministic embedder: each text -> a small fixed-dim vector. No model."""
+
+    model = "fake"
+
+    def __init__(self, *a, **k) -> None:
+        pass
+
+    def dim(self) -> int:
+        return 8
+
+    def embed(self, texts, as_query: bool = False):
+        # Vary the first component by text length so vectors aren't identical.
+        return [[float(len(t) % 7)] + [0.1] * 7 for t in texts]
+
+
+class TestIncrementalVecBackfill:
+    @pytest.mark.skipif(
+        not HAS_SQLITE_VEC, reason="sqlite_vec required for vec schema"
+    )
+    def test_backfill_only_touches_new_extractions(self, tmp_path: Path) -> None:
+        from vec.store import apply_vec_schema, backfill_all
+
+        db_path = tmp_path / "index.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(
+            """
+            CREATE TABLE extractions(
+                id INTEGER PRIMARY KEY,
+                content TEXT, cwd TEXT, ts TEXT, kind TEXT
+            );
+            CREATE VIRTUAL TABLE extractions_fts USING fts5(content);
+            """
+        )
+        rows = [
+            (1, "nginx rate limiting config", "/a", "2025-01-01", "decision"),
+            (2, "chocolate cake recipe details", "/b", "2025-01-02", "note"),
+        ]
+        for r in rows:
+            conn.execute(
+                "INSERT INTO extractions(id, content, cwd, ts, kind) VALUES (?,?,?,?,?)", r
+            )
+            conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (?,?)", (r[0], r[1]))
+        conn.commit()
+
+        emb = _FakeEmbedder()
+        apply_vec_schema(conn, dim=emb.dim())
+        first = backfill_all(conn, embedder=emb)
+        assert first.extractions_embedded == 2
+        conn.commit()
+
+        # New extraction arrives (what _commit_parsed does on an incremental tick).
+        conn.execute(
+            "INSERT INTO extractions(id, content, cwd, ts, kind) VALUES (?,?,?,?,?)",
+            (3, "postgres row level security", "/c", "2025-01-03", "decision"),
+        )
+        conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (?,?)", (3, "postgres row level security"))
+        conn.commit()
+
+        second = backfill_all(conn, embedder=_FakeEmbedder())
+        # Incremental WHERE => only the unembedded row is seen and embedded.
+        assert second.extractions_seen == 1
+        assert second.extractions_embedded == 1
+        n = conn.execute(
+            "SELECT COUNT(*) FROM chunk_embeddings WHERE extraction_id = 3"
+        ).fetchone()[0]
+        assert n >= 1
+        conn.close()
+
+    def test_index_cmd_calls_backfill_when_enabled(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import types as _types
+        from unittest.mock import Mock
+
+        # Stub the WT-4 index.ingest module so the CLI doesn't depend on it.
+        fake_pkg = _types.ModuleType("index")
+        fake_ingest = _types.ModuleType("index.ingest")
+        fake_ingest.ingest_all = lambda **kw: []  # type: ignore[attr-defined]
+        fake_pkg.ingest = fake_ingest  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "index", fake_pkg)
+        monkeypatch.setitem(sys.modules, "index.ingest", fake_ingest)
+
+        import total_recall.cmd_index as cmd_index
+        from total_recall.__main__ import cli
+        from click.testing import CliRunner
+
+        backfill_mock = Mock()
+        monkeypatch.setattr(cmd_index, "_backfill_vectors", backfill_mock)
+        monkeypatch.delenv("TOTAL_RECALL_VEC", raising=False)
+
+        db = tmp_path / "idx.db"
+        runner = CliRunner()
+
+        # Non-dry-run: backfill IS invoked once with the db path.
+        result = runner.invoke(cli, ["--db", str(db), "index"])
+        assert result.exit_code == 0, result.output
+        assert backfill_mock.call_count == 1
+        assert backfill_mock.call_args.args[0] == str(db)
+
+        # Dry-run: backfill is NOT invoked.
+        backfill_mock.reset_mock()
+        result = runner.invoke(cli, ["--db", str(db), "index", "--dry-run"])
+        assert result.exit_code == 0, result.output
+        assert backfill_mock.call_count == 0
+
+    def test_index_cmd_backfill_respects_env_gate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import types as _types
+        from unittest.mock import Mock
+
+        fake_pkg = _types.ModuleType("index")
+        fake_ingest = _types.ModuleType("index.ingest")
+        fake_ingest.ingest_all = lambda **kw: []  # type: ignore[attr-defined]
+        fake_pkg.ingest = fake_ingest  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "index", fake_pkg)
+        monkeypatch.setitem(sys.modules, "index.ingest", fake_ingest)
+
+        from total_recall.__main__ import cli
+        from click.testing import CliRunner
+
+        # With the gate off, the real _backfill_vectors short-circuits before
+        # ever reaching backfill_all (stub it to fail the test if reached).
+        called = Mock()
+        monkeypatch.setattr("vec.store.backfill_all", called)
+        monkeypatch.setenv("TOTAL_RECALL_VEC", "0")
+
+        db = tmp_path / "idx.db"
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--db", str(db), "index"])
+        assert result.exit_code == 0, result.output
+        assert called.call_count == 0
+
+
+# ----------------------------------------------------------------------------
 # Hybrid search degraded-mode test (no embedder / no sqlite_vec)
 # ----------------------------------------------------------------------------
 
