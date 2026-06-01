@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.1] - 2026-06-01
+
+### Changed — CI dependency bumps (dependabot)
+
+GitHub Actions version bumps, merged from the 5 open dependabot PRs. CI/release
+workflow only — no runtime code touched.
+
+- `actions/checkout` v4 → v6
+- `actions/setup-python` v5 → v6
+- `actions/upload-artifact` v4 → v7
+- `actions/download-artifact` v4 → v8
+- `softprops/action-gh-release` v2 → v3
+
 ## [2.0.0] - 2026-05-31
 
 ### Added — hybrid (dense-vector) recall by default
