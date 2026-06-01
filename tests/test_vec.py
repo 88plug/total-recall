@@ -244,6 +244,62 @@ class TestLazyImports:
 
 
 # ----------------------------------------------------------------------------
+# GTE / granite custom-model port (registry + tokenizer clamp) — network-free
+# ----------------------------------------------------------------------------
+
+
+class TestGteCustomModels:
+    def test_registry_wiring(self) -> None:
+        from vec.embed import _KNOWN_DIMS, _CUSTOM_MODELS
+
+        assert _KNOWN_DIMS["Alibaba-NLP/gte-modernbert-base"] == 768
+        assert _KNOWN_DIMS["onnx-community/granite-embedding-small-english-r2"] == 384
+        for key, expected in (
+            ("Alibaba-NLP/gte-modernbert-base", 768),
+            ("onnx-community/granite-embedding-small-english-r2", 384),
+        ):
+            assert key in _CUSTOM_MODELS
+            assert _CUSTOM_MODELS[key]["dim"] == expected
+
+    def test_clamp_rewrites_huge_sentinel(self, tmp_path: Path) -> None:
+        import json
+        from vec.embed import _clamp_tokenizer_max_length
+
+        tc = tmp_path / "tokenizer_config.json"
+        tc.write_text(json.dumps({
+            "model_max_length": 1000000000000000000000000000000,
+            "model_type": "modernbert",
+        }))
+        _clamp_tokenizer_max_length(tmp_path)
+        d = json.loads(tc.read_text())
+        assert d["model_max_length"] == 8192
+        assert d["model_type"] == "modernbert"  # unrelated key preserved
+
+    def test_clamp_leaves_sane_value_untouched(self, tmp_path: Path) -> None:
+        import json
+        from vec.embed import _clamp_tokenizer_max_length
+
+        tc = tmp_path / "tokenizer_config.json"
+        tc.write_text(json.dumps({"model_max_length": 8192}))
+        _clamp_tokenizer_max_length(tmp_path)
+        assert json.loads(tc.read_text())["model_max_length"] == 8192
+
+    def test_clamp_missing_file_is_noop(self, tmp_path: Path) -> None:
+        from vec.embed import _clamp_tokenizer_max_length
+
+        # Empty dir: must not raise.
+        assert _clamp_tokenizer_max_length(tmp_path) is None
+
+    @pytest.mark.skipif(not HAS_FASTEMBED, reason="fastembed required")
+    def test_register_custom_model_idempotent(self) -> None:
+        from vec.embed import _register_custom_model
+
+        # Metadata-only registration; second call swallows the 'already' ValueError.
+        _register_custom_model("Alibaba-NLP/gte-modernbert-base")
+        _register_custom_model("Alibaba-NLP/gte-modernbert-base")
+
+
+# ----------------------------------------------------------------------------
 # Hybrid search degraded-mode test (no embedder / no sqlite_vec)
 # ----------------------------------------------------------------------------
 

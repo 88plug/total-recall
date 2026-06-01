@@ -61,11 +61,13 @@ def _backfill_vectors(db_path: str, verbose: bool) -> None:
     try:
         from index.db import connect  # type: ignore[import-not-found]
         from vec.store import apply_vec_schema, backfill_all  # type: ignore[import-not-found]
+        from vec.embed import Embedder  # type: ignore[import-not-found]
 
+        embedder = Embedder()
         conn = connect(db_path)
         try:
-            apply_vec_schema(conn)
-            report = backfill_all(conn)
+            apply_vec_schema(conn, dim=embedder.dim())
+            report = backfill_all(conn, embedder=embedder)
             conn.commit()
         finally:
             conn.close()

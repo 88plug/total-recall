@@ -38,7 +38,91 @@ _KNOWN_DIMS: dict[str, int] = {
     "nomic-ai/nomic-embed-text-v1.5": 768,
     # Allow the short alias the user might pass via env:
     "nomic-embed-text-v1.5": 768,
+    # Custom (non-builtin) models auto-registered on first use (see _CUSTOM_MODELS):
+    "Alibaba-NLP/gte-modernbert-base": 768,
+    "onnx-community/granite-embedding-small-english-r2": 384,
 }
+
+
+# Non-builtin fastembed models we auto-register via add_custom_model on first use.
+# Configs verified from each model card: pooling, normalization, no query prompt.
+_CUSTOM_MODELS: dict[str, dict] = {
+    "Alibaba-NLP/gte-modernbert-base": {
+        "pooling": "CLS", "normalization": True,
+        "hf": "Alibaba-NLP/gte-modernbert-base",
+        "model_file": "onnx/model.onnx", "additional_files": None, "dim": 768,
+    },
+    "onnx-community/granite-embedding-small-english-r2": {
+        "pooling": "CLS", "normalization": True,
+        "hf": "onnx-community/granite-embedding-small-english-r2-ONNX",
+        "model_file": "onnx/model.onnx",
+        "additional_files": ["onnx/model.onnx_data"], "dim": 384,
+    },
+}
+
+
+def _clamp_tokenizer_max_length(model_dir) -> None:
+    """Some models (e.g. ModernBERT) ship model_max_length as a huge sentinel
+    (~1e30) that overflows the Rust tokenizer's enable_truncation. Rewrite it to
+    a sane cap in the cached tokenizer_config.json before fastembed reads it.
+    Idempotent; re-applied on next load if a re-download reverts it."""
+    import json as _json
+    from pathlib import Path as _Path
+    tc = _Path(model_dir) / "tokenizer_config.json"
+    if not tc.exists():
+        return
+    try:
+        d = _json.loads(tc.read_text())
+    except Exception:
+        return
+    changed = False
+    for k in ("model_max_length", "max_length"):
+        v = d.get(k)
+        if isinstance(v, int) and v > 1_000_000:
+            d[k] = 8192
+            changed = True
+    if changed:
+        tc.write_text(_json.dumps(d))
+
+
+def _install_tokenizer_clamp() -> None:
+    """Monkeypatch fastembed load_tokenizer to sanitize model_max_length first."""
+    try:
+        from fastembed.text import onnx_text_model as _otm
+    except Exception:
+        return
+    if getattr(_otm, "_tr_maxlen_clamp", False):
+        return
+    _orig = _otm.load_tokenizer
+
+    def _wrapped(*args, **kwargs):
+        md = kwargs.get("model_dir")
+        if md is None and args:
+            md = args[0]
+        if md is not None:
+            _clamp_tokenizer_max_length(md)
+        return _orig(*args, **kwargs)
+
+    _otm.load_tokenizer = _wrapped
+    _otm._tr_maxlen_clamp = True
+
+
+def _register_custom_model(model: str) -> None:
+    spec = _CUSTOM_MODELS.get(model)
+    if not spec:
+        return
+    from fastembed import TextEmbedding
+    from fastembed.common.model_description import PoolingType, ModelSource
+    try:
+        TextEmbedding.add_custom_model(
+            model=model, dim=spec["dim"],
+            pooling=PoolingType[spec["pooling"]], normalization=spec["normalization"],
+            sources=ModelSource(hf=spec["hf"]), model_file=spec["model_file"],
+            additional_files=spec["additional_files"],
+        )
+    except ValueError as exc:
+        if "already" not in str(exc).lower():
+            raise
 
 
 class Embedder:
@@ -65,6 +149,9 @@ class Embedder:
             from fastembed import TextEmbedding  # type: ignore[import-not-found]
         except ImportError as exc:  # pragma: no cover - exercised only without extra
             raise RuntimeError(_INSTALL_HINT) from exc
+
+        _install_tokenizer_clamp()
+        _register_custom_model(self.model)
 
         kwargs: dict[str, object] = {"model_name": self.model}
         if self.cache_dir is not None:
