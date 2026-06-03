@@ -748,3 +748,22 @@ def test_extract_ontology_from_records_empty() -> None:
     assert snap.machines == []
     # Universal terms are always added.
     assert len(snap.vocabulary) == len(_UNIVERSAL_CLAUDE_CODE_TERMS)
+
+
+import pytest as _pytest
+from extractors.ontology import _looks_like_hex_id as _lhi
+
+
+@_pytest.mark.parametrize("h", [
+    "a013-4f1a-9a75-13c768f26f92", "a01d-5333afd7bc86",
+    "a025ca8d7a59c5e9-iad", "deadbeef-cafe-1234", "5333afd7bc86",
+])
+def test_hex_id_fragments_rejected_as_machines(h):
+    assert _lhi(h) is True
+
+
+@_pytest.mark.parametrize("h", [
+    "relay-eu-west", "server-01", "db-prod", "wild-nuc", "host-01", "ap-southeast",
+])
+def test_real_hostnames_not_hex_rejected(h):
+    assert _lhi(h) is False

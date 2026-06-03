@@ -876,6 +876,29 @@ def _is_cwd_slug(token: str) -> bool:
     return any(seg.lower() in _SLUG_WORDS for seg in segments)
 
 
+_HEX_RUN_RE = re.compile(r"^[0-9a-f]{8,}$", re.IGNORECASE)
+
+
+def _looks_like_hex_id(token: str) -> bool:
+    """True if *token* looks like a UUID / hash / hex-id fragment misdetected as
+    a hostname (e.g. ``a013-4f1a-9a75-13c768f26f92``, ``a01d-5333afd7bc86``,
+    ``a025ca8d7a59c5e9-iad``). The broad ``_HOSTNAME_RE`` matches these, and
+    ``_is_cwd_slug`` (cwd-slug only) misses them — they were the dominant
+    ``machines`` table garbage. Real hostnames use word/role/region/index
+    segments, never long pure-hex runs.
+    """
+    f = token.strip().strip(",.;:!?()[]{}\"'")
+    segs = f.replace(".", "-").split("-")
+    if any(_HEX_RUN_RE.match(seg) for seg in segs):
+        return True
+    if len(segs) >= 3 and all(
+        re.fullmatch(r"[0-9a-f]+", seg, re.IGNORECASE) and any(c.isdigit() for c in seg)
+        for seg in segs
+    ):
+        return True
+    return False
+
+
 def _extract_machines_from_text(
     text: str, ts: int, machines: dict[str, MachineRecord]
 ) -> None:
@@ -886,6 +909,9 @@ def _extract_machines_from_text(
         key = host.lower()
         # Skip cwd directory-slugs misdetected as hostnames (v0.14.0).
         if _is_cwd_slug(key):
+            continue
+        # Skip UUID / hash / hex-id fragments misdetected as hostnames.
+        if _looks_like_hex_id(key):
             continue
         start = max(0, m.start() - _CONTEXT_WINDOW)
         end = min(len(text), m.end() + _CONTEXT_WINDOW)
