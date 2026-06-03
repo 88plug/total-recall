@@ -92,6 +92,34 @@ def _trim_goal_text(text: str, max_len: int = 240) -> str:
     return one_line
 
 
+# Trivial session openers / acks that are NOT goals. The first-message heuristic
+# would otherwise emit these as goals, flooding the corpus with low-signal rows
+# that dilute retrieval (the `goal` kind was the weakest in recall testing).
+_LOW_SIGNAL_OPENER_RE = re.compile(
+    r"(?i)^\s*("
+    r"hi|hey|hello|yo|hiya|sup|gm|gn|morning|good morning|"
+    r"ok|okay|k|kk|yes|yep|yeah|ya|no|nope|nah|sure|"
+    r"thanks|thank you|ty|thx|cool|nice|great|"
+    r"continue|carry on|go on|go ahead|proceed|resume|cont|next|"
+    r"done|stop|wait|hold on"
+    r")\b[\s\W]*$"
+)
+_MIN_FIRST_GOAL_LEN = 12  # chars, after whitespace-collapse
+
+
+def _is_substantive_first_goal(text: str) -> bool:
+    """Whether a first-of-session user string is substantive enough to count as
+    a goal. Filters trivial openers/acks so the first-message heuristic doesn't
+    flood the goal corpus. Explicit-marker goals bypass this check entirely.
+    """
+    t = " ".join(text.split())
+    if len(t) < _MIN_FIRST_GOAL_LEN:
+        return False
+    if _LOW_SIGNAL_OPENER_RE.match(t):
+        return False
+    return True
+
+
 class Goals(Extractor):
     """Emit ``goal`` and ``goal_progress`` extractions.
 
@@ -112,14 +140,12 @@ class Goals(Extractor):
         # record for that session as a goal statement. If no permission-mode
         # is present we fall back to the first user-string outright — that's
         # still the highest-signal turn in a session.
-        seen_perm_mode: set[str] = set()
         seen_first_user: set[str] = set()
 
         for rec in records:
             sid = getattr(rec, "session_id", None) or ""
 
             if getattr(rec, "type", None) == "permission-mode":
-                seen_perm_mode.add(sid)
                 continue
 
             # User-string path: goal declarations.
@@ -128,14 +154,15 @@ class Goals(Extractor):
                 is_first = sid not in seen_first_user
                 if is_first:
                     seen_first_user.add(sid)
-                # "First message" credit applies only when we either saw a
-                # permission-mode for this session OR this is genuinely the
-                # first user turn we've seen for it. Either way `is_first`
-                # is True only once per session.
-                first_after_perm = is_first and (sid in seen_perm_mode or True)
+                # The first user-string of a session is a strong goal signal,
+                # but only when it's *substantive*: trivial openers ("hi",
+                # "ok", "continue") would otherwise flood the goal corpus with
+                # low-signal rows that dilute retrieval. Explicit-marker goals
+                # are kept anywhere in the session, regardless of this gate.
+                first_goal = is_first and _is_substantive_first_goal(user_text)
 
                 marker_hit = bool(_GOAL_MARKER_RE.search(user_text))
-                if not (marker_hit or first_after_perm):
+                if not (marker_hit or first_goal):
                     continue
 
                 trimmed = _trim_goal_text(user_text)
@@ -145,7 +172,7 @@ class Goals(Extractor):
                 score = _BASE_GOAL_SCORE
                 if marker_hit:
                     score += _EXPLICIT_MARKER_BONUS
-                if first_after_perm:
+                if first_goal:
                     score += _FIRST_MESSAGE_BONUS
                 if len(trimmed) >= _LONG_GOAL_THRESHOLD:
                     score += _LONG_GOAL_BONUS
@@ -153,7 +180,7 @@ class Goals(Extractor):
 
                 ctx: dict = {
                     "source": "user_string",
-                    "first_message": first_after_perm,
+                    "first_message": first_goal,
                     "marker": marker_hit,
                 }
                 if _BLOCKED_RE.search(user_text):
@@ -163,7 +190,7 @@ class Goals(Extractor):
 
                 log.debug(
                     "goals: declaration session=%s uuid=%s marker=%s first=%s score=%.2f",
-                    sid, rec.uuid, marker_hit, first_after_perm, score,
+                    sid, rec.uuid, marker_hit, first_goal, score,
                 )
                 yield Extraction(
                     kind="goal",

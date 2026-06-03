@@ -178,6 +178,36 @@ def test_first_message_credit_only_once_per_session():
     assert "s1-u2" not in uuids  # second turn of session 1: no credit
 
 
+@pytest.mark.parametrize(
+    "opener",
+    ["hi", "hey", "ok", "okay", "yes", "thanks", "continue", "go ahead", "sup", "done"],
+)
+def test_trivial_first_message_is_not_a_goal(opener):
+    """Low-signal openers/acks must NOT become goals (corpus-flood fix)."""
+    rec = _user(opener, uuid="u-triv")
+    goals = [e for e in Goals().extract([rec]) if e.kind == "goal"]
+    assert not goals, f"trivial opener should not be a goal: {opener!r}"
+
+
+def test_short_first_message_is_not_a_goal():
+    rec = _user("do it", uuid="u-short")  # < 12 chars after collapse
+    assert not [e for e in Goals().extract([rec]) if e.kind == "goal"]
+
+
+def test_substantive_first_message_still_a_goal():
+    rec = _user("wire up the relay failover end to end", uuid="u-sub")
+    goals = [e for e in Goals().extract([rec]) if e.kind == "goal"]
+    assert len(goals) == 1
+    assert goals[0].context["first_message"] is True
+
+
+def test_explicit_marker_bypasses_substantive_gate():
+    """A short/trivial-looking string with an explicit marker is still a goal."""
+    rec = _user("goal: x", uuid="u-mark")
+    goals = [e for e in Goals().extract([rec]) if e.kind == "goal"]
+    assert goals and goals[0].context["marker"] is True
+
+
 # ---------------------------------------------------------------------------
 # Extractor: goal_progress emission from assistant Done./Shipped paragraphs
 # ---------------------------------------------------------------------------
