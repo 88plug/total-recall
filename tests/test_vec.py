@@ -250,7 +250,7 @@ class TestLazyImports:
 
 class TestGteCustomModels:
     def test_registry_wiring(self) -> None:
-        from vec.embed import _KNOWN_DIMS, _CUSTOM_MODELS
+        from vec.embed import _CUSTOM_MODELS, _KNOWN_DIMS
 
         assert _KNOWN_DIMS["Alibaba-NLP/gte-modernbert-base"] == 768
         assert _KNOWN_DIMS["onnx-community/granite-embedding-small-english-r2"] == 384
@@ -263,6 +263,7 @@ class TestGteCustomModels:
 
     def test_clamp_rewrites_huge_sentinel(self, tmp_path: Path) -> None:
         import json
+
         from vec.embed import _clamp_tokenizer_max_length
 
         tc = tmp_path / "tokenizer_config.json"
@@ -277,6 +278,7 @@ class TestGteCustomModels:
 
     def test_clamp_leaves_sane_value_untouched(self, tmp_path: Path) -> None:
         import json
+
         from vec.embed import _clamp_tokenizer_max_length
 
         tc = tmp_path / "tokenizer_config.json"
@@ -307,6 +309,7 @@ class TestGteCustomModels:
 class TestCustomModelPorts:
     def test_clamp_rewrites_huge_model_max_length(self, tmp_path: Path) -> None:
         import json
+
         from vec.embed import _clamp_tokenizer_max_length
 
         tc = tmp_path / "tokenizer_config.json"
@@ -323,6 +326,7 @@ class TestCustomModelPorts:
 
     def test_clamp_noop_when_already_sane(self, tmp_path: Path) -> None:
         import json
+
         from vec.embed import _clamp_tokenizer_max_length
 
         tc = tmp_path / "tokenizer_config.json"
@@ -343,7 +347,7 @@ class TestCustomModelPorts:
         assert _clamp_tokenizer_max_length(tmp_path) is None
 
     def test_custom_models_have_known_dims(self) -> None:
-        from vec.embed import _KNOWN_DIMS, _CUSTOM_MODELS
+        from vec.embed import _CUSTOM_MODELS, _KNOWN_DIMS
 
         assert _KNOWN_DIMS["Alibaba-NLP/gte-modernbert-base"] == 768
         assert _KNOWN_DIMS["onnx-community/granite-embedding-small-english-r2"] == 384
@@ -377,8 +381,9 @@ class TestCustomModelPorts:
 
     @pytest.mark.skipif(not HAS_FASTEMBED, reason="fastembed required")
     def test_install_tokenizer_clamp_idempotent(self) -> None:
-        from vec.embed import _install_tokenizer_clamp
         from fastembed.text import onnx_text_model as otm
+
+        from vec.embed import _install_tokenizer_clamp
 
         _install_tokenizer_clamp()
         assert getattr(otm, "_tr_maxlen_clamp", False) is True
@@ -534,9 +539,10 @@ class TestIncrementalVecBackfill:
         monkeypatch.setitem(sys.modules, "index", fake_pkg)
         monkeypatch.setitem(sys.modules, "index.ingest", fake_ingest)
 
+        from click.testing import CliRunner
+
         import total_recall.cmd_index as cmd_index
         from total_recall.__main__ import cli
-        from click.testing import CliRunner
 
         backfill_mock = Mock()
         monkeypatch.setattr(cmd_index, "_backfill_vectors", backfill_mock)
@@ -570,8 +576,9 @@ class TestIncrementalVecBackfill:
         monkeypatch.setitem(sys.modules, "index", fake_pkg)
         monkeypatch.setitem(sys.modules, "index.ingest", fake_ingest)
 
-        from total_recall.__main__ import cli
         from click.testing import CliRunner
+
+        from total_recall.__main__ import cli
 
         # With the gate off, the real _backfill_vectors short-circuits before
         # ever reaching backfill_all (stub it to fail the test if reached).

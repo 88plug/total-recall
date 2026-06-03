@@ -33,7 +33,6 @@ import pytest
 from extractors.goals import Goals
 from index import goals as goals_idx
 
-
 # ---------------------------------------------------------------------------
 # Shared fake-record helpers
 # ---------------------------------------------------------------------------

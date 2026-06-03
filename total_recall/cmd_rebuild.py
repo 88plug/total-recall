@@ -60,8 +60,8 @@ def _backfill_vectors(db_path: str, verbose: bool) -> None:
         return
     try:
         from index.db import connect  # type: ignore[import-not-found]
-        from vec.store import apply_vec_schema, backfill_all  # type: ignore[import-not-found]
         from vec.embed import Embedder  # type: ignore[import-not-found]
+        from vec.store import apply_vec_schema, backfill_all  # type: ignore[import-not-found]
 
         embedder = Embedder()
         conn = connect(db_path)
@@ -226,7 +226,9 @@ def rebuild_cmd(
             )
     else:
         try:
-            from lib.sources.collect import materialize_all_source_records  # type: ignore[import-not-found]
+            from lib.sources.collect import (
+                materialize_all_source_records,  # type: ignore[import-not-found]
+            )
             all_records = materialize_all_source_records()
             if all_records:
                 _using_records = True
@@ -316,8 +318,12 @@ def rebuild_cmd(
 
         # Implicit preferences.
         try:
-            from extractors.implicit_preferences import extract_implicit_preferences  # type: ignore[import-not-found]
-            from index.implicit_preferences import persist_implicit_preferences  # type: ignore[import-not-found]
+            from extractors.implicit_preferences import (
+                extract_implicit_preferences,  # type: ignore[import-not-found]
+            )
+            from index.implicit_preferences import (
+                persist_implicit_preferences,  # type: ignore[import-not-found]
+            )
             if _using_records and all_records:
                 # extract_implicit_preferences accepts (session_id, cwd, records)
                 # triples OR path-likes. Build a single pseudo-triple so all
@@ -412,8 +418,13 @@ def rebuild_cmd(
 
             # Machines refinement
             try:
-                from extractors.llm.refine_machines import refine_machines  # type: ignore[import-not-found]
-                from index.operator import get_profile, upsert_profile_field  # type: ignore[import-not-found]
+                from extractors.llm.refine_machines import (
+                    refine_machines,  # type: ignore[import-not-found]
+                )
+                from index.operator import (  # type: ignore[import-not-found]
+                    get_profile,
+                    upsert_profile_field,
+                )
                 conn = connect(db_path)
                 try:
                     prof = get_profile(conn)

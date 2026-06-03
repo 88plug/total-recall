@@ -112,7 +112,7 @@ def _register_custom_model(model: str) -> None:
     if not spec:
         return
     from fastembed import TextEmbedding
-    from fastembed.common.model_description import PoolingType, ModelSource
+    from fastembed.common.model_description import ModelSource, PoolingType
     try:
         TextEmbedding.add_custom_model(
             model=model, dim=spec["dim"],
