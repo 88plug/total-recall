@@ -158,6 +158,19 @@ def _iso_to_epoch(ts: Any) -> int | None:
         return None
 
 
+# Synthetic "user" envelopes injected by the harness (task notifications,
+# slash-command echoes, local-command output, system reminders). These are
+# not genuine human directives; mirrors extractors.base._SKIP_PREFIXES.
+_SKIP_USER_PREFIXES = (
+    "<task-notification>",
+    "<command-message>",
+    "<command-name>",
+    "<local-command-stdout>",
+    "<local-command-stderr>",
+    "<system-reminder>",
+)
+
+
 def _msg(rec: dict) -> dict:
     m = rec.get("message")
     return m if isinstance(m, dict) else {}
@@ -208,7 +221,14 @@ def _is_real_user(rec: dict) -> bool:
     only_tool_result = blocks and all(
         isinstance(b, dict) and b.get("type") == "tool_result" for b in blocks
     )
-    return has_text and not only_tool_result
+    if not (has_text and not only_tool_result):
+        return False
+    # Reject synthetic envelopes (task notifications, slash-command echoes,
+    # local-command output) that masquerade as user text turns.
+    stripped = _text_of(rec).lstrip()
+    if any(stripped.startswith(pfx) for pfx in _SKIP_USER_PREFIXES):
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
