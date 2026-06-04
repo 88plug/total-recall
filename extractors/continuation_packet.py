@@ -591,6 +591,94 @@ def _apply_budget(fields: dict, max_chars: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Compact rendering (shared by the SessionStart restore hook + the
+# UserPromptSubmit bridge). Turns the packet dict into a short human-readable
+# block, hard-capped so it stays well under the SessionStart 10k additionalContext
+# limit. Pure stdlib, never raises.
+# ---------------------------------------------------------------------------
+
+
+def _render_one(key: str, val: Any) -> list[str]:
+    """Render a single packet field to a list of lines. Best-effort."""
+    label = {
+        "active_goal": "Active goal",
+        "last_user_directive": "Last directive",
+        "files_in_flight": "Files in flight",
+        "last_actions": "Last actions",
+        "decisions_this_session": "Decisions this session",
+        "open_plan": "Open plan",
+        "next_step": "Next step",
+        "failed_attempts_this_session": "Failed attempts this session",
+    }.get(key, key)
+
+    lines: list[str] = []
+    if key == "files_in_flight" and isinstance(val, list):
+        lines.append(f"{label}:")
+        for f in val[:6]:
+            if isinstance(f, dict):
+                path = f.get("path", "")
+                verb = f.get("verb", "")
+                lines.append(f"  - {verb} {path}".rstrip())
+            else:
+                lines.append(f"  - {f}")
+    elif key == "last_actions" and isinstance(val, list):
+        lines.append(f"{label}:")
+        for a in val[:5]:
+            if isinstance(a, dict):
+                tool = a.get("tool", "")
+                arg = str(a.get("arg", "")).replace("\n", " ")[:120]
+                ok = "ok" if a.get("ok") else "FAILED"
+                lines.append(f"  - [{ok}] {tool}: {arg}".rstrip())
+            else:
+                lines.append(f"  - {a}")
+    elif isinstance(val, list):
+        lines.append(f"{label}:")
+        for item in val[:5]:
+            if isinstance(item, dict):
+                txt = item.get("text") or item.get("goal") or json.dumps(
+                    item, ensure_ascii=False
+                )
+                lines.append(f"  - {str(txt)[:240]}")
+            else:
+                lines.append(f"  - {str(item)[:240]}")
+    elif isinstance(val, dict):
+        txt = val.get("text") or val.get("goal") or json.dumps(
+            val, ensure_ascii=False
+        )
+        lines.append(f"{label}: {str(txt)[:280]}")
+    else:
+        lines.append(f"{label}: {str(val)[:280]}")
+    return lines
+
+
+def render_continuation_packet(packet: dict, max_chars: int = 6000) -> str:
+    """Render a packet dict to a compact human-readable block.
+
+    Fields are emitted in ``_PRIORITY`` order (highest value first) so that a
+    tight ``max_chars`` evicts the least useful tail first. Returns "" when the
+    packet carries no renderable fields. Never raises.
+    """
+    if not isinstance(packet, dict):
+        return ""
+    out: list[str] = []
+    for key in _PRIORITY:
+        if key not in packet:
+            continue
+        val = packet[key]
+        if val in (None, "", [], {}):
+            continue
+        try:
+            block = _render_one(key, val)
+        except Exception:  # noqa: BLE001
+            continue
+        candidate = "\n".join(out + block)
+        if len(candidate) > max_chars:
+            break
+        out.extend(block)
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
 # Public builder
 # ---------------------------------------------------------------------------
 
@@ -701,6 +789,7 @@ def build_continuation_packet(
 
 __all__ = [
     "build_continuation_packet",
+    "render_continuation_packet",
     # Exposed for tests:
     "_apply_budget",
     "_PRIORITY",
