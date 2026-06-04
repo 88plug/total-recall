@@ -128,6 +128,36 @@ def _fallback_prompt_relevant(prompt: str, cwd: str) -> str:
         return ""
 
 
+def _continuation_block(session_id: str, cwd: str) -> str:
+    """Render the persisted continuation packet for ``session_id``.
+
+    Belt #3: after a compaction the SessionStart(compact) hook is the primary
+    restore surface, but if it was skipped (or its context scrolled away) the
+    next UserPromptSubmit re-surfaces the packet on top of whatever else this
+    turn would emit. Returns "" on any failure — the caller treats that as
+    "no continuation block".
+    """
+    try:
+        from hooks.lib.compact_restore import _load_packet  # type: ignore
+        from extractors.continuation_packet import (  # type: ignore
+            render_continuation_packet,
+        )
+    except Exception:
+        return ""
+    try:
+        packet = _load_packet(session_id, cwd or None)
+        if not isinstance(packet, dict) or set(packet) <= {"_kind"}:
+            return ""
+        body = render_continuation_packet(packet, max_chars=4000)
+    except Exception:
+        return ""
+    if not body:
+        return ""
+    return (
+        "[total-recall] POST-COMPACTION CONTINUATION — where we were:\n" + body
+    )
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="decide_and_format")
     p.add_argument("--session", required=True)
@@ -195,6 +225,16 @@ def main(argv=None) -> int:
                 payload = ""
         if not payload:
             payload = _fallback_prompt_relevant(args.prompt, args.cwd)
+
+    # 4b. Belt #3: if a compaction left a continuation packet pending and it
+    #     hasn't been consumed yet, prepend its rendering to whatever we're
+    #     about to emit, then clear the flag (consumed). One-shot like
+    #     post_compact: a single re-surface is enough.
+    if state.get("continuation_pending"):
+        cont = _continuation_block(args.session, args.cwd)
+        state["continuation_pending"] = False  # consumed (cleared via save below)
+        if cont:
+            payload = cont + ("\n\n" + payload if payload else "")
 
     # 5. Record the injection (if any) and persist state. Always save —
     #    even on a no-fire turn we still want the turn counter and
