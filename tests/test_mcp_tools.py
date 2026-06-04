@@ -110,6 +110,16 @@ def fake_index_query(monkeypatch: pytest.MonkeyPatch):
         return list(conn.execute(sql, params).fetchall())
 
     def list_sessions_for_cwd(conn, cwd, limit=10):  # noqa: ANN001
+        # ``cwd=None`` means "all projects" — mirrors the real
+        # index.query.list_sessions_for_cwd so the prior_sessions_for_cwd
+        # this_cwd -> all_projects fallback is exercisable.
+        if cwd is None:
+            return list(
+                conn.execute(
+                    "SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            )
         return list(
             conn.execute(
                 "SELECT * FROM sessions WHERE cwd = ? ORDER BY started_at DESC LIMIT ?",
@@ -391,6 +401,43 @@ def test_prior_sessions_for_cwd_lists_sessions(tmp_db_dir, fake_index_query):
     assert r["session_id"] == "s1"
     assert r["ai_title"] == "Set up relay fleet"
     assert r["message_count"] == 42
+
+
+def test_prior_sessions_for_cwd_falls_back_when_cwd_unknown(
+    tmp_db_dir, fake_index_query, monkeypatch
+):
+    """No explicit cwd + unknown current cwd -> retry all_projects + _meta."""
+    _seed_corpus(tmp_db_dir / "index.db")
+    monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
+    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
+        sys.modules.pop(mod, None)
+    server = importlib.import_module("mcp_server.server")
+    _, structured = asyncio.run(
+        server.mcp.call_tool("prior_sessions_for_cwd", {})
+    )
+    rows = structured["result"]
+    # First row is the scope-fallback meta, body carries the proj-a session.
+    assert rows and "_meta" in rows[0]
+    assert rows[0]["scope_used"] == "all_projects"
+    assert any(r.get("session_id") == "s1" for r in rows[1:])
+
+
+def test_prior_sessions_for_cwd_explicit_cwd_no_fallback(
+    tmp_db_dir, fake_index_query, monkeypatch
+):
+    """An explicit unknown cwd returns empty — no all_projects fallback."""
+    _seed_corpus(tmp_db_dir / "index.db")
+    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
+        sys.modules.pop(mod, None)
+    server = importlib.import_module("mcp_server.server")
+    _, structured = asyncio.run(
+        server.mcp.call_tool(
+            "prior_sessions_for_cwd", {"cwd": "/home/operator/proj-not-in-index"}
+        )
+    )
+    rows = structured["result"]
+    # Explicit cwd is honored verbatim: no rows, no _meta fallback marker.
+    assert not any("_meta" in r for r in rows)
 
 
 def test_search_messages_falls_through_to_fts(tmp_db_dir, fake_index_query):

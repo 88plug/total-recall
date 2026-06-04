@@ -292,9 +292,18 @@ def prior_sessions_for_cwd(cwd: str | None = None, limit: int = 10) -> list[dict
     if query_mod is None:
         return [{"error": "index.query module not available on this branch"}]
 
-    target_cwd = cwd or _current_cwd()
+    explicit_cwd = cwd is not None
+    target_cwd = cwd if explicit_cwd else _current_cwd()
     try:
         rows = query_mod.list_sessions_for_cwd(conn, cwd=target_cwd, limit=limit)
+        fell_back = False
+        # Same this_cwd -> all_projects fallback as find_failed_attempts: when
+        # the caller didn't pin a cwd and the current one is unknown to the
+        # index (e.g. `claude` launched from ~), retry across all projects so
+        # orientation queries aren't silently empty.
+        if not rows and not explicit_cwd:
+            rows = query_mod.list_sessions_for_cwd(conn, cwd=None, limit=limit)
+            fell_back = True
     except Exception as e:
         log.exception("prior_sessions_for_cwd() failed")
         return [{"error": f"prior_sessions_for_cwd failed: {e!r}"}]
@@ -304,7 +313,10 @@ def prior_sessions_for_cwd(cwd: str | None = None, limit: int = 10) -> list[dict
         except Exception:
             pass
 
-    return [_row_to_hit(r) for r in rows]
+    out: list[dict] = [_row_to_hit(r) for r in rows]
+    if fell_back:
+        out.insert(0, _scope_meta("all_projects", True, "this_cwd"))
+    return out
 
 
 @mcp.tool()

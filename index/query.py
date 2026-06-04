@@ -478,7 +478,7 @@ def session_count_for_cwd(conn: sqlite3.Connection, cwd: str) -> int:
 
 def list_sessions_for_cwd(
     conn: sqlite3.Connection,
-    cwd: str,
+    cwd: str | None,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     """Return per-session summaries for a cwd, newest first.
@@ -486,9 +486,19 @@ def list_sessions_for_cwd(
     Each row carries ``session_id``, ``first_ts``, ``last_ts``,
     ``message_count``, and ``ai_title`` (best-effort: the most recent
     ``ai-title`` text we saw for that session, else ``None``).
+
+    ``cwd=None`` means "all projects" (no scope filter) — this is what the
+    MCP ``prior_sessions_for_cwd`` fallback passes when the current cwd is
+    not in the index, so an orientation query still returns recent work.
     """
+    where = ""
+    params: list[Any] = []
+    if cwd is not None:
+        where = "WHERE m.project_key = ?"
+        params.append(project_key(cwd))
+    params.append(limit)
     cur = conn.execute(
-        """
+        f"""
         SELECT m.session_id,
                MIN(m.ts) AS first_ts,
                MAX(m.ts) AS last_ts,
@@ -500,12 +510,12 @@ def list_sessions_for_cwd(
                  ORDER BY m2.ts DESC
                  LIMIT 1) AS ai_title
           FROM messages m
-         WHERE m.project_key = ?
+         {where}
          GROUP BY m.session_id
          ORDER BY last_ts DESC
          LIMIT ?
         """,
-        (project_key(cwd), limit),
+        params,
     )
     out: list[dict[str, Any]] = []
     for row in cur.fetchall():
