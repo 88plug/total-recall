@@ -87,6 +87,22 @@ if [ "$WROTE" != "true" ]; then
     "$NOW_ISO" "$CWD" "$SESSION_ID" > "$STATE_FILE" 2>/dev/null && WROTE="true"
 fi
 
+# If pre-compact-seed.sh persisted a continuation packet for this session,
+# flag continuation_pending=true so the SessionStart compact-restore hook (and
+# the UserPromptSubmit bridge) know there is an in-flight packet to surface.
+# Best-effort: a failure here only loses the belt-3 reinjection, not the flag.
+CONT_FILE="${STATE_DIR}/${STATE_KEY}.continuation.json"
+if [ -f "$CONT_FILE" ]; then
+  if recall::has_jq; then
+    TMP2="${STATE_FILE}.tmp2.$$"
+    if jq '. + {continuation_pending: true}' "$STATE_FILE" > "$TMP2" 2>/dev/null \
+       && mv "$TMP2" "$STATE_FILE" 2>/dev/null; then
+      recall::log "post-compact-recovery: continuation_pending=true (packet present)"
+    fi
+    rm -f "$TMP2" 2>/dev/null
+  fi
+fi
+
 # Re-prime the bootstrap marker if the index has been wiped/rotated. This is
 # the "compact during migration" edge case — without this, the next hook
 # tick would not realize it needs to rebootstrap.
