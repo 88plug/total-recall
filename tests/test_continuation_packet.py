@@ -16,6 +16,7 @@ from extractors.continuation_packet import (
     _iso_to_epoch,
     _read_records,
     build_continuation_packet,
+    render_continuation_packet,
 )
 
 TS_PRE = "2025-05-01T12:00:00.000Z"
@@ -412,3 +413,37 @@ def test_garbage_lines_tolerated(tmp_path):
         fh.write("{broken json\n")
     pkt = build_continuation_packet(str(path), SID, CWD)
     assert pkt["last_user_directive"] == "good directive"
+
+
+def test_render_continuation_packet_basic():
+    packet = {
+        "active_goal": {"goal": "ship compaction continuity"},
+        "last_user_directive": "fix the failing assertion in parser.py",
+        "files_in_flight": [{"path": "/p/parser.py", "verb": "Edit"}],
+        "last_actions": [{"tool": "Bash", "arg": "pytest", "ok": False}],
+        "_kind": "continuation_packet",
+    }
+    out = render_continuation_packet(packet, max_chars=6000)
+    assert "Active goal: ship compaction continuity" in out
+    assert "fix the failing assertion in parser.py" in out
+    assert "/p/parser.py" in out
+    assert "[FAILED] Bash" in out
+    # Priority order: active_goal renders before last_user_directive.
+    assert out.index("Active goal") < out.index("Last directive")
+
+
+def test_render_continuation_packet_empty_and_bad():
+    assert render_continuation_packet({}, max_chars=6000) == ""
+    assert render_continuation_packet({"_kind": "continuation_packet"}) == ""
+    # Non-dict input never raises.
+    assert render_continuation_packet(None) == ""  # type: ignore[arg-type]
+
+
+def test_render_continuation_packet_respects_cap():
+    packet = {
+        "last_user_directive": "x" * 500,
+        "open_plan": "y" * 5000,
+        "_kind": "continuation_packet",
+    }
+    out = render_continuation_packet(packet, max_chars=300)
+    assert len(out) <= 300

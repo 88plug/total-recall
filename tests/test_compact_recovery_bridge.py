@@ -107,3 +107,87 @@ def test_recovery_flag_drives_reinjection(plugin_data, monkeypatch):
     decision, reasons = should_reinject(sess, last_user="continue please")
     assert decision is True
     assert "hard:post_compact_known_project" in reasons
+
+
+def test_decide_and_format_surfaces_pending_continuation(plugin_data, monkeypatch):
+    """Belt #3: decide_and_format prepends the persisted packet rendering when
+    continuation_pending is set, then clears the flag."""
+    import importlib
+    import io
+    import contextlib
+
+    import hooks.lib.session_state as ss
+    importlib.reload(ss)
+    from hooks.lib import decide_and_format as daf
+
+    sid = "daf-pending-1"
+    cwd = "/home/operator/proj"
+
+    # Persist a continuation packet for this session (what pre-compact-seed
+    # would have written).
+    sessions = plugin_data / "total-recall" / "sessions"
+    sessions.mkdir(parents=True, exist_ok=True)
+    (sessions / f"{sid}.continuation.json").write_text(
+        json.dumps(
+            {
+                "last_user_directive": "belt3 surfaces this directive",
+                "files_in_flight": [{"path": "/home/operator/proj/p.py", "verb": "Edit"}],
+                "_kind": "continuation_packet",
+            }
+        )
+    )
+
+    # Seed session state with the pending flag (post-compact-recovery's job).
+    state = ss.load_state(sid)
+    state["cwd"] = cwd
+    state["continuation_pending"] = True
+    ss.save_state(state)
+
+    db = plugin_data / "total-recall" / "index.db"  # absent → no fire/fallback
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = daf.main(
+            ["--session", sid, "--cwd", cwd, "--prompt", "continue", "--db", str(db)]
+        )
+    out = buf.getvalue()
+
+    assert rc == 0
+    assert out.startswith("[total-recall] POST-COMPACTION CONTINUATION")
+    assert "belt3 surfaces this directive" in out
+
+    # Flag consumed.
+    after = ss.load_state(sid)
+    assert after.get("continuation_pending") is False
+
+
+def test_decide_and_format_no_pending_no_continuation(plugin_data, monkeypatch):
+    """Without continuation_pending the continuation block is never surfaced."""
+    import importlib
+    import io
+    import contextlib
+
+    import hooks.lib.session_state as ss
+    importlib.reload(ss)
+    from hooks.lib import decide_and_format as daf
+
+    sid = "daf-nopending-1"
+    cwd = "/home/operator/proj"
+
+    sessions = plugin_data / "total-recall" / "sessions"
+    sessions.mkdir(parents=True, exist_ok=True)
+    (sessions / f"{sid}.continuation.json").write_text(
+        json.dumps({"last_user_directive": "should NOT surface", "_kind": "continuation_packet"})
+    )
+    # No continuation_pending flag set.
+    ss.save_state({**ss.load_state(sid), "cwd": cwd})
+
+    db = plugin_data / "total-recall" / "index.db"
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = daf.main(
+            ["--session", sid, "--cwd", cwd, "--prompt", "continue", "--db", str(db)]
+        )
+    out = buf.getvalue()
+
+    assert rc == 0
+    assert "POST-COMPACTION CONTINUATION" not in out
