@@ -28,6 +28,7 @@ pass and the rest of the pipeline can be validated in isolation.
 
 from __future__ import annotations
 
+
 import json
 import logging
 import os
@@ -37,6 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Iterator
+from index.paths import project_key
 
 log = logging.getLogger(__name__)
 
@@ -326,6 +328,7 @@ def _row_for_message(
         text,
         None,  # raw_json opt-in; default off saves ~5x disk.
         source,  # v4: which CLI client this row came from.
+        project_key(getattr(rec, "cwd", None)),  # v5: worktree-collapsed root.
     )
 
 
@@ -453,6 +456,7 @@ def _row_for_extraction(ext: Any, source: str = "claude_code") -> tuple:
         getattr(ext, "scope", "project") or "project",
         ctx_json,
         source,  # v4: which CLI client produced the source record.
+        project_key(getattr(ext, "cwd", None)),  # v5: worktree-collapsed root.
     )
 
 
@@ -767,13 +771,30 @@ def _commit_parsed(
                     INSERT OR IGNORE INTO messages(
                         session_id, cwd, git_branch, role, kind, ts,
                         parent_uuid, message_uuid, byte_offset, source_file,
-                        text, raw_json, source
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        text, raw_json, source, project_key
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     parsed.message_rows,
                 )
             except sqlite3.OperationalError as exc:
-                if "source" in str(exc):
+                if "project_key" in str(exc):
+                    log.warning(
+                        "messages.project_key column missing; falling back to "
+                        "v4 INSERT shape — run apply_schema() to enable "
+                        "project pooling"
+                    )
+                    conn.executemany(
+                        """
+                        INSERT OR IGNORE INTO messages(
+                            session_id, cwd, git_branch, role, kind, ts,
+                            parent_uuid, message_uuid, byte_offset, source_file,
+                            text, raw_json, source
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        # Strip the trailing project_key to match the v4 shape.
+                        [row[:-1] for row in parsed.message_rows],
+                    )
+                elif "source" in str(exc):
                     log.warning(
                         "messages.source column missing; falling back to "
                         "v3 INSERT shape — run apply_schema() to enable "
@@ -787,8 +808,8 @@ def _commit_parsed(
                             text, raw_json
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                        # Strip the trailing source value to match the v3 shape.
-                        [row[:-1] for row in parsed.message_rows],
+                        # Strip the trailing project_key + source (v3 shape).
+                        [row[:-2] for row in parsed.message_rows],
                     )
                 else:
                     raise
@@ -868,13 +889,27 @@ def _commit_parsed(
                     """
                     INSERT OR IGNORE INTO extractions(
                         kind, content, session_id, cwd, ts, source_uuid,
-                        score, scope, context_json, source
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        score, scope, context_json, source, project_key
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     parsed.extraction_rows,
                 )
             except sqlite3.OperationalError as exc:
-                if "source" in str(exc):
+                if "project_key" in str(exc):
+                    log.warning(
+                        "extractions.project_key column missing; falling back "
+                        "to v4 INSERT shape"
+                    )
+                    conn.executemany(
+                        """
+                        INSERT OR IGNORE INTO extractions(
+                            kind, content, session_id, cwd, ts, source_uuid,
+                            score, scope, context_json, source
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        [row[:-1] for row in parsed.extraction_rows],
+                    )
+                elif "source" in str(exc):
                     log.warning(
                         "extractions.source column missing; falling back to "
                         "v3 INSERT shape"
@@ -886,7 +921,7 @@ def _commit_parsed(
                             score, scope, context_json
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                        [row[:-1] for row in parsed.extraction_rows],
+                        [row[:-2] for row in parsed.extraction_rows],
                     )
                 else:
                     raise

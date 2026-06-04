@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from index.paths import project_key
+
 if TYPE_CHECKING:  # pragma: no cover
     from .embed import Embedder
 
@@ -450,8 +452,10 @@ def vec_search(
     """
     params: list[object] = [qvec, over]
     if cwd is not None:
-        sql += " AND e.cwd = ?"
-        params.append(cwd)
+        # Pool worktree checkouts under their owning repo root (see
+        # index.paths.project_key) so dense recall matches the FTS leg.
+        sql += " AND e.project_key = ?"
+        params.append(project_key(cwd))
     sql += " ORDER BY v.distance"
 
     cur = conn.execute(sql, params)

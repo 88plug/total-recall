@@ -98,7 +98,7 @@ def connect(
     return conn
 
 
-_CURRENT_SCHEMA_VERSION = "4"
+_CURRENT_SCHEMA_VERSION = "5"
 
 
 def _read_schema_version(conn: sqlite3.Connection) -> str | None:
@@ -200,6 +200,72 @@ def _migrate_to_v4(conn: sqlite3.Connection) -> None:
         pass
 
 
+# Backfill CASE: collapse worktree cwd to its owning repo root. Mirrors
+# index.paths.project_key so the SQL backfill and the Python runtime agree.
+_PROJECT_KEY_CASE = (
+    "CASE "
+    "WHEN instr(cwd, '/.claude/worktrees/') > 0 "
+    "THEN substr(cwd, 1, instr(cwd, '/.claude/worktrees/') - 1) "
+    "WHEN instr(cwd, '/.worktrees/') > 0 "
+    "THEN substr(cwd, 1, instr(cwd, '/.worktrees/') - 1) "
+    "ELSE cwd END"
+)
+
+
+def _migrate_to_v5(conn: sqlite3.Connection) -> None:
+    """Idempotent v* → v5 migration.
+
+    Adds a ``project_key`` column to ``messages`` and ``extractions`` and
+    backfills it by collapsing worktree ``cwd`` values to their owning repo
+    root (see :func:`index.paths.project_key`). Safe to run repeatedly: each
+    ALTER is guarded by a ``PRAGMA table_info`` check and the backfill UPDATE
+    is deterministic, so a second run leaves the rows unchanged.
+    """
+    # Backfill is scoped to NULL rows only. Two reasons: (1) it keeps the
+    # migration idempotent without re-touching already-canonical rows, and
+    # (2) a blanket UPDATE on ``messages`` fires the ``messages_au`` FTS-sync
+    # trigger for every row, which issues an FTS ``'delete'`` against the
+    # contentless index for rows the index never saw (legacy rows inserted
+    # before the triggers existed) — corrupting it. Restricting to NULL means
+    # we touch each row exactly once, when it first gains the column.
+    # The backfill UPDATE runs only on the ALTER (column just added). Re-runs
+    # against an already-migrated DB skip it entirely — both because there is
+    # nothing to do and because a blanket UPDATE on ``messages`` fires the
+    # ``messages_au`` FTS-sync trigger, which is unsafe when the contentless
+    # FTS index is out of sync with the base table (legacy rows the index
+    # never saw). Gating on the ALTER keeps the write to exactly one pass.
+    msg_cols = _table_columns(conn, "messages")
+    if msg_cols and "project_key" not in msg_cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN project_key TEXT")
+        conn.execute(f"UPDATE messages SET project_key = {_PROJECT_KEY_CASE}")
+    if msg_cols:
+        try:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_messages_project_key_ts "
+                "ON messages(project_key, ts DESC)"
+            )
+        except sqlite3.OperationalError:
+            pass
+
+    ext_cols = _table_columns(conn, "extractions")
+    if ext_cols and "project_key" not in ext_cols:
+        conn.execute("ALTER TABLE extractions ADD COLUMN project_key TEXT")
+        conn.execute(f"UPDATE extractions SET project_key = {_PROJECT_KEY_CASE}")
+    if ext_cols:
+        try:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_extractions_project_key_kind "
+                "ON extractions(project_key, kind, ts DESC)"
+            )
+        except sqlite3.OperationalError:
+            pass
+
+    try:
+        conn.execute("ANALYZE")
+    except sqlite3.DatabaseError:
+        pass
+
+
 def apply_schema(conn: sqlite3.Connection) -> None:
     """Run ``schema.sql`` against ``conn``, then run any pending migrations.
 
@@ -223,29 +289,33 @@ def apply_schema(conn: sqlite3.Connection) -> None:
     # references a column the ALTER TABLE migration hasn't added yet, so the
     # executescript will error halfway through. Detect that case and skip the
     # whole-script path; the migration plus a re-run will fill in the rest.
-    pre_v4 = False
+    pre_migrate = False
     msg_cols = _table_columns(conn, "messages")
-    if msg_cols and "source" not in msg_cols:
-        pre_v4 = True
+    if msg_cols and ("source" not in msg_cols or "project_key" not in msg_cols):
+        pre_migrate = True
     ext_cols = _table_columns(conn, "extractions")
-    if ext_cols and "source" not in ext_cols:
-        pre_v4 = True
+    if ext_cols and ("source" not in ext_cols or "project_key" not in ext_cols):
+        pre_migrate = True
 
-    if pre_v4:
-        # Run the migration FIRST so the columns exist, then re-execute the
-        # full script so any new tables / indexes / triggers get created.
+    if pre_migrate:
+        # Run the migrations FIRST so the columns exist, then re-execute the
+        # full script so any new tables / indexes / triggers get created. The
+        # in-script CREATE INDEX statements reference columns the migrations
+        # add (``source``, ``project_key``), so they must precede the script.
         _migrate_to_v4(conn)
+        _migrate_to_v5(conn)
         conn.executescript(sql)
     else:
         conn.executescript(sql)
-        # Still call the migration on a fresh DB — it's a no-op when columns
-        # already exist, and catches any partially-upgraded states.
+        # Still call the migrations on a fresh DB — no-ops when columns
+        # already exist, and they catch any partially-upgraded states.
         _migrate_to_v4(conn)
+        _migrate_to_v5(conn)
 
     current = _read_schema_version(conn)
     if current == _CURRENT_SCHEMA_VERSION:
         return
-    if current in ("1", "2", "3"):
+    if current in ("1", "2", "3", "4"):
         # Earlier versions: the executescript above CREATE-IF-NOT-EXISTS'd
         # new tables (v2 metrics) and the migration added v4 columns. The
         # INSERT OR IGNORE in the script left the row at its old value, so

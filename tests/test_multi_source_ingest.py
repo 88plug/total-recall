@@ -287,14 +287,14 @@ def test_schema_v3_to_v4_migration(tmp_path: Path) -> None:
         ver = c.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         ).fetchone()
-        assert ver["value"] == "4"
+        assert ver["value"] == "5"
 
         # Re-applying must be a no-op.
         apply_schema(c)
         ver2 = c.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         ).fetchone()
-        assert ver2["value"] == "4"
+        assert ver2["value"] == "5"
         # Row count unchanged.
         assert c.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1
     finally:

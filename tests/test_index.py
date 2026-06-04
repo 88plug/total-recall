@@ -28,6 +28,7 @@ from index import db as index_db  # noqa: E402
 from index import ingest as index_ingest  # noqa: E402
 from index import query as index_query  # noqa: E402
 from index.db import apply_schema, connect  # noqa: E402
+from index.paths import project_key
 from index.ingest import IngestReport, ingest_file  # noqa: E402
 from index.query import (  # noqa: E402
     get_session_meta,
@@ -72,12 +73,14 @@ def _insert_message(
         """
         INSERT INTO messages(
             session_id, cwd, git_branch, role, kind, ts,
-            parent_uuid, message_uuid, byte_offset, source_file, text, raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            parent_uuid, message_uuid, byte_offset, source_file, text, raw_json,
+            project_key
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             session_id, cwd, git_branch, role, kind, ts,
             parent_uuid, uuid, byte_offset, source_file, text, None,
+            project_key(cwd),
         ),
     )
     return int(cur.lastrowid or 0)
@@ -100,12 +103,12 @@ def _insert_extraction(
         """
         INSERT INTO extractions(
             kind, content, session_id, cwd, ts, source_uuid,
-            score, scope, context_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            score, scope, context_json, project_key
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             kind, content, session_id, cwd, ts, source_uuid, score, scope,
-            json.dumps(context or {}),
+            json.dumps(context or {}), project_key(cwd),
         ),
     )
     return int(cur.lastrowid or 0)
@@ -137,7 +140,7 @@ def test_apply_schema_is_idempotent(tmp_path: Path) -> None:
         "SELECT value FROM schema_meta WHERE key = 'schema_version'"
     ).fetchall()
     assert len(rows) == 1
-    assert rows[0]["value"] == "4"
+    assert rows[0]["value"] == "5"
     c.close()
 
 
@@ -623,7 +626,7 @@ def test_schema_v2_creates_turns_compactions_ingest_runs(tmp_path: Path) -> None
         ver = c.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         ).fetchone()
-        assert ver is not None and ver["value"] == "4"
+        assert ver is not None and ver["value"] == "5"
     finally:
         c.close()
 
@@ -656,7 +659,7 @@ def test_schema_migration_v1_to_v2(tmp_path: Path) -> None:
         ver = c.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         ).fetchone()
-        assert ver is not None and ver["value"] == "4"
+        assert ver is not None and ver["value"] == "5"
     finally:
         c.close()
 

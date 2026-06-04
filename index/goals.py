@@ -20,10 +20,11 @@ Design notes:
   is meant to be called once per ingest pass (so a long-paused goal
   appears as ``paused`` even if no new records mention it). Tests use a
   ``now_ts`` parameter to drive a clock fixture.
-* ``project`` stores the raw ``cwd`` from the source record. Worktree
-  normalization (mapping ``…/repo-wt-foo`` back to ``…/repo``) happens
-  outside this module — at the point we have a ``cwd``, it's already
-  canonical from the caller's perspective.
+* ``project`` stores the worktree-collapsed project root (see
+  :func:`index.paths.project_key`). Normalization happens *here*: writes
+  via :func:`upsert_from_extractions` and reads via
+  :func:`get_active_goal` / :func:`list_goals` all pass ``cwd`` through
+  ``project_key`` so worktree checkouts pool under their owning repo.
 """
 
 from __future__ import annotations
@@ -34,6 +35,8 @@ import sqlite3
 import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable
+
+from index.paths import project_key
 
 log = logging.getLogger(__name__)
 
@@ -82,9 +85,44 @@ PAUSED_DAYS = 30
 ABANDONED_DAYS = 60
 
 
+_PROJECT_KEY_CASE = (
+    "CASE "
+    "WHEN instr(project, '/.claude/worktrees/') > 0 "
+    "THEN substr(project, 1, instr(project, '/.claude/worktrees/') - 1) "
+    "WHEN instr(project, '/.worktrees/') > 0 "
+    "THEN substr(project, 1, instr(project, '/.worktrees/') - 1) "
+    "ELSE project END"
+)
+
+
 def apply_schema(conn: sqlite3.Connection) -> None:
-    """Create ``goal_stack`` + its indexes if not present. Idempotent."""
+    """Create ``goal_stack`` + its indexes if not present. Idempotent.
+
+    Also runs a one-time, idempotent backfill that collapses any legacy
+    worktree ``project`` values to their owning repo root so reads pool
+    correctly. The UPDATE is deterministic, so re-running is a no-op once
+    the projects are already canonical.
+    """
     conn.executescript(GOAL_STACK_SCHEMA)
+    # One-time, idempotent backfill: collapse any legacy worktree ``project``
+    # to its owning repo root. Guarded by a cheap existence probe so the common
+    # case (already-canonical rows) takes no write lock at all — important
+    # because this runs on every open and a blanket UPDATE would otherwise
+    # contend with concurrent readers/writers on the same DB file.
+    try:
+        needs = conn.execute(
+            f"SELECT 1 FROM goal_stack WHERE project <> ({_PROJECT_KEY_CASE}) "
+            "LIMIT 1"
+        ).fetchone()
+        if needs is not None:
+            conn.execute(
+                f"UPDATE goal_stack SET project = {_PROJECT_KEY_CASE} "
+                f"WHERE project <> ({_PROJECT_KEY_CASE})"
+            )
+    except sqlite3.OperationalError:
+        # Table may not exist yet on a brand-new conn that bypassed the
+        # executescript above; the CREATE is idempotent so this is defensive.
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +242,7 @@ def upsert_from_extractions(
         kind = getattr(ext, "kind", None)
         if kind not in ("goal", "goal_progress"):
             continue
-        cwd = getattr(ext, "cwd", None)
+        cwd = project_key(getattr(ext, "cwd", None))
         if not cwd:
             continue
         ts = _ts_int(getattr(ext, "ts", None))
@@ -398,7 +436,7 @@ def get_active_goal(
                   declared_ts DESC
          LIMIT 1
         """,
-        (project,),
+        (project_key(project),),
     ).fetchone()
     if row is None:
         return None
@@ -430,7 +468,7 @@ def list_goals(
     params: list[Any] = []
     if project is not None:
         sql += " AND project = ?"
-        params.append(project)
+        params.append(project_key(project))
     if status != "any":
         sql += " AND status = ?"
         params.append(status)

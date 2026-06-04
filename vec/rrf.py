@@ -12,6 +12,8 @@ import logging
 import sqlite3
 from typing import Any, Callable
 
+from index.paths import project_key
+
 log = logging.getLogger(__name__)
 
 
@@ -220,8 +222,8 @@ def _inline_fts_search(
     )
     params: list[object] = [query]
     if cwd is not None:
-        sql += " AND e.cwd = ?"
-        params.append(cwd)
+        sql += " AND e.project_key = ?"
+        params.append(project_key(cwd))
     if kind is not None:
         sql += " AND e.kind = ?"
         params.append(kind)

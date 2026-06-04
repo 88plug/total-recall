@@ -1,4 +1,4 @@
--- total-recall SQLite schema (v4).
+-- total-recall SQLite schema (v5).
 --
 -- Design notes:
 --   * messages          — one row per parsed JSONL record (assistant/user/...).
@@ -57,7 +57,10 @@ CREATE TABLE IF NOT EXISTS messages (
     -- CREATE; pre-v4 DBs get them via the ALTER TABLE migration in
     -- ``index/db.py::apply_schema``.
     source        TEXT    NOT NULL DEFAULT 'claude_code',
-    dedup_superseded_by_source TEXT
+    dedup_superseded_by_source TEXT,
+    -- v5: worktree-collapsed project root for pooling. Fresh installs get it
+    -- here; pre-v5 DBs get it via _migrate_to_v5 (ALTER + backfill).
+    project_key   TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_cwd_ts     ON messages(cwd, ts DESC);
@@ -65,6 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_session    ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_kind_ts    ON messages(kind, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_source     ON messages(source_file, byte_offset);
 CREATE INDEX IF NOT EXISTS idx_messages_source_cwd_ts ON messages(source, cwd, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_project_key_ts ON messages(project_key, ts DESC);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
     text,
@@ -105,6 +109,8 @@ CREATE TABLE IF NOT EXISTS extractions (
     -- messages.
     source       TEXT    NOT NULL DEFAULT 'claude_code',
     dedup_superseded_by_source TEXT,
+    -- v5: worktree-collapsed project root for pooling (see messages.project_key).
+    project_key  TEXT,
     UNIQUE(kind, source_uuid)
 );
 
@@ -113,6 +119,7 @@ CREATE INDEX IF NOT EXISTS idx_extractions_session      ON extractions(session_i
 CREATE INDEX IF NOT EXISTS idx_extractions_scope_score  ON extractions(scope, score DESC);
 CREATE INDEX IF NOT EXISTS idx_extractions_kind_ts      ON extractions(kind, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_extractions_source_kind  ON extractions(source, kind, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_extractions_project_key_kind ON extractions(project_key, kind, ts DESC);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS extractions_fts USING fts5(
     content,
@@ -207,7 +214,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-INSERT OR IGNORE INTO schema_meta(key, value) VALUES ('schema_version', '4');
+INSERT OR IGNORE INTO schema_meta(key, value) VALUES ('schema_version', '5');
 
 -- Operator-aware extractor tables (v0.13.5).
 -- These are also created on first write by their owning modules' ensure_schema

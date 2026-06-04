@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from index.paths import project_key
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -284,6 +286,7 @@ def search_extractions(
     scope: str | None = None,
     since: datetime | None = None,
     limit: int = 10,
+    exact_cwd: bool = False,
 ) -> list[QueryHit]:
     """Search the ``extractions`` table.
 
@@ -296,8 +299,14 @@ def search_extractions(
     params: list[Any] = []
 
     if cwd is not None:
-        where.append("e.cwd = ?")
-        params.append(cwd)
+        # Pool worktree checkouts under their owning repo root unless the
+        # caller explicitly asked for per-worktree precision (exact_cwd).
+        if exact_cwd:
+            where.append("e.cwd = ?")
+            params.append(cwd)
+        else:
+            where.append("e.project_key = ?")
+            params.append(project_key(cwd))
     if kind is not None:
         where.append("e.kind = ?")
         params.append(kind)
@@ -385,6 +394,7 @@ def search_messages(
     cwd: str | None = None,
     role: str | None = None,
     limit: int = 20,
+    exact_cwd: bool = False,
 ) -> list[dict[str, Any]]:
     """Raw-message FTS5 search.
 
@@ -407,8 +417,12 @@ def search_messages(
     """
     params: list[Any] = [match]
     if cwd is not None:
-        sql += " AND m.cwd = ?"
-        params.append(cwd)
+        if exact_cwd:
+            sql += " AND m.cwd = ?"
+            params.append(cwd)
+        else:
+            sql += " AND m.project_key = ?"
+            params.append(project_key(cwd))
     if role is not None:
         sql += " AND m.role = ?"
         params.append(role)
@@ -441,12 +455,12 @@ def top_topics_for_cwd(
         """
         SELECT content
           FROM extractions
-         WHERE cwd = ?
+         WHERE project_key = ?
          GROUP BY content
          ORDER BY MAX(score) DESC, MAX(ts) DESC
          LIMIT ?
         """,
-        (cwd, limit),
+        (project_key(cwd), limit),
     )
     return [row["content"] for row in cur.fetchall()]
 
@@ -454,8 +468,9 @@ def top_topics_for_cwd(
 def session_count_for_cwd(conn: sqlite3.Connection, cwd: str) -> int:
     """Count distinct sessions known for a cwd."""
     cur = conn.execute(
-        "SELECT COUNT(DISTINCT session_id) AS n FROM messages WHERE cwd = ?",
-        (cwd,),
+        "SELECT COUNT(DISTINCT session_id) AS n FROM messages "
+        "WHERE project_key = ?",
+        (project_key(cwd),),
     )
     row = cur.fetchone()
     return int(row["n"]) if row else 0
@@ -485,12 +500,12 @@ def list_sessions_for_cwd(
                  ORDER BY m2.ts DESC
                  LIMIT 1) AS ai_title
           FROM messages m
-         WHERE m.cwd = ?
+         WHERE m.project_key = ?
          GROUP BY m.session_id
          ORDER BY last_ts DESC
          LIMIT ?
         """,
-        (cwd, limit),
+        (project_key(cwd), limit),
     )
     out: list[dict[str, Any]] = []
     for row in cur.fetchall():
