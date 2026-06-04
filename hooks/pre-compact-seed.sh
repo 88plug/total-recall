@@ -34,6 +34,7 @@ CWD="$(recall::field cwd)"
 [ -n "$CWD" ] || CWD="${CLAUDE_PROJECT_DIR:-${PWD:-/unknown}}"
 SESSION_ID="$(recall::field session_id)"
 TRIGGER="$(recall::field trigger)"
+TRANSCRIPT="$(recall::field transcript_path)"
 
 if ! recall::has_jq || ! recall::has_py; then
   recall::log "pre-compact-seed: missing jq or python3; skipping"
@@ -96,19 +97,103 @@ else
   CTX="$("$RECALL_PY" -c "$PY_SNIPPET" -- "$CWD" 2>/dev/null || true)"
 fi
 
-if [ -z "${CTX// }" ]; then
+if [ -z "${CTX// }" ] && { [ -z "${TRANSCRIPT:-}" ] || [ ! -f "${TRANSCRIPT:-}" ]; }; then
   recall::log "pre-compact-seed: no context to seed (cwd=$CWD)"
   recall::log_json hook.pre_compact elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="$EMITTED" trigger="$TRIGGER"
   exit 0
 fi
 
+# --- Continuation packet (in-flight + durable state) ---------------------
+# A second, transcript-derived lane: open files, last actions, the pending
+# plan, the last directive, plus durable index state (active goal, decisions,
+# failed attempts). Built by hooks/lib/build_packet.py. Every step below is
+# optional and graceful — a failure here must never block compaction.
+PACKET_JSON=""
+PACKET_RENDER=""
+if [ -n "${TRANSCRIPT:-}" ] && [ -f "$TRANSCRIPT" ]; then
+  DB_PATH="${RECALL_DATA_ROOT}/index.db"
+  if command -v timeout >/dev/null 2>&1; then
+    PACKET_JSON="$(timeout 4s "$RECALL_PY" "$HOOK_DIR/lib/build_packet.py" \
+      --transcript "$TRANSCRIPT" --session "$SESSION_ID" --cwd "$CWD" \
+      --db "$DB_PATH" --max-chars 2000 2>/dev/null || true)"
+  else
+    PACKET_JSON="$("$RECALL_PY" "$HOOK_DIR/lib/build_packet.py" \
+      --transcript "$TRANSCRIPT" --session "$SESSION_ID" --cwd "$CWD" \
+      --db "$DB_PATH" --max-chars 2000 2>/dev/null || true)"
+  fi
+fi
+
+if [ -n "${PACKET_JSON// }" ]; then
+  # (b) Persist the packet to the session-state dir as
+  #     <session_id>.continuation.json so post-compact-recovery + the
+  #     SessionStart restore hook can find it deterministically.
+  STATE_KEY="${SESSION_ID:-$(recall::cwd_slug "$CWD")}"
+  STATE_DIR="${RECALL_DATA_ROOT}/sessions"
+  if mkdir -p "$STATE_DIR" 2>/dev/null; then
+    CONT_FILE="${STATE_DIR}/${STATE_KEY}.continuation.json"
+    TMP_CONT="${CONT_FILE}.tmp.$$"
+    printf '%s' "$PACKET_JSON" > "$TMP_CONT" 2>/dev/null \
+      && mv "$TMP_CONT" "$CONT_FILE" 2>/dev/null \
+      || rm -f "$TMP_CONT" 2>/dev/null
+  fi
+
+  # (d) Drop a single overwriteable memory markdown so Claude Code re-attaches
+  #     the in-flight state automatically post-compaction. Only when the
+  #     project's memory dir already exists (we never create it).
+  MEM_SLUG="$(recall::cwd_slug "$CWD")"
+  MEM_DIR="${HOME}/.claude/projects/${MEM_SLUG}/memory"
+  if [ -d "$MEM_DIR" ]; then
+    {
+      printf '%s\n\n' '# total-recall continuation (auto-generated)'
+      printf '%s\n\n' '_Last in-flight + durable state captured at compaction. Overwritten each compaction; safe to delete._'
+      printf '```json\n%s\n```\n' "$PACKET_JSON"
+    } > "${MEM_DIR}/total-recall-continuation.md" 2>/dev/null || true
+  fi
+
+  # (c) Render the packet for inclusion in the PRESERVE-VERBATIM block.
+  PACKET_RENDER="$(printf '%s' "$PACKET_JSON" | "$RECALL_PY" -c '
+import json, sys
+sys.path.append(__import__("os").environ.get("CLAUDE_PLUGIN_ROOT",""))
+try:
+    from extractors.continuation_packet import render_continuation_packet
+    data = json.loads(sys.stdin.read() or "{}")
+    out = render_continuation_packet(data, max_chars=4000)
+    if out:
+        sys.stdout.write(out)
+except Exception:
+    pass
+' 2>/dev/null || true)"
+fi
+
 # Wrap the JSON payload in a short marker so the summarizer recognizes this
 # block as durable operator state and PRESERVES it verbatim in the summary
-# (rather than paraphrasing it into uselessness).
-SEED_TEXT=$(printf '%s\n%s\n%s\n' \
-  '[total-recall] OPERATOR CONTEXT — PRESERVE VERBATIM IN POST-COMPACT SUMMARY:' \
-  "$CTX" \
-  '[total-recall] END OPERATOR CONTEXT')
+# (rather than paraphrasing it into uselessness). The continuation packet
+# rides inside the same marker block when present.
+SEED_TEXT=""
+if [ -n "${CTX// }" ]; then
+  SEED_TEXT=$(printf '%s\n%s\n%s\n' \
+    '[total-recall] OPERATOR CONTEXT — PRESERVE VERBATIM IN POST-COMPACT SUMMARY:' \
+    "$CTX" \
+    '[total-recall] END OPERATOR CONTEXT')
+fi
+if [ -n "${PACKET_RENDER// }" ]; then
+  CONT_BLOCK=$(printf '%s\n%s\n%s\n' \
+    '[total-recall] CONTINUATION (in-flight state) — PRESERVE VERBATIM:' \
+    "$PACKET_RENDER" \
+    '[total-recall] END CONTINUATION')
+  if [ -n "$SEED_TEXT" ]; then
+    SEED_TEXT="${SEED_TEXT}"$'\n\n'"${CONT_BLOCK}"
+  else
+    SEED_TEXT="$CONT_BLOCK"
+  fi
+fi
+
+# Both lanes empty (operator context AND packet) -> nothing to seed.
+if [ -z "${SEED_TEXT// }" ]; then
+  recall::log "pre-compact-seed: nothing to seed after packet build (cwd=$CWD)"
+  recall::log_json hook.pre_compact elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="$EMITTED" trigger="$TRIGGER"
+  exit 0
+fi
 
 recall::emit_context "$SEED_TEXT" "PreCompact" || {
   recall::log "pre-compact-seed: emit failed (cwd=$CWD)"
