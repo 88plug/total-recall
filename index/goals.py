@@ -48,6 +48,7 @@ __all__ = [
     "upsert_from_extractions",
     "recompute_statuses",
     "get_active_goal",
+    "get_active_goal_for_cwd",
     "list_goals",
     # Constants exposed for tests + callers.
     "PAUSED_DAYS",
@@ -441,6 +442,21 @@ def get_active_goal(
     if row is None:
         return None
     return GoalRow.from_row(row)
+
+
+def get_active_goal_for_cwd(
+    conn: sqlite3.Connection,
+    cwd: str | None,
+) -> GoalRow | None:
+    """Active goal for ``cwd``, pooling worktree checkouts to their repo root.
+
+    Thin wrapper over :func:`get_active_goal` that maps a (possibly worktree)
+    ``cwd`` to its owning project via :func:`index.paths.project_key`. Returns
+    ``None`` when ``cwd`` is ``None`` or no active/blocked goal exists.
+    """
+    if cwd is None:
+        return None
+    return get_active_goal(conn, project_key(cwd))
 
 
 def list_goals(

@@ -31,6 +31,8 @@ import sqlite3
 import time
 from typing import Any
 
+from index.paths import project_key
+
 __all__ = [
     "SCHEMA_SQL",
     "ensure_schema",
@@ -38,6 +40,7 @@ __all__ = [
     "mark_reversed",
     "list_decisions",
     "get_for_topic",
+    "top_decisions_for_scope",
     "row_to_dict",
 ]
 
@@ -319,3 +322,58 @@ def get_for_topic(
         (topic,),
     ).fetchone()
     return row_to_dict(row)
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    """True if *name* is a table. Read paths use this instead of
+    :func:`ensure_schema` so a mode=ro connection never trips
+    ``attempt to write a readonly database``."""
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            (name,),
+        ).fetchone()
+        return row is not None
+    except sqlite3.Error:
+        return False
+
+
+def top_decisions_for_scope(
+    conn: sqlite3.Connection,
+    cwd: str | None = None,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Top active standing decisions for ``cwd``'s project scope.
+
+    Mirrors :func:`get_for_topic`'s cascade, applied at the list level: prefer
+    rows whose ``scope`` equals the worktree-collapsed project root (see
+    :func:`index.paths.project_key`); if that yields nothing, fall back to
+    ``scope='global'`` rows; if still empty, return the strongest decisions of
+    any scope. Reversed decisions are excluded. Ordered by ``assertion_count``
+    then recency. Read-only safe (no schema write).
+    """
+    if not _table_exists(conn, "standing_decisions"):
+        return []
+    scope = project_key(cwd)
+
+    def _query(where_extra: str, params: tuple) -> list[dict[str, Any]]:
+        rows = conn.execute(
+            f"""
+            SELECT * FROM standing_decisions
+             WHERE is_reversed = 0{where_extra}
+             ORDER BY assertion_count DESC,
+                      COALESCE(last_reasserted_ts, 0) DESC
+             LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        return [d for d in (row_to_dict(r) for r in rows) if d is not None]
+
+    if scope is not None:
+        rows = _query(" AND scope = ?", (scope, int(limit)))
+        if rows:
+            return rows
+    rows = _query(" AND scope = 'global'", (int(limit),))
+    if rows:
+        return rows
+    return _query("", (int(limit),))

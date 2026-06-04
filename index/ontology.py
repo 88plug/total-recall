@@ -39,6 +39,7 @@ __all__ = [
     "get_term",
     "list_projects",
     "list_machines",
+    "machines_for_cwd",
     "list_terms",
 ]
 
@@ -283,6 +284,45 @@ def list_machines(
             return out  # invalid regex — degrade to "no filter"
         out = [m for m in out if m and pat.search(m.get("hostname", ""))]
     return out  # type: ignore[return-value]
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    """True if *name* is a table. Read paths use this instead of
+    :func:`ensure_schema` so a mode=ro connection never trips
+    ``attempt to write a readonly database``."""
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            (name,),
+        ).fetchone()
+        return row is not None
+    except sqlite3.Error:
+        return False
+
+
+def machines_for_cwd(
+    conn: sqlite3.Connection,
+    cwd: str | None = None,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Most-recently-seen machines, newest first.
+
+    The ``machines`` table is not scoped to a ``cwd`` — the machine inventory
+    is operator-global. ``cwd`` is accepted for call-site symmetry with the
+    other operator-context collectors but ignored. Ordered by ``last_seen_ts``
+    descending. Read-only safe: an absent table yields ``[]``.
+    """
+    if not _table_exists(conn, "machines"):
+        return []
+    rows = conn.execute(
+        """
+        SELECT * FROM machines
+         ORDER BY COALESCE(last_seen_ts, 0) DESC, hostname ASC
+         LIMIT ?
+        """,
+        (max(0, int(limit)),),
+    ).fetchall()
+    return [m for m in (_row_to_machine(r) for r in rows) if m is not None]
 
 
 # ---------------------------------------------------------------------------

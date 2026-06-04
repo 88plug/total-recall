@@ -87,14 +87,25 @@ def _collect_active_goal(conn: sqlite3.Connection, cwd: str | None) -> dict[str,
     goal = get_active_goal_for_cwd(conn, cwd=cwd) if cwd else get_active_goal_for_cwd(conn)
     if not goal:
         return None
+    # The goals API returns a ``GoalRow`` dataclass (``.to_dict()`` →
+    # ``goal_text`` / ``project`` / ``status`` …); other callers may hand us a
+    # plain dict. Normalize both to a compact ``{goal, status, scope}`` shape
+    # the model can read, mapping ``goal_text`` → ``goal``.
+    if not isinstance(goal, dict) and hasattr(goal, "to_dict"):
+        goal = goal.to_dict()
     if isinstance(goal, dict):
-        # Trim to the most useful fields, in case the goals API returns a
-        # fully-hydrated row with provenance columns the model doesn't need.
-        return {
-            k: goal[k]
-            for k in ("goal", "summary", "scope", "ts", "cwd")
-            if k in goal and goal[k] is not None
-        } or goal
+        text = goal.get("goal") or goal.get("goal_text")
+        out: dict[str, Any] = {}
+        if text:
+            out["goal"] = text
+        for src, dst in (("status", "status"), ("scope", "scope"),
+                         ("project", "scope"), ("cwd", "cwd"),
+                         ("summary", "summary"),
+                         ("last_progress_ts", "ts"), ("ts", "ts")):
+            val = goal.get(src)
+            if val is not None and dst not in out:
+                out[dst] = val
+        return out or {"goal": str(goal)}
     return {"goal": str(goal)}
 
 

@@ -31,6 +31,7 @@ __all__ = [
     "upsert_ban",
     "upsert_failed_attempt",
     "check_banned",
+    "top_bans",
     "list_failed_attempts",
 ]
 
@@ -303,6 +304,62 @@ def check_banned(conn: sqlite3.Connection, thing: str) -> dict | None:
         "reassertion_count": best["reassertion_count"],
         "source_session": best["source_session"],
     }
+
+
+def top_bans(
+    conn: sqlite3.Connection,
+    cwd: str | None = None,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Strongest standing bans, newest first.
+
+    The ``bans`` table is not scoped to a ``cwd`` — bans are operator-global
+    (e.g. "never use provider X"). ``cwd`` is accepted for call-site symmetry
+    with the other operator-context collectors but ignored. Ordered by ban
+    strength (absolute > context > preference) then most-recently reasserted.
+    Read-only safe: an absent table means "no bans recorded".
+    """
+    if not _table_exists(conn, "bans"):
+        return []
+    rows = conn.execute(
+        """
+        SELECT banned_thing, category, ban_strength, ban_text,
+               context_clause, first_banned_ts, last_reasserted_ts,
+               reassertion_count, source_session
+          FROM bans
+        """
+    ).fetchall()
+    if not rows:
+        return []
+    strength_rank = {"absolute": 3, "context": 2, "preference": 1}
+    ordered = sorted(
+        rows,
+        key=lambda r: (
+            strength_rank.get(r["ban_strength"], 0),
+            r["last_reasserted_ts"] or 0,
+            r["reassertion_count"] or 0,
+        ),
+        reverse=True,
+    )
+    out: list[dict[str, Any]] = []
+    for r in ordered[: max(0, int(limit))]:
+        # Keys are chosen to match what the operator-context ``_collect_bans``
+        # collector projects (``target`` / ``kind`` / ``reason`` / ``severity``)
+        # while preserving the native ban vocabulary as a sibling for callers
+        # that want it. Bans are operator-global, so there is no per-cwd scope.
+        out.append(
+            {
+                "target": r["banned_thing"],
+                "kind": r["category"] or r["ban_strength"],
+                "reason": r["ban_text"],
+                "severity": r["ban_strength"],
+                "banned_thing": r["banned_thing"],
+                "ban_strength": r["ban_strength"],
+                "last_reasserted_ts": r["last_reasserted_ts"],
+                "reassertion_count": r["reassertion_count"],
+            }
+        )
+    return out
 
 
 def list_failed_attempts(
