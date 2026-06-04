@@ -5,7 +5,7 @@
 #   - pre-compact-seed emits a hookSpecificOutput envelope with hookEventName
 #     "PreCompact" and an additionalContext string that wraps the operator
 #     context JSON (so the summarizer preserves it verbatim)
-#   - post-compact-recovery writes ${RECALL_DATA_ROOT}/session_state/<sid>.json
+#   - post-compact-recovery writes ${RECALL_DATA_ROOT}/sessions/<sid>.json
 #     containing {"post_compact": true, ...}
 #   - both exit 0 on every error path, including missing DB
 #
@@ -185,7 +185,7 @@ else
   fail "post-compact-recovery" "expected empty stdout, got: $OUT"
 fi
 
-STATE_FILE="$RECALL_DATA_ROOT/session_state/sess-abc-123.json"
+STATE_FILE="$RECALL_DATA_ROOT/sessions/sess-abc-123.json"
 if [ -f "$STATE_FILE" ]; then
   ok "post-compact-recovery: wrote $STATE_FILE"
 else
@@ -220,8 +220,8 @@ fi
 # ---------------------------------------------------------------------------
 echo "[4] post-compact-recovery: merges existing state"
 
-mkdir -p "$RECALL_DATA_ROOT/session_state"
-EXISTING_FILE="$RECALL_DATA_ROOT/session_state/sess-merge.json"
+mkdir -p "$RECALL_DATA_ROOT/sessions"
+EXISTING_FILE="$RECALL_DATA_ROOT/sessions/sess-merge.json"
 cat > "$EXISTING_FILE" <<'JSON'
 {"injections_count": 3, "last_inject_ts": 1700000000.5, "post_compact": false}
 JSON
@@ -266,7 +266,7 @@ else
 fi
 
 # Should have fallen back to a cwd-slug key.
-SLUG_FILE="$RECALL_DATA_ROOT/session_state/-tmp-anonymous.json"
+SLUG_FILE="$RECALL_DATA_ROOT/sessions/-tmp-anonymous.json"
 if [ -f "$SLUG_FILE" ]; then
   ok "post-compact-recovery (no session_id): fell back to cwd-slug state file"
 else

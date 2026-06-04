@@ -15,8 +15,9 @@
 # Guarantees:
 #   - 5-second budget
 #   - exit 0 always
-#   - state file: ${RECALL_DATA_ROOT}/session_state/<session_id>.json
-#     (the convention SessionState consumers expect)
+#   - state file: ${RECALL_DATA_ROOT}/sessions/<session_id>.json
+#     (the path hooks/lib/session_state.py reads — sessions/, NOT
+#     session_state/, which no consumer ever reads from)
 
 set -uo pipefail
 
@@ -39,7 +40,7 @@ SESSION_ID="$(recall::field session_id)"
 # still want the flag to land *somewhere* so the next UserPromptSubmit can
 # read it.
 STATE_KEY="${SESSION_ID:-$(recall::cwd_slug "$CWD")}"
-STATE_DIR="${RECALL_DATA_ROOT}/session_state"
+STATE_DIR="${RECALL_DATA_ROOT}/sessions"
 STATE_FILE="${STATE_DIR}/${STATE_KEY}.json"
 
 mkdir -p "$STATE_DIR" 2>/dev/null || {
