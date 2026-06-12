@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-06-04
+
+### Added
+- Dense embedding model upgraded to `Alibaba-NLP/gte-modernbert-base` (768-d) for hybrid recall, chosen via a real-corpus bake-off (vs bge-small/granite-r2); auto-registered through fastembed `add_custom_model` with a ModernBERT `model_max_length` clamp.
+- Worktree memory pooling: new `index/paths.py::project_key` collapses `/.claude/worktrees/` and `/.worktrees/` cwds to the owning repo; schema **v5** adds an indexed `project_key` column to `messages`/`extractions`, recall scopes on it, and `exact_cwd=True` preserves precise per-worktree scope.
+- Compaction coding-continuity: `extractors/continuation_packet.py` builds an in-flight packet (active goal, last directive, files-in-flight, last actions, plan, next step) from the live transcript tail + index; a new `SessionStart` `compact` hook deterministically restores it after compaction (PreCompact persists it; UserPromptSubmit belt re-injects). Backtested over 61 real compaction boundaries: +3-6pp marginal file coverage, 0 regressions, ~51% post-compaction re-discovery preventable.
+- `scripts/backtest_compaction.py` continuation-packet eval harness.
+
+### Fixed
+- Goal extraction no longer emits every trivial session opener as a goal (the first-message heuristic now requires a substantive directive), de-noising the `goal` kind.
+- Machine extraction rejects UUID/hex-id fragments misdetected as hostnames.
+- Operator-context collectors (`get_active_goal_for_cwd`, `top_decisions_for_scope`, `top_bans`, `machines_for_cwd`) are implemented for real instead of silently no-oping, so the SessionStart bundle populates.
+- PostCompact recovery flag now writes to the directory the reader uses (`sessions/`), so post-compaction re-injection actually fires.
+- `cmd_rebuild` vec backfill uses the embedder's true dimension instead of a hardcoded 384.
+- `prior_sessions_for_cwd` gained the `this_cwd -> all_projects` fallback.
+
 ## [2.0.1] - 2026-06-01
 
 ### Changed — CI dependency bumps (dependabot)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "total-recall"
-version = "2.0.1"
+version = "2.1.0"
 description = "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 8 supported CLI clients; surfaces operator identity / decisions / bans / corrections via MCP."
 readme = "README.md"
 license = "LicenseRef-FSL-1.1-ALv2"
