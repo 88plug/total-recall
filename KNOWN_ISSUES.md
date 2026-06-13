@@ -35,14 +35,16 @@ to close that class of gap.
 
 ### Config / doc / LOW — fixed
 
-- ✅ `.mcp.json` `${CLAUDE_PLUGIN_ROOT:-.}` dev-checkout fallback. — **v0.13.0/.2**
+- ✅ `.mcp.json` dev-checkout fallback uses plain `${CLAUDE_PLUGIN_ROOT}`. — **v0.13.0/.2**
 - ✅ slash-command `--json` flag position (recall-status / recall-inspect). — doc batch
 - ✅ #7 dead doc link `docs/install/llm-refinement.md` → `docs/llm-refinement.md`.
 - ✅ #8 stale `gemma4:e2b` default refs → `qwen3.5:2b` (SKILL.md, pyproject).
 - ✅ #9 removed leftover executable `hooks/session-start-signpost-v1.sh.bak`.
 - ✅ #10 retargeted 2 perma-skipped `test_operator_context` tests to the real
   `session-start-signpost.sh` (now run + pass). — **v0.13.5**
-- ✅ #11 `hooks/hooks.json` uses `${CLAUDE_PLUGIN_ROOT:-.}` in all 6 paths. — **v0.13.5**
+- ✅ #11 `hooks/hooks.json` uses plain `${CLAUDE_PLUGIN_ROOT}` in all paths. — **v2.1.2**
+  (Manifest token expansion does NOT interpret bash `${VAR:-default}`; any
+  `:-default` fallback must live inside the shell scripts, not in the manifest.)
 - ✅ `marketplace-entry.json` version drift (0.9.0 → current). — **v0.13.x**
 
 ## Rejected — false positive

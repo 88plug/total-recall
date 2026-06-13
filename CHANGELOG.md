@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.2] - 2026-06-13
+
+### Fixed
+- `hooks/hooks.json`: all 7 hook command paths now use the plain `${CLAUDE_PLUGIN_ROOT}` token instead of the bash `${CLAUDE_PLUGIN_ROOT:-.}` default form. Claude Code's manifest variable expansion does not interpret `${VAR:-default}`, so the literal `:-.` was left in the resolved path and every hook (SessionStart signpost/compact-restore, UserPromptSubmit retrieval, Stop re-index, PreCompact seed, both PostCompact hooks) failed to launch. Any `:-default` fallback must live inside the shell scripts, not in the manifest.
+- Corrected KNOWN_ISSUES.md / CHANGELOG history that described the broken `${CLAUDE_PLUGIN_ROOT:-.}` form as an approved/retained pattern.
+
+### Changed
+- `author.email` set to the 88plug-convention `andrew@88plug.com`.
+
 ## [2.1.0] - 2026-06-04
 
 ### Added
@@ -313,8 +322,9 @@ log the bootstrap branch).
 - #10: retargeted the 2 permanently-skipped `test_operator_context` tests from
   the nonexistent `session-start-signpost-v2.sh` to the real
   `session-start-signpost.sh`. Both now run and pass (were silently skipping).
-- #11: `hooks/hooks.json` now uses `${CLAUDE_PLUGIN_ROOT:-.}` in all 6 command
-  paths, matching the `.mcp.json` defensive-default pattern.
+- #11: `hooks/hooks.json` now uses plain `${CLAUDE_PLUGIN_ROOT}` in all command
+  paths. (The earlier `${CLAUDE_PLUGIN_ROOT:-.}` form was wrong — manifest token
+  expansion does not interpret bash `${VAR:-default}`; corrected in v2.1.2.)
 
 ## [0.13.4] - 2026-05-30
 
@@ -389,7 +399,7 @@ CLI/plugin harness does.
   helped. Fixed to `force_full=False`.
 - `.mcp.json`: dropped a bad `TOTAL_RECALL_DB_DIR=${CLAUDE_PLUGIN_DATA:-./data}`
   default that pointed a dev checkout at a nonexistent `./data` and blocked the
-  server's own `~/.local/share` fallback. `${CLAUDE_PLUGIN_ROOT:-.}` retained.
+  server's own `~/.local/share` fallback. Plain `${CLAUDE_PLUGIN_ROOT}` retained.
 - `marketplace-entry.json` version corrected 0.9.0 → current (3-minor drift).
 
 ### Added — contract + consistency tests (guard the bug class)

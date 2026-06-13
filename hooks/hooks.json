@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT:-.}/hooks/session-start-signpost.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start-signpost.sh",
             "timeout": 5
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT:-.}/hooks/session-start-compact-restore.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start-compact-restore.sh",
             "timeout": 5
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT:-.}/hooks/user-prompt-retrieve.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-retrieve.sh",
             "timeout": 8,
             "async": true
           }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT:-.}/hooks/stop-index.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-index.sh",
             "timeout": 60,
             "async": true
           }
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT:-.}/hooks/pre-compact-seed.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact-seed.sh",
             "timeout": 5
           }
         ]
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT:-.}/hooks/post-compact-recovery.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-compact-recovery.sh",
             "timeout": 5
           }
         ]
@@ -72,7 +72,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT:-.}/hooks/post-compact-index.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-compact-index.sh",
             "timeout": 60,
             "async": true
           }
