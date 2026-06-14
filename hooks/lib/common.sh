@@ -192,6 +192,34 @@ recall::_install_uv() {
 # Cached result so multiple calls within one hook don't rerun the probe.
 RECALL_UV_CACHED=""
 
+# Extract the uv binary BUNDLED with the plugin (vendor/uv/uv-<target>.tar.gz) for
+# the current platform into the data dir, and echo its path. Lets first run work
+# fully OFFLINE on any supported machine. Returns nonzero if no matching bundle.
+recall::_uv_from_bundle() {
+  local root vend os arch libc target tb dest
+  root="$(recall::_plugin_root)"; vend="${root}/vendor/uv"
+  [ -d "$vend" ] || return 1
+  os="$(uname -s 2>/dev/null)"; arch="$(uname -m 2>/dev/null)"
+  case "$os" in
+    Linux)
+      case "$arch" in x86_64|amd64) arch=x86_64 ;; aarch64|arm64) arch=aarch64 ;; *) return 1 ;; esac
+      libc=gnu
+      if (ldd --version 2>&1 | grep -qi musl) || ls /lib/ld-musl-* >/dev/null 2>&1; then libc=musl; fi
+      target="${arch}-unknown-linux-${libc}" ;;
+    Darwin)
+      case "$arch" in x86_64) arch=x86_64 ;; arm64|aarch64) arch=aarch64 ;; *) return 1 ;; esac
+      target="${arch}-apple-darwin" ;;
+    *) return 1 ;;
+  esac
+  tb="${vend}/uv-${target}.tar.gz"
+  [ -f "$tb" ] || return 1
+  dest="${RECALL_DATA_ROOT}/bin"; mkdir -p "$dest" || return 1
+  tar xzf "$tb" --strip-components=1 -C "$dest" >/dev/null 2>&1 || return 1
+  chmod +x "$dest/uv" "$dest/uvx" 2>/dev/null || true
+  recall::_can_run_uv "$dest/uv" && { printf '%s' "$dest/uv"; return 0; }
+  return 1
+}
+
 recall::uv() {
   if [ -n "$RECALL_UV_CACHED" ]; then
     printf '%s' "$RECALL_UV_CACHED"
@@ -220,8 +248,25 @@ recall::uv() {
     return 0
   fi
 
+  # 3a. uv installed under the common user-level location but off the spawn PATH
+  # (e.g. ~/.local/bin not on Claude Code's MCP-spawn PATH — the wildnuc case).
+  if recall::_can_run_uv "${HOME}/.local/bin/uv"; then
+    RECALL_UV_CACHED="${HOME}/.local/bin/uv"
+    printf '%s' "$RECALL_UV_CACHED"
+    return 0
+  fi
+
+  # 3b. uv BUNDLED with the plugin (vendor/uv) — extract the matching platform's
+  # binary. Offline-capable; preferred over a network download.
+  local from_bundle
+  if from_bundle="$(recall::_uv_from_bundle)"; then
+    RECALL_UV_CACHED="$from_bundle"
+    printf '%s' "$RECALL_UV_CACHED"
+    return 0
+  fi
+
   # 4. Install uv on demand (one-time, then cached for the lifetime of the
-  # plugin's data dir — survives plugin updates).
+  # plugin's data dir — survives plugin updates). Last resort: needs network.
   if recall::_install_uv && recall::_can_run_uv "$bundled"; then
     RECALL_UV_CACHED="$bundled"
     printf '%s' "$RECALL_UV_CACHED"
