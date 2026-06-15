@@ -1,0 +1,35 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "total-recall",
+  "description": "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 8 supported CLI clients. Surfaces operator identity / decisions / bans / correc",
+  "owner": {
+    "name": "88plug",
+    "email": "andrew@88plug.com"
+  },
+  "plugins": [
+    {
+      "name": "total-recall",
+      "source": ".",
+      "displayName": "Total Recall",
+      "description": "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 8 supported CLI clients. Surfaces operator identity / decisions / bans / corrections / goals / voice via 26 MCP tools, 6 hooks (SessionStart signpost + SessionStart compact-restore + UserPromptSubmit retrieval + Stop/PostCompact re-index + PreCompact continuity-seed), 15 slash commands, and 3 skills. gte-modernbert hybrid recall; worktree-aware project scoping; post-compaction coding-continuity packet. Optional local-LLM refinement ([llm] extra, ollama, off by default). The operator becomes the source of truth; the model stops re-asking what they already told it.",
+      "author": {
+        "name": "88plug",
+        "email": "andrew@88plug.com"
+      },
+      "homepage": "https://github.com/88plug/total-recall",
+      "license": "FSL-1.1-ALv2",
+      "category": "productivity",
+      "tags": [
+        "type:plugin",
+        "memory",
+        "context",
+        "cross-session",
+        "cross-cli",
+        "operator-profile",
+        "mcp",
+        "hooks",
+        "data-mining"
+      ]
+    }
+  ]
+}
