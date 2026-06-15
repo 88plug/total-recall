@@ -53,10 +53,11 @@ def test_state_path_layout(plugin_data):
     assert mode == 0o700
 
 
-def test_state_path_creates_parents(plugin_data):
+def test_state_path_creates_parents(plugin_data, monkeypatch):
     # Even nested under a non-existent root, the function bootstraps.
     nested = plugin_data / "deeper" / "still"
-    os.environ["CLAUDE_PLUGIN_DATA"] = str(nested)
+    # monkeypatch (not os.environ[...]=) so this does not leak into later tests.
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(nested))
     p = ss.state_path("s1")
     assert p.parent.exists()
 

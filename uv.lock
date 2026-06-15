@@ -2399,6 +2399,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "twine" },
 ]
 llm = [
@@ -2421,6 +2422,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "sqlite-vec", marker = "extra == 'vec'", specifier = ">=0.1.6" },
+    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'dev'" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=4.0" },
 ]
 provides-extras = ["vec", "llm", "dev"]

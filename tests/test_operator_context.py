@@ -520,6 +520,11 @@ def test_signpost_v2_with_populated_db(tmp_path, monkeypatch):
     conn.close()
 
     env = os.environ.copy()
+    # Drop any ambient recall/plugin vars another test may have leaked into the
+    # process env, so this subprocess sees only what we set below (the hook reads
+    # several RECALL_*/CLAUDE_PLUGIN* vars; a stray one makes stdout non-hermetic).
+    for _k in [k for k in env if k.startswith(("RECALL_", "TOTAL_RECALL_", "CLAUDE_PLUGIN"))]:
+        del env[_k]
     env["CLAUDE_PLUGIN_DATA"] = str(tmp_path)
     env["TOTAL_RECALL_DB_DIR"] = str(db_dir)
     env["RECALL_FRESH_SIZE_THRESHOLD"] = "1024"  # 1 KB — our DB is bigger.
