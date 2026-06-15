@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write  # for PyPI trusted publishing
 
 jobs:
   build:
@@ -78,29 +77,6 @@ jobs:
         with:
           name: dist
           path: dist/
-
-  pypi-publish:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/total-recall
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: dist
-          path: dist/
-
-      - name: publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        # Uses trusted publishing — no PYPI_TOKEN needed.
-        # Configure the trusted publisher once at:
-        # https://pypi.org/manage/account/publishing/
-        # Manual fallback: set PYPI_API_TOKEN repo secret and add:
-        #   with:
-        #     password: ${{ secrets.PYPI_API_TOKEN }}
 
   github-release:
     needs: build
