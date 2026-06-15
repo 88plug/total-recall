@@ -528,6 +528,11 @@ def test_signpost_v2_with_populated_db(tmp_path, monkeypatch):
     env["CLAUDE_PLUGIN_DATA"] = str(tmp_path)
     env["TOTAL_RECALL_DB_DIR"] = str(db_dir)
     env["RECALL_FRESH_SIZE_THRESHOLD"] = "1024"  # 1 KB — our DB is bigger.
+    # Disable the orthogonal LLM-refinement notice: without ollama present (e.g.
+    # CI) the hook appends a human-readable "[total-recall] …" line to the
+    # context, which is valid behaviour but makes additionalContext non-JSON and
+    # would break the json.loads assertion below.
+    env["TOTAL_RECALL_LLM_PROVIDER"] = "none"
     env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{env.get('PYTHONPATH','')}"
 
     proc = subprocess.run(
