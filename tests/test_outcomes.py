@@ -21,8 +21,8 @@ from detector.outcomes import (
     all_trigger_stats,
     ensure_schema,
     evaluate_pending,
-    record_injection,
     recommend_threshold_adjustment,
+    record_injection,
     trigger_precision,
 )
 

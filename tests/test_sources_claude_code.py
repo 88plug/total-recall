@@ -17,11 +17,11 @@ from pathlib import Path
 
 import pytest
 
-from lib.jsonl_walker import DEFAULT_PROJECTS_ROOT, iter_records as cc_iter_records
+from lib.jsonl_walker import DEFAULT_PROJECTS_ROOT
+from lib.jsonl_walker import iter_records as cc_iter_records
 from lib.schema import AssistantRecord, PermissionModeRecord, UserRecord
 from lib.sources import SOURCES, SessionFile, all_sources, source_by_name
 from lib.sources.claude_code import ClaudeCodeSource
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -177,7 +177,7 @@ def test_iter_records_round_trips_via_walker(tmp_path: Path):
 
     # Same length, same offsets, same record uuids/types.
     assert len(via_adapter) == len(via_walker)
-    for (oa, ra), (ow, rw) in zip(via_adapter, via_walker):
+    for (oa, ra), (ow, rw) in zip(via_adapter, via_walker, strict=False):
         assert oa == ow
         assert ra.type == rw.type
         assert ra.uuid == rw.uuid

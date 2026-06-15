@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import pathlib
 import sys
-from typing import Optional
 
 import pytest
 
@@ -24,6 +23,7 @@ _REPO = pathlib.Path(__file__).resolve().parent.parent
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+import hooks.lib.scope_detect as _scope_detect_mod  # noqa: E402
 from hooks.lib.scope_detect import (  # noqa: E402
     PIVOT_REGEX,
     ScopeShift,
@@ -31,10 +31,7 @@ from hooks.lib.scope_detect import (  # noqa: E402
     dominant_scope,
     infer_scope,
     score_scopes,
-    _SCOPE_KEYWORDS_CACHE,
 )
-import hooks.lib.scope_detect as _scope_detect_mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers — inject a deterministic scope-keyword table for keyword tests

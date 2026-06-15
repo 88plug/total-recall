@@ -11,6 +11,7 @@ branch, and never raise into the FastMCP transport.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import sqlite3
@@ -60,9 +61,7 @@ def _ts_to_iso(value: Any) -> str | None:
 
 def _row_to_correction(row: Any) -> dict:
     """Coerce a sqlite row / mapping into the documented correction shape."""
-    if hasattr(row, "keys"):
-        d = {k: row[k] for k in row.keys()}
-    elif isinstance(row, dict):
+    if hasattr(row, "keys") or isinstance(row, dict):
         d = dict(row)
     else:
         try:
@@ -111,7 +110,12 @@ def recall_corrections_about(
     scope: Literal["this_cwd", "all_projects"] = "all_projects",
     limit: int = 10,
 ) -> list[dict]:
-    """Return past operator corrections matching a topic. Includes the rejected approach (what the model previously did that the operator pushed back on) so the current turn can avoid repeating it. HIGH-PRIORITY: call before suggesting any default provider, library, pattern, or approach the user might have previously rejected."""
+    (
+        "Return past operator corrections matching a topic. Includes the rejected approach "
+        "(what the model previously did that the operator pushed back on) so the current turn "
+        "can avoid repeating it. HIGH-PRIORITY: call before suggesting any default provider, "
+        "library, pattern, or approach the user might have previously rejected."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -139,15 +143,18 @@ def recall_corrections_about(
                 cwd=cwd_filter,
                 limit=limit,
             )
-            hits = [h for h in hits if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None)) == "model_correction"]
+            hits = [
+                h
+                for h in hits
+                if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None))
+                == "model_correction"
+            ]
     except Exception as e:
         log.exception("recall_corrections_about() failed")
         return [{"error": f"recall_corrections_about failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     out = [_row_to_correction(h) for h in hits]
     # Sort severity DESC then ts DESC. None-safe.
@@ -167,7 +174,10 @@ def get_recent_corrections(
     since_days: int = 30,
     limit: int = 5,
 ) -> list[dict]:
-    """Return recent operator corrections, useful at session start to know what the model has been doing wrong lately."""
+    (
+        "Return recent operator corrections, useful at session start to know what the model has "
+        "been doing wrong lately."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -195,7 +205,12 @@ def get_recent_corrections(
                 cwd=cwd,
                 limit=max(limit * 4, limit),
             )
-            hits = [h for h in hits if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None)) == "model_correction"]
+            hits = [
+                h
+                for h in hits
+                if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None))
+                == "model_correction"
+            ]
     except sqlite3.Error as e:
         log.exception("get_recent_corrections() sql failure")
         return [{"error": f"get_recent_corrections failed: {e!r}"}]
@@ -203,10 +218,8 @@ def get_recent_corrections(
         log.exception("get_recent_corrections() failed")
         return [{"error": f"get_recent_corrections failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     out: list[dict] = []
     for h in hits:

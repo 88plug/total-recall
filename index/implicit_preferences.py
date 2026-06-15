@@ -20,7 +20,7 @@ import sqlite3
 import time
 from typing import Any
 
-from extractors.implicit_preferences import ImplicitPreference, ImplicitPreferenceProfile
+from extractors.implicit_preferences import ImplicitPreferenceProfile
 
 __all__ = [
     "SCHEMA_SQL",
@@ -170,14 +170,14 @@ def get_implicit_preferences(
     result: list[dict[str, Any]] = []
     for row in rows:
         try:
-            d: dict[str, Any] = {k: row[k] for k in row.keys()}
+            d: dict[str, Any] = dict(row)
         except (TypeError, AttributeError):
             keys = [
                 "id", "category", "value", "confidence", "evidence_sessions",
                 "evidence_projects", "contradiction_count", "sample_phrases_json",
                 "first_seen_ts", "last_seen_ts", "updated_ts",
             ]
-            d = dict(zip(keys, row))
+            d = dict(zip(keys, row, strict=False))
         raw_phrases = d.pop("sample_phrases_json", "[]")
         try:
             d["sample_phrases"] = json.loads(raw_phrases) if raw_phrases else []

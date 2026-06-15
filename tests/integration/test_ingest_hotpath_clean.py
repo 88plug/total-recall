@@ -129,11 +129,15 @@ def _build_corpus(root: Path) -> Path:
         _ai_title_record("Dana's synth session A", _SESSION_A),
         _user_record("hi, i'm dana@synthcorp.example, starting fresh", _SESSION_A, "u-a1"),
         _assistant_record("Hello Dana! Let's get started.", _SESSION_A, "a-a1", "u-a1"),
-        _user_record("can you help me refactor the pipeline on novabox", _SESSION_A, "u-a2", "u-a1"),
+        _user_record(
+            "can you help me refactor the pipeline on novabox", _SESSION_A, "u-a2", "u-a1"
+        ),
         _assistant_record("Sure! What does the pipeline do?", _SESSION_A, "a-a2", "u-a2"),
         _user_record("keep it simple please — KISS always wins here", _SESSION_A, "u-a3", "u-a2"),
         _assistant_record("Understood. KISS principles applied.", _SESSION_A, "a-a3", "u-a3"),
-        _user_record("also stop adding comments unless truly necessary", _SESSION_A, "u-a4", "u-a3"),
+        _user_record(
+            "also stop adding comments unless truly necessary", _SESSION_A, "u-a4", "u-a3"
+        ),
         _assistant_record("Got it. No superfluous comments.", _SESSION_A, "a-a4", "u-a4"),
     ]
     _write_session(_SESSION_A, records_a)
@@ -143,8 +147,12 @@ def _build_corpus(root: Path) -> Path:
         _ai_title_record("Dana's synth session B", _SESSION_B),
         _user_record("dana@synthcorp.example checking in again", _SESSION_B, "u-b1"),
         _assistant_record("Welcome back!", _SESSION_B, "a-b1", "u-b1"),
-        _user_record("remind me: bias to action, verify before asserting", _SESSION_B, "u-b2", "u-b1"),
-        _assistant_record("Absolutely, those are your core principles.", _SESSION_B, "a-b2", "u-b2"),
+        _user_record(
+            "remind me: bias to action, verify before asserting", _SESSION_B, "u-b2", "u-b1"
+        ),
+        _assistant_record(
+            "Absolutely, those are your core principles.", _SESSION_B, "a-b2", "u-b2"
+        ),
     ]
     _write_session(_SESSION_B, records_b)
 
@@ -165,9 +173,9 @@ def test_ingest_hotpath_emits_no_incremental_warnings(tmp_path: pytest.TempPathF
     from index.db import connect
     from index.ingest import ingest_all
     from index.operator import get_profile
-    from index.workflow import get_workflow
     from index.satisfaction import get_satisfaction_summary
     from index.voice import get_voice
+    from index.workflow import get_workflow
 
     corpus_root = tmp_path / "projects"
     _build_corpus(corpus_root)

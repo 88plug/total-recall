@@ -23,7 +23,6 @@ from click.testing import CliRunner
 from total_recall import cmd_sources
 from total_recall.__main__ import cli
 
-
 # --------------------------------------------------------------------------- #
 # Fixtures
 # --------------------------------------------------------------------------- #

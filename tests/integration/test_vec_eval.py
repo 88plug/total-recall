@@ -84,9 +84,9 @@ def _precision_at_k(hits: list, target: str, k: int) -> float:
 
 
 def test_hybrid_not_worse_than_fts5_on_paraphrases(tmp_path, capsys) -> None:
+    from vec.embed import Embedder
     from vec.rrf import hybrid_search
     from vec.store import apply_vec_schema, backfill_all
-    from vec.embed import Embedder
 
     db = tmp_path / "eval.db"
     conn = connect(db)

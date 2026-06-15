@@ -27,15 +27,14 @@ from pathlib import Path
 import pytest
 
 from extractors.ontology import (
+    _UNIVERSAL_CLAUDE_CODE_TERMS,
     MachineRecord,
-    ProjectRecord,
     _extract_machines_from_text,
-    compute_co_mention_graph,
+    _looks_like_hex_id,
     extract_ontology,
     extract_ontology_from_records,
     mine_vocabulary,
     persist_ontology,
-    _UNIVERSAL_CLAUDE_CODE_TERMS,
 )
 from index.ontology import (
     bump_vocabulary_frequency,
@@ -47,7 +46,6 @@ from index.ontology import (
     upsert_project,
     upsert_vocabulary_term,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -89,7 +87,10 @@ def synthetic_projects_root(tmp_path: Path) -> Path:
                 "cwd": "/home/operator/acme-net",
                 "message": {
                     "role": "user",
-                    "content": "wire up acme-net-ctrl on host-alpha (192.168.50.42) and fan out via the relay fleet",
+                    "content": (
+                        "wire up acme-net-ctrl on host-alpha (192.168.50.42) "
+                        "and fan out via the relay fleet"
+                    ),
                 },
             },
             {
@@ -104,7 +105,10 @@ def synthetic_projects_root(tmp_path: Path) -> Path:
                     "content": [
                         {
                             "type": "text",
-                            "text": "Editing main.go and api.go on host-alpha. The RTX 3090 24GiB is up. Tailscale IP 100.64.0.10.",
+                            "text": (
+                                "Editing main.go and api.go on host-alpha. "
+                                "The RTX 3090 24GiB is up. Tailscale IP 100.64.0.10."
+                            ),
                         }
                     ],
                 },
@@ -731,7 +735,9 @@ def test_extract_ontology_from_records_record_objects() -> None:
             self.raw = raw
             self.type = raw["type"]
 
-    raw = _user_rec("sRec1", "opnsense opnsense opnsense wireguard wireguard wireguard host-beta (10.0.0.5)")
+    raw = _user_rec(
+        "sRec1", "opnsense opnsense opnsense wireguard wireguard wireguard host-beta (10.0.0.5)"
+    )
     # Three sessions, each with a FakeRecord carrying the same content.
     records = [FakeRecord({**raw, "sessionId": f"sRec{i}"}) for i in range(3)]
     snap = extract_ontology_from_records(records)
@@ -750,20 +756,16 @@ def test_extract_ontology_from_records_empty() -> None:
     assert len(snap.vocabulary) == len(_UNIVERSAL_CLAUDE_CODE_TERMS)
 
 
-import pytest as _pytest
-from extractors.ontology import _looks_like_hex_id as _lhi
-
-
-@_pytest.mark.parametrize("h", [
+@pytest.mark.parametrize("h", [
     "a013-4f1a-9a75-13c768f26f92", "a01d-5333afd7bc86",
     "a025ca8d7a59c5e9-iad", "deadbeef-cafe-1234", "5333afd7bc86",
 ])
 def test_hex_id_fragments_rejected_as_machines(h):
-    assert _lhi(h) is True
+    assert _looks_like_hex_id(h) is True
 
 
-@_pytest.mark.parametrize("h", [
+@pytest.mark.parametrize("h", [
     "relay-eu-west", "server-01", "db-prod", "wild-nuc", "host-01", "ap-southeast",
 ])
 def test_real_hostnames_not_hex_rejected(h):
-    assert _lhi(h) is False
+    assert _looks_like_hex_id(h) is False

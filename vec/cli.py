@@ -20,7 +20,6 @@ import sqlite3
 import sys
 from pathlib import Path
 
-
 DEFAULT_DB = Path(os.environ.get("TOTAL_RECALL_DB", "~/.claude/total-recall/index.db")).expanduser()
 
 
@@ -47,7 +46,7 @@ def _open_db(path: Path) -> sqlite3.Connection:
             )
         else:
             print(f"error: {msg}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
     return conn
 

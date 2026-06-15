@@ -12,6 +12,7 @@ sessions WHO is asking, this one tells them HOW that person talks.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -29,7 +30,11 @@ def _index_missing_error() -> dict[str, Any]:
 
 @mcp.tool()
 def get_voice_profile() -> dict:
-    """Return the operator's measured communication style — casing, brevity, profanity rate, signature typos, top first words. Use to match cadence in responses. Calling this AND following its rules eliminates the 'you sound like an AI' feel that prompts pushback."""
+    (
+        "Return the operator's measured communication style — casing, brevity, profanity rate, "
+        "signature typos, top first words. Use to match cadence in responses. Calling this AND "
+        "following its rules eliminates the 'you sound like an AI' feel that prompts pushback."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -62,10 +67,8 @@ def get_voice_profile() -> dict:
 
         return profile
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
 
 __all__ = ["get_voice_profile"]

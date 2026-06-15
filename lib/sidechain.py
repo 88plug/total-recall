@@ -27,7 +27,6 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Optional
 
 from lib.jsonl_walker import iter_records
 from lib.schema import Record, UserRecord
@@ -98,7 +97,7 @@ def load_subagent_meta(agent_jsonl: Path) -> dict:
 
 def _parent_tool_use_id_for_agent(
     parent_records: list[Record], agent_id: str
-) -> Optional[str]:
+) -> str | None:
     """Find the parent ``user`` tool_result whose ``toolUseResult.agentId``
     matches, and return its inner ``tool_use_id`` so callers can map back to
     the originating assistant ``tool_use`` block.

@@ -28,6 +28,7 @@ bias in mind.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -45,7 +46,8 @@ def _index_missing_error() -> dict[str, Any]:
 
 @mcp.tool()
 def get_satisfaction_profile() -> dict:
-    """Return the bidirectional satisfaction cross-tab: which assistant behaviors earn praise vs. frustration.
+    """Return the bidirectional satisfaction cross-tab: which assistant
+    behaviors earn praise vs. frustration.
 
     The matrix maps each reaction category (e.g. ``praise_quality``,
     ``frustration_verbosity``) to a dict of ``{ai_behavior: count}``.
@@ -84,10 +86,8 @@ def get_satisfaction_profile() -> dict:
 
         return summary
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
 
 __all__ = ["get_satisfaction_profile"]

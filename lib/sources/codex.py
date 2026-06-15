@@ -113,9 +113,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 from lib.schema import (
     AssistantRecord,
@@ -127,7 +128,6 @@ from lib.schema import (
     UserRecord,
 )
 from lib.sources.base import SOURCES, SessionFile, SessionSource
-
 
 DEFAULT_CODEX_HOME = Path("~/.codex").expanduser()
 
@@ -163,7 +163,7 @@ def _normalize_tokens(usage: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _parse_ts(raw: Any) -> Optional[datetime]:
+def _parse_ts(raw: Any) -> datetime | None:
     if not isinstance(raw, str):
         return None
     try:
@@ -223,11 +223,11 @@ class _ReplayState:
     """Mutable state threaded through one JSONL stream's translation."""
 
     def __init__(self) -> None:
-        self.session_id: Optional[str] = None
-        self.cwd: Optional[str] = None
-        self.model: Optional[str] = None
-        self.model_provider: Optional[str] = None
-        self.cli_version: Optional[str] = None
+        self.session_id: str | None = None
+        self.cwd: str | None = None
+        self.model: str | None = None
+        self.model_provider: str | None = None
+        self.cli_version: str | None = None
 
     def base(self, obj: dict[str, Any], byte_offset: int) -> dict[str, Any]:
         return dict(
@@ -285,10 +285,7 @@ def _translate_event_msg(
             # External-tagged: single key.
             for k, v in payload.items():
                 inner_kind = k
-                if isinstance(v, dict):
-                    inner_body = v
-                else:
-                    inner_body = {"value": v}
+                inner_body = v if isinstance(v, dict) else {"value": v}
                 break
 
     normalized = dict(inner_body)
@@ -362,10 +359,7 @@ def _translate_function_call(
         args = {"_raw": args}
     name = payload.get("name", "")
     ns = payload.get("namespace")
-    if isinstance(ns, str) and ns:
-        full_name = f"{ns}.{name}"
-    else:
-        full_name = name
+    full_name = f"{ns}.{name}" if isinstance(ns, str) and ns else name
     call_id = payload.get("call_id") or payload.get("id") or ""
     block = Block(
         type="tool_use",
@@ -489,7 +483,7 @@ def _translate_reasoning(
 
 def _translate_response_item(
     obj: dict[str, Any], payload: Any, state: _ReplayState, byte_offset: int
-) -> Optional[Record]:
+) -> Record | None:
     """Route on the inner tagged variant inside ``response_item.payload``."""
     if not isinstance(payload, dict):
         return None
@@ -568,7 +562,7 @@ class CodexSource(SessionSource):
 
     name = "codex"
 
-    def __init__(self, codex_home: Optional[Path] = None) -> None:
+    def __init__(self, codex_home: Path | None = None) -> None:
         if codex_home is not None:
             self.codex_home = Path(codex_home)
         else:
@@ -718,7 +712,7 @@ def _route(
 # ---------------------------------------------------------------------------
 
 
-def _session_id_from_filename(name: str) -> Optional[str]:
+def _session_id_from_filename(name: str) -> str | None:
     """Pull the thread UUID off the tail of ``rollout-<ts>-<uuid>.jsonl``.
 
     Returns ``None`` if the name doesn't match the expected pattern. UUIDs

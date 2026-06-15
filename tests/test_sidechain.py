@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from lib.jsonl_walker import DEFAULT_PROJECTS_ROOT, read_all
-from lib.schema import UserRecord, parse_record
+from lib.schema import UserRecord
 from lib.sidechain import (
     link_subagents_to_parent,
     load_subagent,
@@ -237,7 +237,7 @@ def test_corpus_amnesia_session_has_subagents():
     parent_records = read_all(session_jsonl)
     linked = link_subagents_to_parent(parent_records, sub_dir)
     assert linked
-    assert all(isinstance(k, str) and k for k in linked.keys())
+    assert all(isinstance(k, str) and k for k in linked)
 
 
 @pytest.mark.skipif(not _have_corpus(), reason="no ~/.claude/projects on this machine")
@@ -271,4 +271,6 @@ def test_corpus_link_keys_match_real_tool_use_ids():
 
     # At least one linked key should be a real parent tool_use_id.
     overlap = real_tool_use_ids & set(linked.keys())
-    assert overlap, f"no subagent keyed to a real parent tool_use_id; keys={list(linked.keys())[:5]}"
+    assert overlap, (
+        f"no subagent keyed to a real parent tool_use_id; keys={list(linked.keys())[:5]}"
+    )

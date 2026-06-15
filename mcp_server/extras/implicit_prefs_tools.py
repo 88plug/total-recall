@@ -15,9 +15,9 @@ never writes and degrades gracefully when the table is absent.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sqlite3
-from typing import Any
 
 from mcp_server.server import get_conn, mcp
 
@@ -105,10 +105,8 @@ def list_implicit_preferences(
 
         return rows
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
 
 __all__ = ["list_implicit_preferences"]

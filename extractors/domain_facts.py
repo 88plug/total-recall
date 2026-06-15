@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Iterable, Iterator
+from collections.abc import Iterable, Iterator
 
 from extractors.base import DagLike, Extraction, Extractor, RecordLike, get_user_string
 

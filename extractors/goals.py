@@ -115,9 +115,7 @@ def _is_substantive_first_goal(text: str) -> bool:
     t = " ".join(text.split())
     if len(t) < _MIN_FIRST_GOAL_LEN:
         return False
-    if _LOW_SIGNAL_OPENER_RE.match(t):
-        return False
-    return True
+    return not _LOW_SIGNAL_OPENER_RE.match(t)
 
 
 class Goals(Extractor):

@@ -26,7 +26,6 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 
 def state_path(session_id: str) -> Path:

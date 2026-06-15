@@ -21,7 +21,7 @@ import json
 import sqlite3
 import time
 from dataclasses import asdict
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from extractors.workflow import WorkflowProfile
@@ -63,7 +63,7 @@ def _decode(raw: Any) -> Any:
 
 def persist_workflow(
     conn: sqlite3.Connection,
-    profile: "WorkflowProfile | dict",
+    profile: WorkflowProfile | dict,
     updated_ts: int | None = None,
 ) -> None:
     """Bulk-upsert all fields from ``profile`` into the ``workflow_profile`` table.

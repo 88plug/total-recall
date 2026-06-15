@@ -27,11 +27,11 @@ left empty so a buggy signal layer can never break the user's turn.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import sys
 import time
 from pathlib import Path
-
 
 # --------------------------------------------------------------------------- #
 # defensive sys.path bootstrap (same pattern as query.py)
@@ -112,8 +112,8 @@ def _fallback_prompt_relevant(prompt: str, cwd: str) -> str:
     Returns "" if anything goes wrong — the hook will just emit nothing.
     """
     try:
-        import io
         import contextlib
+        import io
 
         from hooks.lib import query as q  # type: ignore
 
@@ -138,10 +138,10 @@ def _continuation_block(session_id: str, cwd: str) -> str:
     "no continuation block".
     """
     try:
-        from hooks.lib.compact_restore import _load_packet  # type: ignore
         from extractors.continuation_packet import (  # type: ignore
             render_continuation_packet,
         )
+        from hooks.lib.compact_restore import _load_packet  # type: ignore
     except Exception:
         return ""
     try:
@@ -167,9 +167,9 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
 
     try:
+        from detector.reinjection import should_reinject  # type: ignore
         from hooks.lib import session_state as ss  # type: ignore
         from hooks.lib.scope_detect import detect_scope_shift  # type: ignore
-        from detector.reinjection import should_reinject  # type: ignore
     except Exception:
         return 0  # signal layer not importable → no envelope
 
@@ -192,10 +192,8 @@ def main(argv=None) -> int:
 
     # 2. Advance the turn counters BEFORE the decision so things like
     #    ``turns_since_inject`` and ``recent_prompts`` reflect this turn.
-    try:
+    with contextlib.suppress(Exception):
         ss.advance_turn(state, args.cwd, args.prompt)
-    except Exception:
-        pass
 
     # 3. Ask the signal layer whether to fire.
     project_known = _project_known(db_path, args.cwd)
@@ -240,14 +238,10 @@ def main(argv=None) -> int:
     #    even on a no-fire turn we still want the turn counter and
     #    recent_prompts window updated for next time.
     if payload:
-        try:
+        with contextlib.suppress(Exception):
             ss.record_inject(state)
-        except Exception:
-            pass
-    try:
+    with contextlib.suppress(Exception):
         ss.save_state(state)
-    except Exception:
-        pass
 
     if payload:
         sys.stdout.write(payload)

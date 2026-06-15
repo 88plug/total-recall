@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, Optional
 
 from lib.schema import Record, parse_record
 
@@ -192,7 +192,7 @@ def file_size(path: Path) -> int:
         return 0
 
 
-def derive_session_id_from_path(path: Path) -> Optional[str]:
+def derive_session_id_from_path(path: Path) -> str | None:
     """Pull the session UUID out of the filename (``<uuid>.jsonl``)."""
     p = Path(path)
     stem = p.stem

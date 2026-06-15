@@ -124,9 +124,11 @@ def _iter_lines(p: Path):
         return
     try:
         if p.suffix == ".gz":
-            opener = lambda: gzip.open(p, "rt", encoding="utf-8")
+            def opener():
+                return gzip.open(p, "rt", encoding="utf-8")
         else:
-            opener = lambda: open(p, "r", encoding="utf-8")
+            def opener():
+                return open(p, encoding="utf-8")
         with opener() as fh:
             for line in fh:
                 line = line.strip()

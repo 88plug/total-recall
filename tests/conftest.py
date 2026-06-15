@@ -6,14 +6,11 @@ tests that depend on it should `pytest.skip` rather than error at collection.
 from __future__ import annotations
 
 import json
-import os
 import pathlib
 import sqlite3
-import tempfile
-from typing import Iterator
+from collections.abc import Iterator
 
 import pytest
-
 
 # --- DB schema (minimal, mirrors index/schema.sql if present) ---------------
 

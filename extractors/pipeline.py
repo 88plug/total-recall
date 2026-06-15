@@ -9,8 +9,8 @@ don't sneak through via the auxiliary fields.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import replace
-from typing import Callable, Iterable, Iterator
 
 from extractors.away_summaries import AwaySummaries
 from extractors.bans import Bans
@@ -37,8 +37,10 @@ ALL_EXTRACTORS: list[Extractor] = [
     DomainFacts(),
     AwaySummaries(),
     # v0.3 operator-aware extractors (research phases O1-O10 + impl I1-I10)
-    ModelCorrections(),     # I2 — the highest-leverage extractor: pairs user pushback with rejected approach
-    StandingDecisions(),    # I5 — provider-a > provider-b, billing-provider-a > billing-provider-b, etc.
+    # I2 — the highest-leverage extractor: pairs user pushback with rejected approach
+    ModelCorrections(),
+    # I5 — provider-a > provider-b, billing-provider-a > billing-provider-b, etc.
+    StandingDecisions(),
     Bans(),                 # I6 — provider/tool/pattern bans + failed attempts
     Goals(),                # I3 — per-project goal stack with status state machine
     TruthRhetoric(),        # I9 — 7-category truth-assertion taxonomy

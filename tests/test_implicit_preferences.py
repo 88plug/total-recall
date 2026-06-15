@@ -16,7 +16,6 @@ import time
 import pytest
 
 from extractors.implicit_preferences import (
-    PROMOTION_MIN_PROJECTS,
     PROMOTION_MIN_SESSIONS,
     ImplicitPreference,
     ImplicitPreferenceProfile,
@@ -27,7 +26,6 @@ from index.implicit_preferences import (
     get_implicit_preferences,
     persist_implicit_preferences,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test record builders

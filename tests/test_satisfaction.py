@@ -13,8 +13,6 @@ from __future__ import annotations
 import sqlite3
 import time
 
-import pytest
-
 from detector.escalation import assess_escalation
 from extractors.satisfaction import (
     classify_ai_behavior,
@@ -27,7 +25,6 @@ from index.satisfaction import (
     persist_satisfaction,
     upsert_satisfaction_pair,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper: in-memory SQLite connection

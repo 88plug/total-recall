@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from lib.dag import Dag  # noqa: F401
@@ -125,9 +126,7 @@ def is_skipped_user_string(text: str) -> bool:
     stripped = text.lstrip()
     if any(stripped.startswith(p) for p in _SKIP_PREFIXES):
         return True
-    if len(stripped) < _MIN_LEN or len(stripped) > _MAX_LEN:
-        return True
-    return False
+    return bool(len(stripped) < _MIN_LEN or len(stripped) > _MAX_LEN)
 
 
 def get_user_string(rec: RecordLike) -> str | None:

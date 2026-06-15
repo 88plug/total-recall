@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 log = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ def filter_dedup_rows(
     cwd_idx: int,
     ts_idx: int,
     text_idx: int,
-    seen: Optional[dict[tuple[str, int, str], str]] = None,
+    seen: dict[tuple[str, int, str], str] | None = None,
 ) -> tuple[list[tuple], dict[tuple[str, int, str], str], int]:
     """Filter ``rows`` against an in-memory dedup table.
 

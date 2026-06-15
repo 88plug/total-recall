@@ -69,15 +69,15 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 from lib.schema import (
     AssistantRecord,
     Block,
     Record,
     SystemRecord,
-    ToolResult,
     ToolUseRef,
     UserRecord,
     _classify_user_content,
@@ -86,7 +86,6 @@ from lib.schema import (
     _parse_ts,
 )
 from lib.sources.base import SOURCES, SessionFile, SessionSource
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -102,7 +101,7 @@ def _default_sessions_dir() -> Path:
     return Path.home() / ".continue" / "sessions"
 
 
-def _safe_load_json(path: Path) -> Optional[Any]:
+def _safe_load_json(path: Path) -> Any | None:
     """Return parsed JSON or ``None`` on any read / parse error."""
 
     try:
@@ -112,7 +111,7 @@ def _safe_load_json(path: Path) -> Optional[Any]:
         return None
 
 
-def _content_to_text(content: Any) -> Optional[str]:
+def _content_to_text(content: Any) -> str | None:
     """Flatten Continue's polymorphic ``message.content`` to a string.
 
     Continue messages may carry ``content`` as a plain string, an
@@ -137,7 +136,7 @@ def _build_base_kwargs(
     raw: dict[str, Any],
     *,
     session_id: str,
-    cwd: Optional[str],
+    cwd: str | None,
     index: int,
 ) -> dict[str, Any]:
     """Populate the cross-cutting Record fields from a ``ChatHistoryItem``."""
@@ -253,10 +252,10 @@ def _project_item_to_record(
     item: dict[str, Any],
     *,
     session_id: str,
-    cwd: Optional[str],
+    cwd: str | None,
     index: int,
-    chat_model_title: Optional[str],
-    usage_for_first_assistant: Optional[dict[str, Any]],
+    chat_model_title: str | None,
+    usage_for_first_assistant: dict[str, Any] | None,
 ) -> Record:
     """Translate one ``ChatHistoryItem`` into a canonical Record."""
 
@@ -321,7 +320,7 @@ class ContinueSource(SessionSource):
 
     name = "continue"
 
-    def __init__(self, sessions_dir: Optional[Path] = None) -> None:
+    def __init__(self, sessions_dir: Path | None = None) -> None:
         env = os.environ.get("CONTINUE_GLOBAL_DIR")
         if env:
             self.sessions_dir = Path(env).expanduser() / "sessions"
@@ -397,7 +396,7 @@ class ContinueSource(SessionSource):
             workspace = meta.get("workspaceDirectory") if isinstance(meta, dict) else None
             title = meta.get("title") if isinstance(meta, dict) else None
             date_created = meta.get("dateCreated") if isinstance(meta, dict) else None
-            started_at: Optional[float] = None
+            started_at: float | None = None
             if isinstance(date_created, (int, float)):
                 # Continue records ms epoch.
                 started_at = float(date_created) / 1000.0
@@ -456,7 +455,7 @@ class ContinueSource(SessionSource):
             item = history[i]
             if not isinstance(item, dict):
                 continue
-            attach_usage: Optional[dict[str, Any]] = None
+            attach_usage: dict[str, Any] | None = None
             role = (item.get("message") or {}).get("role") if isinstance(
                 item.get("message"), dict
             ) else None

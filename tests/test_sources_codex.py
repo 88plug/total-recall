@@ -9,17 +9,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from lib.schema import (
     AssistantRecord,
-    Record,
     SystemRecord,
     UserRecord,
 )
 from lib.sources.base import SOURCES, source_by_name
 from lib.sources.codex import CodexSource, _session_id_from_filename
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -262,7 +258,7 @@ def test_iter_records_model_threading_with_mid_session_switch(tmp_path):
         _response_message("assistant", "after-compact reply"),
         _response_function_call_output("c1", "all good"),
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
 
@@ -320,7 +316,7 @@ def test_function_call_double_decode_roundtrip(tmp_path):
         _turn_context("gpt-5"),
         _response_function_call("shell", args, call_id="call-xyz"),
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]
@@ -354,7 +350,7 @@ def test_function_call_with_namespace(tmp_path):
             },
         },
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]
@@ -372,7 +368,7 @@ def test_local_shell_call_separate_from_function_call(tmp_path):
         _turn_context("gpt-5"),
         _response_local_shell_call(["bash", "-c", "echo hi"], call_id="ls-1"),
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]
@@ -393,7 +389,7 @@ def test_function_call_output_string_shape(tmp_path):
         _turn_context("gpt-5"),
         _response_function_call_output("c1", "plain stdout"),
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]
@@ -420,7 +416,7 @@ def test_function_call_output_structured_shape(tmp_path):
         _turn_context("gpt-5"),
         _response_function_call_output("c1", structured),
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]
@@ -446,7 +442,7 @@ def test_token_count_field_remapping(tmp_path):
             total_tokens=415,
         ),
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]
@@ -475,7 +471,7 @@ def test_iter_records_resume_via_offset(tmp_path):
         _response_message("assistant", "two"),
         _response_message("user", "three"),
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
 
@@ -533,7 +529,7 @@ def test_iter_records_unknown_response_subvariant_falls_through(tmp_path):
             },
         },
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]
@@ -556,7 +552,7 @@ def test_reasoning_block_emits_thinking(tmp_path):
             },
         },
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]
@@ -575,7 +571,7 @@ def test_session_meta_cwd_threads_into_subsequent_records(tmp_path):
         _turn_context("gpt-5", cwd="/repo/B"),  # cwd changes mid-session too
         _response_message("user", "still here"),
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]
@@ -593,7 +589,7 @@ def test_session_id_falls_back_to_filename_for_pre_meta_lines(tmp_path):
         _turn_context("gpt-5"),
         _response_message("user", "orphan prompt"),
     ]
-    path = _make_session(tmp_path, lines)
+    _make_session(tmp_path, lines)
     s = CodexSource(codex_home=tmp_path)
     sf = next(iter(s.discover_sessions()))
     recs = [r for _, r in s.iter_records(sf)]

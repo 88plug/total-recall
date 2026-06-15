@@ -53,6 +53,7 @@ def _run_recovery(cwd: str, session_id: str, env_extra: dict | None = None):
 def test_recovery_flag_reaches_session_state_reader(plugin_data, monkeypatch):
     """recovery.sh -> the path session_state.load_state actually reads."""
     import importlib
+
     import hooks.lib.session_state as ss
     importlib.reload(ss)
 
@@ -77,6 +78,7 @@ def test_recovery_flag_reaches_session_state_reader(plugin_data, monkeypatch):
 def test_recovery_flag_drives_reinjection(plugin_data, monkeypatch):
     """The post_compact flag set by recovery.sh fires should_reinject."""
     import importlib
+
     import hooks.lib.session_state as ss
     importlib.reload(ss)
     from detector.reinjection import SessionState, should_reinject
@@ -112,9 +114,9 @@ def test_recovery_flag_drives_reinjection(plugin_data, monkeypatch):
 def test_decide_and_format_surfaces_pending_continuation(plugin_data, monkeypatch):
     """Belt #3: decide_and_format prepends the persisted packet rendering when
     continuation_pending is set, then clears the flag."""
+    import contextlib
     import importlib
     import io
-    import contextlib
 
     import hooks.lib.session_state as ss
     importlib.reload(ss)
@@ -162,9 +164,9 @@ def test_decide_and_format_surfaces_pending_continuation(plugin_data, monkeypatc
 
 def test_decide_and_format_no_pending_no_continuation(plugin_data, monkeypatch):
     """Without continuation_pending the continuation block is never surfaced."""
+    import contextlib
     import importlib
     import io
-    import contextlib
 
     import hooks.lib.session_state as ss
     importlib.reload(ss)

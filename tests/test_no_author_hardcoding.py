@@ -29,7 +29,9 @@ SCAN_DIRS = ["extractors", "mcp_server", "index", "lib", "detector", "hooks/lib"
 SCAN_EXTENSIONS = {".py"}
 
 _DENYLIST_PATH = Path(
-    os.environ.get("BT_AUTHOR_DENYLIST", str(REPO_ROOT / "tests" / "local" / "author_denylist.json"))
+    os.environ.get(
+        "BT_AUTHOR_DENYLIST", str(REPO_ROOT / "tests" / "local" / "author_denylist.json")
+    )
 )
 
 
@@ -51,7 +53,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _scan_file(path: Path, patterns: list[tuple[str, re.Pattern[str]]]) -> list[tuple[int, str, str]]:
+def _scan_file(
+    path: Path, patterns: list[tuple[str, re.Pattern[str]]]
+) -> list[tuple[int, str, str]]:
     hits: list[tuple[int, str, str]] = []
     try:
         text = path.read_text(encoding="utf-8", errors="replace")

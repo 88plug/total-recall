@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from index.paths import project_key
 
@@ -232,6 +233,6 @@ def _inline_fts_search(
     try:
         cur2 = conn.execute(sql, params)
         cols = [d[0] for d in (cur2.description or [])]
-        return [dict(zip(cols, row)) for row in cur2.fetchall()]
+        return [dict(zip(cols, row, strict=False)) for row in cur2.fetchall()]
     except sqlite3.Error:
         return []

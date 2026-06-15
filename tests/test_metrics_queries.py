@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 import sys
-import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -22,7 +21,6 @@ if str(REPO_ROOT) not in sys.path:
 
 from index import metrics as M  # noqa: E402
 from index.db import connect  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Helpers

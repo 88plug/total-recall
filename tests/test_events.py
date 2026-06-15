@@ -196,7 +196,9 @@ def test_read_events_handles_malformed_lines(events_path: Path) -> None:
     assert names == ["good", "manual"]
 
 
-def test_default_path_under_claude_plugin_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_default_path_under_claude_plugin_data(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     # Sanity: the default path constant was assembled from CLAUDE_PLUGIN_DATA at
     # import time, so we cannot retroactively change it. But we can confirm the
     # structure: it ends with total-recall/logs/events.jsonl.

@@ -16,6 +16,7 @@ Sub-subcommands:
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 import click
@@ -26,7 +27,6 @@ from .util import (
     resolve_db_path,
     shorten,
 )
-
 
 # --------------------------------------------------------------------------- #
 # Defensive metrics-layer loader
@@ -70,7 +70,10 @@ def metrics_cmd() -> None:
 # --------------------------------------------------------------------------- #
 
 
-@metrics_cmd.command("summary", help="Sessions / tokens / compactions / top corrections in the window.")
+@metrics_cmd.command(
+    "summary",
+    help="Sessions / tokens / compactions / top corrections in the window.",
+)
 @click.option("--since", default="7d", help="Time window: '7d', '30d', '24h', or YYYY-MM-DD.")
 @click.option("--project", default=None, help="Filter to one cwd.")
 @click.pass_context
@@ -174,10 +177,8 @@ def cost_subcmd(ctx: click.Context, rate: tuple[str, ...], since: str, project: 
     # Build the rates dict. Start with MA6's defaults when available.
     rates: dict[str, tuple[float, float]] = {}
     if cost_mod is not None and hasattr(cost_mod, "DEFAULT_RATES"):
-        try:
+        with contextlib.suppress(Exception):
             rates.update(dict(cost_mod.DEFAULT_RATES))
-        except Exception:  # noqa: BLE001
-            pass
     for spec in rate:
         model, in_rate, out_rate = _parse_rate(spec)
         rates[model] = (in_rate, out_rate)
@@ -203,7 +204,10 @@ def cost_subcmd(ctx: click.Context, rate: tuple[str, ...], since: str, project: 
             }
             for r in by_model
         ]
-        click.echo(format_table(rows, headers=["model", "in_tokens", "cache_read", "out_tokens", "cost"]))
+        click.echo(format_table(
+            rows,
+            headers=["model", "in_tokens", "cache_read", "out_tokens", "cost"],
+        ))
     else:
         click.echo("(no usage in window)")
 

@@ -16,7 +16,6 @@ from lib.schema import AssistantRecord, SystemRecord, UserRecord
 from lib.sources import SOURCES, SessionFile, all_sources, source_by_name
 from lib.sources.continue_dev import ContinueSource
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------

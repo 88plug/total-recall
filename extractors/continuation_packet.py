@@ -43,6 +43,7 @@ Design contract:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -226,9 +227,7 @@ def _is_real_user(rec: dict) -> bool:
     # Reject synthetic envelopes (task notifications, slash-command echoes,
     # local-command output) that masquerade as user text turns.
     stripped = _text_of(rec).lstrip()
-    if any(stripped.startswith(pfx) for pfx in _SKIP_USER_PREFIXES):
-        return False
-    return True
+    return not any(stripped.startswith(pfx) for pfx in _SKIP_USER_PREFIXES)
 
 
 # ---------------------------------------------------------------------------
@@ -777,10 +776,8 @@ def build_continuation_packet(
                 except Exception as e:  # noqa: BLE001
                     log.debug("continuation_packet: failed_attempts failed: %s", e)
             finally:
-                try:
+                with contextlib.suppress(Exception):
                     conn.close()
-                except Exception:  # noqa: BLE001
-                    pass
 
     packet = _apply_budget(fields, max_chars=max(200, int(max_chars)))
     packet["_kind"] = "continuation_packet"

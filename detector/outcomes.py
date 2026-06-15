@@ -21,9 +21,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Iterable, Optional
-
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS reinjection_outcomes (
@@ -76,9 +75,9 @@ def record_injection(
     session_id: str,
     turn: int,
     triggers: Iterable[str],
-    injection_chars: Optional[int] = None,
+    injection_chars: int | None = None,
     *,
-    ts: Optional[int] = None,
+    ts: int | None = None,
 ) -> int:
     """Record a single re-injection event.
 

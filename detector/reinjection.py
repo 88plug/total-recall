@@ -30,13 +30,12 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
 class SessionState:
     cwd: str
-    prev_cwd: Optional[str]
+    prev_cwd: str | None
     last_inject_ts: float                   # unix seconds of last memory push (0 if never)
     turns_since_inject: int
     post_compact: bool                      # PostCompact hook fired this session, not yet consumed
@@ -63,7 +62,7 @@ RECALL_PHRASES = re.compile(
 def should_reinject(
     state: SessionState,
     last_user: str,
-    draft_response: Optional[str] = None,
+    draft_response: str | None = None,
     injections_count: int = 0,
 ) -> tuple[bool, list[str]]:
     """Decide whether to re-inject memory context this turn.
@@ -73,7 +72,6 @@ def should_reinject(
     tagged strings suitable for logging and for auditing fire-rate
     calibration against R5.
     """
-    reasons: list[str] = []
     now = time.time()
 
     # Session budget cap — R4 hard cap, never exceeded.

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Iterable, Iterator
+from collections.abc import Iterable, Iterator
 
 from extractors.base import (
     DagLike,
@@ -272,10 +272,7 @@ def _emit_failed_attempts(rec: RecordLike, text: str) -> Iterator[Extraction]:
 
 
 def _overlaps(m: re.Match, seen: list[tuple[int, int]]) -> bool:
-    for s, e in seen:
-        if not (m.end() <= s or m.start() >= e):
-            return True
-    return False
+    return any(not (m.end() <= s or m.start() >= e) for s, e in seen)
 
 
 def _make_ban(

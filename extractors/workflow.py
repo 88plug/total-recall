@@ -15,14 +15,16 @@ the MCP layer can serve it cheaply at session start.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -162,10 +164,7 @@ def _user_text(rec: Any) -> str | None:
         if rec.get("type") != "user":
             return None
         msg = rec.get("message") or {}
-        if isinstance(msg, dict):
-            content = msg.get("content")
-        else:
-            content = None
+        content = msg.get("content") if isinstance(msg, dict) else None
         # content can be str or list
         if isinstance(content, str):
             return content.strip() or None
@@ -370,10 +369,8 @@ def _process_record(
                     # Also capture the agent count when present.
                     m = _AGENT_COUNT_RE.search(text)
                     if m:
-                        try:
+                        with contextlib.suppress(ValueError):
                             agent_counts.append(int(m.group(1)))
-                        except ValueError:
-                            pass
                     break  # count once per turn
 
             # Autonomy / fire-and-forget detection.
@@ -539,7 +536,7 @@ def _build_profile(
 
 
 def _normalize_existing(
-    existing: "WorkflowProfile | dict | None",
+    existing: WorkflowProfile | dict | None,
 ) -> WorkflowProfile:
     """Coerce existing to a :class:`WorkflowProfile`, stripping sidecar keys.
 
@@ -559,10 +556,8 @@ def _normalize_existing(
         if key.startswith("_"):
             continue
         if hasattr(profile, key):
-            try:
+            with contextlib.suppress(Exception):
                 setattr(profile, key, val)
-            except Exception:  # noqa: BLE001
-                pass
     return profile
 
 
@@ -596,7 +591,7 @@ def _iter_as_dicts(records: Iterable[Any]) -> Iterable[dict]:
 
 def extract_workflow_incremental(
     records: Iterable[dict],
-    existing: "WorkflowProfile | dict | None" = None,
+    existing: WorkflowProfile | dict | None = None,
     window_size: int = _EMA_WINDOW,
 ) -> WorkflowProfile:
     """Update the workflow profile via EMA over a rolling window.

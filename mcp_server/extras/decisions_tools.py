@@ -18,6 +18,7 @@ try to create it from a read-only connection.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import sqlite3
@@ -61,9 +62,7 @@ def _ts_to_iso(value: Any) -> str | None:
 
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
-    if hasattr(row, "keys"):
-        d = {k: row[k] for k in row.keys()}
-    elif isinstance(row, dict):
+    if hasattr(row, "keys") or isinstance(row, dict):
         d = dict(row)
     else:
         try:
@@ -97,7 +96,12 @@ def list_standing_decisions(
     topic: str | None = None,
     scope: str | None = None,
 ) -> list[dict]:
-    """Return standing decisions the operator has made (e.g. provider-a > provider-b, billing-provider-a > billing-provider-b). Use BEFORE suggesting any default — if a decision exists, honor it. Filter by topic ('cloud_provider', 'billing_rail', etc.) or scope ('global' or cwd)."""
+    (
+        "Return standing decisions the operator has made (e.g. provider-a > provider-b, "
+        "billing-provider-a > billing-provider-b). Use BEFORE suggesting any default — if a "
+        "decision exists, honor it. Filter by topic ('cloud_provider', 'billing_rail', etc.) or "
+        "scope ('global' or cwd)."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -137,10 +141,8 @@ def list_standing_decisions(
             return [{"error": f"list_standing_decisions failed: {e!r}"}]
         return [_row_to_dict(r) for r in rows]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
 
 @mcp.tool()
@@ -148,7 +150,10 @@ def get_decision_for_topic(
     topic: str,
     cwd: str | None = None,
 ) -> dict | None:
-    """Quick lookup: 'what did the operator decide about X for this project?' Returns None if no decision recorded."""
+    (
+        "Quick lookup: 'what did the operator decide about X for this project?' Returns None if "
+        "no decision recorded."
+    )
     conn = get_conn()
     if conn is None:
         # Mirror the list_-tool error envelope rather than returning None,
@@ -207,10 +212,8 @@ def get_decision_for_topic(
             return {"error": f"get_decision_for_topic failed: {e!r}"}
         return _row_to_dict(row) if row is not None else None
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
 
 __all__ = [

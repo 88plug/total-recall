@@ -34,7 +34,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Test fixtures
 # ---------------------------------------------------------------------------
@@ -229,7 +228,7 @@ EXPECTED_TOOLS = {
 def test_all_expected_tools_registered(server_module):
     tools = asyncio.run(server_module.mcp.list_tools())
     names = {t.name for t in tools}
-    assert EXPECTED_TOOLS <= names, f"missing tools: {EXPECTED_TOOLS - names}"
+    assert names >= EXPECTED_TOOLS, f"missing tools: {EXPECTED_TOOLS - names}"
 
 
 def test_every_tool_has_description_and_schema(server_module):
@@ -296,10 +295,7 @@ def test_get_session_digest_returns_error_when_db_missing(server_module):
         server_module.mcp.call_tool("get_session_digest", {"session_id": "x"})
     )
     content = result[0] if isinstance(result, (list, tuple)) else result
-    if hasattr(content, "text"):
-        out = json.loads(content.text)
-    else:  # pragma: no cover - shape sanity
-        out = content
+    out = json.loads(content.text) if hasattr(content, "text") else content
     assert isinstance(out, dict)
     assert "error" in out
 
@@ -465,10 +461,7 @@ def test_get_session_digest_assembles_digest(tmp_db_dir, fake_index_query):
         server.mcp.call_tool("get_session_digest", {"session_id": "s1"})
     )
     content = result[0] if isinstance(result, (list, tuple)) else result
-    if hasattr(content, "text"):
-        digest = json.loads(content.text)
-    else:  # pragma: no cover - shape sanity
-        digest = content
+    digest = json.loads(content.text) if hasattr(content, "text") else content
     assert isinstance(digest, dict)
     assert digest["session_id"] == "s1"
     assert digest["ai_title"] == "Set up relay fleet"

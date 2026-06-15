@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from lib.dag import build_dag, find_branches, linearize_main_branch
 from lib.jsonl_walker import DEFAULT_PROJECTS_ROOT, read_all
-from lib.schema import AssistantRecord, Record, UserRecord, parse_record
+from lib.schema import Record, parse_record
 
 
 def _mk_assistant(uuid: str, parent: str | None, ts: str = "2026-05-25T01:00:00.000Z") -> Record:
@@ -288,7 +286,7 @@ def test_corpus_main_branch_is_a_real_path():
     dag = build_dag(recs)
     linear = linearize_main_branch(dag)
     assert linear
-    for prev, nxt in zip(linear, linear[1:]):
+    for prev, nxt in zip(linear, linear[1:], strict=False):
         # Either nxt.parent_uuid == prev.uuid, or we crossed a compact_boundary
         # whose system record has parentUuid:null but logicalParentUuid set.
         # The linearizer follows raw parent pointers, so this invariant holds.

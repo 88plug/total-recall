@@ -113,14 +113,13 @@ def test_events_rotation_compresses_at_10MB(
             session_id=f"s-{i:04d}",
             payload=padding,
         )
-        if rotated.exists():
-            # Keep emitting a few more after rotation so the live file
-            # accumulates fresh content post-rotation; helps assert it's
-            # been truncated correctly.
-            if i > 5 and path.stat().st_size > 0:
-                # one more then break
-                events.emit_event("rotate.post", path=path, marker=True)
-                break
+        # Keep emitting a few more after rotation so the live file
+        # accumulates fresh content post-rotation; helps assert it's
+        # been truncated correctly.
+        if rotated.exists() and i > 5 and path.stat().st_size > 0:
+            # one more then break
+            events.emit_event("rotate.post", path=path, marker=True)
+            break
 
     assert rotated.exists(), (
         f"rotation did not produce {rotated.name} after 200 emits at "

@@ -10,6 +10,7 @@ Tests are read-only on the corpus. Never write into ~/.claude/projects.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import pathlib
@@ -153,7 +154,7 @@ def test_extractors_fire_on_real_corrections(real_corpus_root: pathlib.Path):
         results = Corrections([parsed])
     else:
         inst = Corrections()
-        extract = getattr(inst, "extract", None) or getattr(inst, "__call__", None)
+        extract = getattr(inst, "extract", None) or (inst if callable(inst) else None)
         if extract is None:
             pytest.skip("Corrections extractor has no extract() method")
         results = extract([parsed])
@@ -346,10 +347,8 @@ def test_scrub_on_ingest_locks_in_no_secret_leak_into_messages_text(
         ingest_file(conn, real_corpus_smallest_session, force_full=True)
         rows = conn.execute("SELECT text FROM messages WHERE text IS NOT NULL").fetchall()
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
 
     if not rows:
         pytest.skip("ingest produced 0 message rows; nothing to check")
@@ -420,8 +419,8 @@ def test_vec_cli_search_clean_error_without_extras(tmp_path: pathlib.Path):
     hint. Locks in F3's "no traceback, just tell the user to install vec".
     """
     try:
-        import sqlite_vec  # noqa: F401
         import fastembed  # noqa: F401
+        import sqlite_vec  # noqa: F401
 
         have_vec = True
     except Exception:  # noqa: BLE001

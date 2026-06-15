@@ -25,7 +25,6 @@ import pytest
 
 from mcp_server.extras import recall_targeted_tools as rtt
 
-
 # ---------------------------------------------------------------------------
 # Fixtures + utilities
 # ---------------------------------------------------------------------------

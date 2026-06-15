@@ -25,7 +25,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 __all__ = [
     "ONTOLOGY_SCHEMA",
@@ -127,8 +128,12 @@ def upsert_project(
             purpose          = COALESCE(excluded.purpose, projects.purpose),
             primary_language = COALESCE(excluded.primary_language, projects.primary_language),
             related_projects = COALESCE(excluded.related_projects, projects.related_projects),
-            first_seen_ts    = COALESCE(MIN(excluded.first_seen_ts, projects.first_seen_ts), projects.first_seen_ts, excluded.first_seen_ts),
-            last_active_ts   = COALESCE(MAX(excluded.last_active_ts, projects.last_active_ts), projects.last_active_ts, excluded.last_active_ts),
+            first_seen_ts    = COALESCE(
+                MIN(excluded.first_seen_ts, projects.first_seen_ts),
+                projects.first_seen_ts, excluded.first_seen_ts),
+            last_active_ts   = COALESCE(
+                MAX(excluded.last_active_ts, projects.last_active_ts),
+                projects.last_active_ts, excluded.last_active_ts),
             message_count    = COALESCE(excluded.message_count, projects.message_count)
         """,
         (
@@ -148,7 +153,7 @@ def _row_to_project(row: sqlite3.Row | tuple | None) -> dict[str, Any] | None:
     if row is None:
         return None
     try:
-        d = {k: row[k] for k in row.keys()}
+        d = dict(row)
     except (AttributeError, TypeError):
         cols = [
             "cwd",
@@ -160,7 +165,7 @@ def _row_to_project(row: sqlite3.Row | tuple | None) -> dict[str, Any] | None:
             "last_active_ts",
             "message_count",
         ]
-        d = dict(zip(cols, row))
+        d = dict(zip(cols, row, strict=False))
     raw = d.get("related_projects")
     if isinstance(raw, str) and raw:
         try:
@@ -222,7 +227,9 @@ def upsert_machine(
             gpu          = COALESCE(excluded.gpu, machines.gpu),
             os           = COALESCE(excluded.os, machines.os),
             notes        = COALESCE(excluded.notes, machines.notes),
-            last_seen_ts = COALESCE(MAX(excluded.last_seen_ts, machines.last_seen_ts), machines.last_seen_ts, excluded.last_seen_ts)
+            last_seen_ts = COALESCE(
+                MAX(excluded.last_seen_ts, machines.last_seen_ts),
+                machines.last_seen_ts, excluded.last_seen_ts)
         """,
         (
             hostname,
@@ -242,7 +249,7 @@ def _row_to_machine(row: sqlite3.Row | tuple | None) -> dict[str, Any] | None:
     if row is None:
         return None
     try:
-        return {k: row[k] for k in row.keys()}
+        return dict(row)
     except (AttributeError, TypeError):
         cols = [
             "hostname",
@@ -255,7 +262,7 @@ def _row_to_machine(row: sqlite3.Row | tuple | None) -> dict[str, Any] | None:
             "notes",
             "last_seen_ts",
         ]
-        return dict(zip(cols, row))
+        return dict(zip(cols, row, strict=False))
 
 
 def get_machine(conn: sqlite3.Connection, hostname: str) -> dict[str, Any] | None:
@@ -358,7 +365,9 @@ def upsert_vocabulary_term(
             definition    = excluded.definition,
             category      = COALESCE(excluded.category, vocabulary.category),
             frequency     = COALESCE(excluded.frequency, vocabulary.frequency),
-            first_seen_ts = COALESCE(MIN(excluded.first_seen_ts, vocabulary.first_seen_ts), vocabulary.first_seen_ts, excluded.first_seen_ts)
+            first_seen_ts = COALESCE(
+                MIN(excluded.first_seen_ts, vocabulary.first_seen_ts),
+                vocabulary.first_seen_ts, excluded.first_seen_ts)
         """,
         (term, definition, category, freq, seen),
     )
@@ -383,10 +392,10 @@ def _row_to_term(row: sqlite3.Row | tuple | None) -> dict[str, Any] | None:
     if row is None:
         return None
     try:
-        return {k: row[k] for k in row.keys()}
+        return dict(row)
     except (AttributeError, TypeError):
         cols = ["term", "definition", "category", "frequency", "first_seen_ts"]
-        return dict(zip(cols, row))
+        return dict(zip(cols, row, strict=False))
 
 
 def get_term(conn: sqlite3.Connection, term: str) -> dict[str, Any] | None:

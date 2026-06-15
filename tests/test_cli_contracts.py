@@ -16,7 +16,6 @@ from click.testing import CliRunner
 
 from total_recall.__main__ import cli
 
-
 # --------------------------------------------------------------------------- #
 # Every registered subcommand must respond to --help (cheap smoke).
 # --------------------------------------------------------------------------- #

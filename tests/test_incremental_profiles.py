@@ -15,7 +15,6 @@ is heuristic.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -28,35 +27,33 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from extractors.ontology import (  # noqa: E402
+    update_vocabulary_counts,
+)
 from extractors.operator_profile import (  # noqa: E402
     OperatorProfile,
     extract_incremental,
     persist_incremental_profile,
 )
-from extractors.ontology import (  # noqa: E402
-    update_vocabulary_counts,
-)
 from extractors.voice_profile import measure_voice_incremental  # noqa: E402
 from index import ingest as index_ingest  # noqa: E402
 from index.db import connect  # noqa: E402
 from index.ingest import ingest_file  # noqa: E402
+from index.ontology import (  # noqa: E402
+    ONTOLOGY_SCHEMA,
+    get_term,
+    upsert_vocabulary_term,
+)
 from index.operator import (  # noqa: E402
     OPERATOR_PROFILE_SCHEMA,
     get_profile,
     get_profile_field,
     upsert_profile_field,
 )
-from index.ontology import (  # noqa: E402
-    ONTOLOGY_SCHEMA,
-    get_term,
-    upsert_vocabulary_term,
-)
 from index.voice import (  # noqa: E402
     VOICE_PROFILE_SCHEMA,
     get_voice,
-    persist_voice_profile,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures + builders
@@ -449,7 +446,9 @@ def test_ingest_file_triggers_incremental_profile_updates(
         # The update_vocabulary_counts path only bumps terms already in the table,
         # so we verify the counter path works by pre-seeding the term.
         from index.ontology import upsert_vocabulary_term as _upsert_vt
-        _upsert_vt(conn, term="novabox", definition="test workstation", category="machine", frequency=1)
+        _upsert_vt(
+            conn, term="novabox", definition="test workstation", category="machine", frequency=1
+        )
         from extractors.ontology import update_vocabulary_counts as _uvc
         _uvc(fake_records, conn)
         term = get_term(conn, "novabox")

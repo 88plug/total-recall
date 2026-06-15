@@ -17,6 +17,7 @@ All three degrade gracefully when the index is absent (returning an
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sqlite3
 from typing import Any
@@ -50,10 +51,8 @@ def _load_ontology_module():
 def _close(conn: sqlite3.Connection | None) -> None:
     if conn is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         conn.close()
-    except Exception:
-        pass
 
 
 def _row_to_dict(row: Any) -> dict:
@@ -61,7 +60,7 @@ def _row_to_dict(row: Any) -> dict:
         return {}
     if hasattr(row, "keys"):
         try:
-            return {k: row[k] for k in row.keys()}
+            return dict(row)
         except Exception:
             pass
     if isinstance(row, dict):
@@ -79,7 +78,11 @@ def _row_to_dict(row: Any) -> dict:
 
 @mcp.tool()
 def get_project_graph() -> dict:
-    """Return the operator's project graph: cwd -> {purpose, primary_language, related_projects, last_active}. Use to orient at session start — know what other projects this one connects to."""
+    (
+        "Return the operator's project graph: cwd -> {purpose, primary_language, "
+        "related_projects, last_active}. Use to orient at session start — know what other "
+        "projects this one connects to."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -137,7 +140,11 @@ def get_project_graph() -> dict:
 
 @mcp.tool()
 def get_machine_inventory(name_pattern: str | None = None) -> list[dict]:
-    """Return the operator's machine inventory: hostname -> {role, lan_ip, tailscale_ip, gpu}. Use when working on LAN/cluster tasks. Pattern is a regex applied to hostname; pass None for all."""
+    (
+        "Return the operator's machine inventory: hostname -> {role, lan_ip, tailscale_ip, "
+        "gpu}. Use when working on LAN/cluster tasks. Pattern is a regex applied to hostname; "
+        "pass None for all."
+    )
     conn = get_conn()
     if conn is None:
         return [_index_missing_error()]
@@ -186,7 +193,11 @@ def get_machine_inventory(name_pattern: str | None = None) -> list[dict]:
 
 @mcp.tool()
 def define_term(term: str) -> dict | None:
-    """Lookup operator-specific vocabulary. E.g. define_term('relay fleet') returns the operator's own definition of that term. Use when encountering unfamiliar nouns in the operator's prompts."""
+    (
+        "Lookup operator-specific vocabulary. E.g. define_term('relay fleet') returns the "
+        "operator's own definition of that term. Use when encountering unfamiliar nouns in the "
+        "operator's prompts."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()

@@ -23,7 +23,8 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -318,7 +319,7 @@ def _learn_typos(
     english = _get_english_words()
 
     # Tokenise: split on anything that's not alpha, keep length >= min_len.
-    raw_tokens = re.findall(r"[a-z]{%d,}" % _TYPO_MIN_LEN, corpus_lc)
+    raw_tokens = re.findall(rf"[a-z]{{{_TYPO_MIN_LEN},}}", corpus_lc)
 
     # First pass: count candidate tokens.
     token_counts: Counter[str] = Counter()

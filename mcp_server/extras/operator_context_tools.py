@@ -32,6 +32,7 @@ Design notes:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -126,7 +127,7 @@ def _collect_standing_decisions(conn: sqlite3.Connection, cwd: str | None) -> li
     for row in rows or []:
         if not isinstance(row, dict):
             try:
-                row = {k: row[k] for k in row.keys()}  # type: ignore[attr-defined]
+                row = dict(row)  # type: ignore[attr-defined]
             except Exception:
                 continue
         out.append(
@@ -151,7 +152,7 @@ def _collect_bans(conn: sqlite3.Connection, cwd: str | None) -> list[dict[str, A
     for row in rows or []:
         if not isinstance(row, dict):
             try:
-                row = {k: row[k] for k in row.keys()}  # type: ignore[attr-defined]
+                row = dict(row)  # type: ignore[attr-defined]
             except Exception:
                 continue
         out.append(
@@ -207,7 +208,7 @@ def _collect_recent_corrections(conn: sqlite3.Connection, cwd: str | None) -> li
     for h in hits or []:
         # Hits may be sqlite3.Row, QueryHit dataclass, or dict.
         if hasattr(h, "keys"):
-            d = {k: h[k] for k in h.keys()}
+            d = {k: h[k] for k in h}
             context = d.get("context") or d.get("context_json") or {}
             if isinstance(context, str):
                 try:
@@ -244,7 +245,7 @@ def _collect_machines(conn: sqlite3.Connection, cwd: str | None) -> list[str]:
             out.append(row)
             continue
         if hasattr(row, "keys"):
-            d = {k: row[k] for k in row.keys()}
+            d = dict(row)
         elif isinstance(row, dict):
             d = row
         else:
@@ -391,10 +392,8 @@ def get_operator_context(cwd: str | None = None, max_chars: int = 1800) -> dict:
     except Exception as e:  # noqa: BLE001
         log.debug("operator_context: machines unavailable: %s", e)
 
-    try:
+    with contextlib.suppress(Exception):
         conn.close()
-    except Exception:
-        pass
 
     payload = _build_payload(sections, max_chars=max(200, int(max_chars)))
     # Tag the payload so the model knows it's the unified-context blob and not

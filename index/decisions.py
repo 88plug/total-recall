@@ -94,7 +94,7 @@ def row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     if isinstance(row, dict):
         return dict(row)
     try:
-        return {k: row[k] for k in row.keys()}
+        return dict(row)
     except (AttributeError, TypeError):
         return dict(row)  # type: ignore[arg-type]
 

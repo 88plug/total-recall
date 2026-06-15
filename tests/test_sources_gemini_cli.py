@@ -13,10 +13,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-
-import pytest
 
 from lib.schema import AssistantRecord, SystemRecord, UserRecord
 from lib.sources.base import SOURCES
@@ -26,7 +24,6 @@ from lib.sources.gemini_cli import (
     _map_tokens,
     _replay,
 )
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -310,7 +307,9 @@ def test_iter_records_end_to_end(tmp_path: Path):
             "timestamp": "t2",
             "content": [{"text": "ok"}],
             "toolCalls": [{"id": "t1", "name": "shell", "status": "pending"}],
-            "tokens": {"input": 10, "output": 3, "cached": 0, "thoughts": 0, "tool": 1, "total": 14},
+            "tokens": {
+                "input": 10, "output": 3, "cached": 0, "thoughts": 0, "tool": 1, "total": 14
+            },
         },
         {"id": "u2", "type": "user", "timestamp": "t3", "content": "second turn"},
         # status update: same id, last-write-wins
@@ -322,7 +321,9 @@ def test_iter_records_end_to_end(tmp_path: Path):
             "toolCalls": [
                 {"id": "t1", "name": "shell", "status": "completed", "result": "done"}
             ],
-            "tokens": {"input": 10, "output": 3, "cached": 0, "thoughts": 0, "tool": 1, "total": 14},
+            "tokens": {
+                "input": 10, "output": 3, "cached": 0, "thoughts": 0, "tool": 1, "total": 14
+            },
         },
         {"$set": {"lastUpdated": "2026-05-25T12:09:00Z"}},
         {
@@ -337,7 +338,7 @@ def test_iter_records_end_to_end(tmp_path: Path):
         # add an info row
         {"id": "i1", "type": "info", "timestamp": "t6", "content": "you compacted"},
     ]
-    path = _build_session(tmp_path / "tmp", session_id="sX", rows=rows)
+    _build_session(tmp_path / "tmp", session_id="sX", rows=rows)
     s = GeminiCliSource(root=tmp_path / "tmp")
     sessions = list(s.discover_sessions())
     assert len(sessions) == 1
@@ -391,7 +392,7 @@ def test_iter_records_function_call_and_response(tmp_path: Path):
             ],
         },
     ]
-    path = _build_session(tmp_path / "tmp", session_id="sFC", rows=rows)
+    _build_session(tmp_path / "tmp", session_id="sFC", rows=rows)
     s = GeminiCliSource(root=tmp_path / "tmp")
     sessions = list(s.discover_sessions())
     yielded = list(s.iter_records(sessions[0]))

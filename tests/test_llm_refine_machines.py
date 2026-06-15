@@ -105,8 +105,12 @@ class TestSuccessfulFiltering:
 
         result = refine_machines(machines, client=client)
 
-        assert result["host-alpha"] == {"role": "web", "ip": "10.0.0.1", "tailscale": True, "hits": 5}
-        assert result["relay-eu-1"] == {"role": "relay", "ip": "100.64.1.1", "tailscale": True, "hits": 3}
+        assert result["host-alpha"] == {
+            "role": "web", "ip": "10.0.0.1", "tailscale": True, "hits": 5
+        }
+        assert result["relay-eu-1"] == {
+            "role": "relay", "ip": "100.64.1.1", "tailscale": True, "hits": 3
+        }
         assert "brute-force" not in result
 
     def test_all_schema_keys_present(self):
@@ -188,7 +192,7 @@ class TestBatching:
 
         # The mock returns only entries that start with "server-".
         def smart_generate_json(system, user, schema=None, **kw):
-            import json, re
+            import re
             # Extract quoted tokens from the prompt.
             found = re.findall(r"'(server-\d+)'", user)
             return {"keep": found}

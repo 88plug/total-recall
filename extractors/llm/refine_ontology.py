@@ -47,9 +47,11 @@ You are a terminology extractor. Your job is to write a SHORT definition of what
 a term means in THIS operator's context.
 
 RULES:
-1. Do NOT copy, quote, or repeat the context text. Restate the meaning in your OWN words as one short sentence.
+1. Do NOT copy, quote, or repeat the context text. Restate the meaning in \
+your OWN words as one short sentence.
 2. Use only the information in the provided snippet — do not add general knowledge.
-3. If the snippet is too vague, ambiguous, or off-topic to form a confident definition, return null for that term.
+3. If the snippet is too vague, ambiguous, or off-topic to form a confident \
+definition, return null for that term.
 
 EXAMPLES:
   term: "sharechain"
@@ -58,7 +60,8 @@ EXAMPLES:
 
   term: "fan-out"
   snippet: "fan-out parallel agents research wave then build wave non-overlapping files"
-  -> definition: "A workflow pattern where multiple agents work in parallel on separate subtasks before merging results."
+  -> definition: "A workflow pattern where multiple agents work in parallel \
+on separate subtasks before merging results."
 
   term: "xyzzy"
   snippet: "xyzzy"
@@ -79,8 +82,10 @@ RULES:
 
 EXAMPLES:
   cwd: "ip-service-for-docker"
-  snippets: ["returns the real client IP even behind NAT", "tiny Go HTTP service", "used by sidecar relay fleet"]
-  -> narrative: "A lightweight Go HTTP service that reports the real client IP address, used by the sidecar relay infrastructure."
+  snippets: ["returns the real client IP even behind NAT", "tiny Go HTTP \
+service", "used by sidecar relay fleet"]
+  -> narrative: "A lightweight Go HTTP service that reports the real client IP \
+address, used by the sidecar relay infrastructure."
 
   cwd: "temp-scratch"
   snippets: ["scratch", "testing stuff"]
@@ -154,16 +159,19 @@ def _is_echo(output: str, source: str, threshold: float = _ECHO_THRESHOLD) -> bo
     src_lower = source.lower().strip()
     # Only apply verbatim check when both strings are long enough to avoid
     # false positives from single-char / very short sources.
-    if len(out_lower) >= _VERBATIM_MIN_LEN and len(src_lower) >= _VERBATIM_MIN_LEN:
-        if out_lower in src_lower or src_lower in out_lower:
-            return True
+    if (
+        len(out_lower) >= _VERBATIM_MIN_LEN
+        and len(src_lower) >= _VERBATIM_MIN_LEN
+        and (out_lower in src_lower or src_lower in out_lower)
+    ):
+        return True
     out_tokens = _tokenize(output)
     src_tokens = _tokenize(source)
     overlap = len(out_tokens & src_tokens) / max(1, len(out_tokens))
     return overlap >= threshold
 
 
-def _get_client(client: "LLMClient | None") -> "LLMClient | None":
+def _get_client(client: LLMClient | None) -> LLMClient | None:
     """Return a usable client or None."""
     if client is not None:
         return client if client.available else None
@@ -333,7 +341,7 @@ def _build_narrative_user_prompt(batch: list[dict]) -> str:
 
 def refine_vocabulary_definitions(
     terms: list[dict],
-    client: "LLMClient | None" = None,
+    client: LLMClient | None = None,
 ) -> list[dict]:
     """For each term, return a copy with a ``definition`` field added/updated.
 
@@ -414,7 +422,7 @@ def refine_vocabulary_definitions(
 
 def refine_project_narratives(
     projects: list[dict],
-    client: "LLMClient | None" = None,
+    client: LLMClient | None = None,
 ) -> list[dict]:
     """For each project, return a copy with a ``narrative`` field added.
 

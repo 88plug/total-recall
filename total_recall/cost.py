@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Mapping
+from collections.abc import Mapping
 
 # ---------------------------------------------------------------------------
 # Default per-Mtok rates (USD), verified May 2026.

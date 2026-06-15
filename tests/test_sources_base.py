@@ -7,8 +7,9 @@ any other on-disk corpus. Adapter-specific behaviour lives in
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import pytest
 
@@ -19,7 +20,6 @@ from lib.sources.base import (
     all_sources,
     source_by_name,
 )
-
 
 # ---------------------------------------------------------------------------
 # SessionFile dataclass shape

@@ -19,7 +19,6 @@ import time
 import pytest
 
 from detector.reinjection import (
-    CACHE_FRESH_SECONDS,
     MAX_INJECTIONS_PER_SESSION,
     SessionState,
     should_reinject,

@@ -49,11 +49,13 @@ Design constraints
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -245,7 +247,7 @@ def _process_dag(records: dict[str, dict]) -> dict[str, dict[str, int]]:
 
     # Build parent→record lookup (keyed by uuid for O(1) parent lookup).
     # We need: for each user turn, find its parent assistant turn.
-    for uid, rec in records.items():
+    for _uid, rec in records.items():
         if rec.get("type") != "user":
             continue
 
@@ -285,10 +287,8 @@ def _process_dag(records: dict[str, dict]) -> dict[str, dict[str, int]]:
         ai_behavior = classify_ai_behavior(content_blocks, full_text)
 
         ts_raw = rec.get("timestamp")
-        try:
-            ts = int(ts_raw) if ts_raw is not None else None
-        except (TypeError, ValueError):
-            ts = None
+        with contextlib.suppress(TypeError, ValueError):
+            int(ts_raw) if ts_raw is not None else None
 
         counts.setdefault(reaction, {})[ai_behavior] = (
             counts.get(reaction, {}).get(ai_behavior, 0) + 1
@@ -421,7 +421,9 @@ def _record_to_dag_dict(rec: Any) -> dict | None:
             if btype == "text":
                 raw_blocks.append({"type": "text", "text": getattr(blk, "text", "") or ""})
             elif btype == "thinking":
-                raw_blocks.append({"type": "thinking", "thinking": getattr(blk, "thinking", "") or ""})
+                raw_blocks.append(
+                    {"type": "thinking", "thinking": getattr(blk, "thinking", "") or ""}
+                )
             elif btype == "tool_use":
                 tu = getattr(blk, "tool_use", None)
                 raw_blocks.append({
@@ -447,7 +449,7 @@ def _record_to_dag_dict(rec: Any) -> dict | None:
 
 
 def extract_satisfaction_from_records(
-    records: "Iterable[Any]",
+    records: Iterable[Any],
     existing: dict | None = None,
 ) -> dict:
     """Full or incremental satisfaction extraction from a multi-source record stream.

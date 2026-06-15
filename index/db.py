@@ -14,6 +14,7 @@ schema bootstrap are guaranteed.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sqlite3
 from pathlib import Path
@@ -53,11 +54,9 @@ def _ensure_parent_dir(db_path: Path) -> None:
     """
     parent = db_path.parent
     parent.mkdir(parents=True, exist_ok=True)
-    try:
-        # Only tighten perms when we own the directory; ignore on weird FS.
+    # Only tighten perms when we own the directory; ignore on weird FS.
+    with contextlib.suppress(PermissionError, OSError):
         os.chmod(parent, 0o700)
-    except (PermissionError, OSError):
-        pass
 
 
 def connect(
@@ -165,13 +164,11 @@ def _migrate_to_v4(conn: sqlite3.Connection) -> None:
         # have errored before this point (sqlite executes left-to-right and
         # would parse the CREATE INDEX referencing the missing column). To
         # guarantee the index ends up present, re-create it here defensively.
-        try:
+        with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_messages_source_cwd_ts "
                 "ON messages(source, cwd, ts DESC)"
             )
-        except sqlite3.OperationalError:
-            pass
 
     # extractions.source / extractions.dedup_superseded_by_source
     ext_cols = _table_columns(conn, "extractions")
@@ -185,19 +182,15 @@ def _migrate_to_v4(conn: sqlite3.Connection) -> None:
             conn.execute(
                 "ALTER TABLE extractions ADD COLUMN dedup_superseded_by_source TEXT"
             )
-        try:
+        with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_extractions_source_kind "
                 "ON extractions(source, kind, ts DESC)"
             )
-        except sqlite3.OperationalError:
-            pass
 
     # Help the planner notice the new columns/index.
-    try:
+    with contextlib.suppress(sqlite3.DatabaseError):
         conn.execute("ANALYZE")
-    except sqlite3.DatabaseError:
-        pass
 
 
 # Backfill CASE: collapse worktree cwd to its owning repo root. Mirrors
@@ -239,31 +232,25 @@ def _migrate_to_v5(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE messages ADD COLUMN project_key TEXT")
         conn.execute(f"UPDATE messages SET project_key = {_PROJECT_KEY_CASE}")
     if msg_cols:
-        try:
+        with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_messages_project_key_ts "
                 "ON messages(project_key, ts DESC)"
             )
-        except sqlite3.OperationalError:
-            pass
 
     ext_cols = _table_columns(conn, "extractions")
     if ext_cols and "project_key" not in ext_cols:
         conn.execute("ALTER TABLE extractions ADD COLUMN project_key TEXT")
         conn.execute(f"UPDATE extractions SET project_key = {_PROJECT_KEY_CASE}")
     if ext_cols:
-        try:
+        with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_extractions_project_key_kind "
                 "ON extractions(project_key, kind, ts DESC)"
             )
-        except sqlite3.OperationalError:
-            pass
 
-    try:
+    with contextlib.suppress(sqlite3.DatabaseError):
         conn.execute("ANALYZE")
-    except sqlite3.DatabaseError:
-        pass
 
 
 def apply_schema(conn: sqlite3.Connection) -> None:

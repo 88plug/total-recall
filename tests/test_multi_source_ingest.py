@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator, List
+from typing import Any
 
 import pytest
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -35,7 +35,6 @@ from index.multi_source import (  # noqa: E402
     text_hash,
 )
 from lib.sources.base import SOURCES, SessionFile, SessionSource  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Synthetic record + adapter
@@ -108,8 +107,7 @@ def _make_synth_source(
             self, session: SessionFile, start_offset: int = 0
         ) -> Iterator[tuple[int, Any]]:
             recs = session.extra.get("_records", [])
-            for i, rec in enumerate(recs):
-                yield (i, rec)
+            yield from enumerate(recs)
 
     _SynthSource.name = name
     _SynthSource.__name__ = f"_SynthSource_{name}"

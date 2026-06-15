@@ -37,7 +37,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -255,7 +254,7 @@ def test_all_sections_present_in_priority_order(tmp_db_dir, monkeypatch):
 
     # Priority order: identity must appear before machines etc. when iterating
     # the dict insertion order (Python 3.7+ preserves it).
-    keys = [k for k in out.keys() if not k.startswith("_")]
+    keys = [k for k in out if not k.startswith("_")]
     priority = list(tool_mod._PRIORITY)
     # Filter priority to only those present, then compare.
     expected_order = [k for k in priority if k in keys]

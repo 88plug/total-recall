@@ -21,6 +21,7 @@ fresh-checkout / pre-first-index environment.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -49,7 +50,13 @@ def _index_missing_error() -> dict:
 
 @mcp.tool()
 def check_banned(thing: str) -> dict:
-    """Check if a thing (provider, tool, library, framework, pattern) is banned by the operator. Returns {"banned": bool, "strength": ..., "verbatim_quote": ..., "context": ...}. Call BEFORE suggesting any default. Examples: check_banned("some-provider") → banned=absolute. check_banned("another-provider") → banned=context (only publicly)."""
+    (
+        "Check if a thing (provider, tool, library, framework, pattern) is banned by the "
+        "operator. Returns {\"banned\": bool, \"strength\": ..., "
+        "\"verbatim_quote\": ..., \"context\": "
+        "...}. Call BEFORE suggesting any default. Examples: check_banned(\"some-provider\") → "
+        "banned=absolute. check_banned(\"another-provider\") → banned=context (only publicly)."
+    )
     if not isinstance(thing, str) or not thing.strip():
         return {"banned": False, "error": "thing must be a non-empty string"}
 
@@ -70,10 +77,8 @@ def check_banned(thing: str) -> dict:
         log.exception("check_banned() failed")
         return {"banned": False, "error": f"check_banned failed: {e!r}"}
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     if row is None:
         return {"banned": False, "thing": thing.lower()}
@@ -92,7 +97,11 @@ def check_banned(thing: str) -> dict:
 
 @mcp.tool()
 def list_failed_attempts(topic: str | None = None, limit: int = 10) -> list[dict]:
-    """Failed approaches the operator has documented. Use before suggesting something that 'sounds reasonable' — it might already be on the failed-attempts log. Returns chronological list with replaced_by + reason."""
+    (
+        "Failed approaches the operator has documented. Use before suggesting something that "
+        "'sounds reasonable' — it might already be on the failed-attempts log. Returns "
+        "chronological list with replaced_by + reason."
+    )
     conn = get_conn()
     if conn is None:
         return [_index_missing_error()]
@@ -107,10 +116,8 @@ def list_failed_attempts(topic: str | None = None, limit: int = 10) -> list[dict
         log.exception("list_failed_attempts() failed")
         return [{"error": f"list_failed_attempts failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     out: list[dict] = []
     for r in rows:

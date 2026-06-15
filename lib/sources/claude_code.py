@@ -18,12 +18,15 @@ remains the source of truth for the streaming JSONL semantics
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 from lib.jsonl_walker import (
     derive_cwd_from_slug,
     derive_slug_from_cwd,
+)
+from lib.jsonl_walker import (
     iter_records as _cc_iter_records,
 )
 from lib.sources.base import SOURCES, SessionFile, SessionSource
@@ -39,7 +42,7 @@ class ClaudeCodeSource(SessionSource):
 
     name = "claude_code"
 
-    def __init__(self, projects_root: Optional[Path] = None) -> None:
+    def __init__(self, projects_root: Path | None = None) -> None:
         self.projects_root = (
             projects_root if projects_root is not None
             else Path.home() / ".claude" / "projects"

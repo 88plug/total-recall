@@ -23,7 +23,6 @@ from click.testing import CliRunner
 from total_recall import __version__
 from total_recall.__main__ import cli
 
-
 SUBCOMMANDS = [
     "index",
     "query",

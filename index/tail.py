@@ -20,14 +20,15 @@ Inotify is an OK upgrade later; the public API of this module won't change.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import signal
 import sqlite3
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
-from index.ingest import ingest_all
+from index.ingest import _DEFAULT_PROJECTS_ROOT, ingest_all
 
 log = logging.getLogger(__name__)
 
@@ -47,17 +48,15 @@ def _install_signal_handlers(stop: Callable[[], None]) -> None:
         stop()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
+        # Off-main-thread or unsupported on this OS; that's fine.
+        with contextlib.suppress(ValueError, OSError):
             signal.signal(sig, _handler)
-        except (ValueError, OSError):
-            # Off-main-thread or unsupported on this OS; that's fine.
-            pass
 
 
 def tail_loop(
     conn: sqlite3.Connection,
     interval: int = 30,
-    projects_root: Path = Path("~/.claude/projects").expanduser(),
+    projects_root: Path = _DEFAULT_PROJECTS_ROOT,
     max_iterations: int | None = None,
 ) -> None:
     """Run :func:`ingest_all` every ``interval`` seconds until interrupted.

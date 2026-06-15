@@ -10,8 +10,6 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 from lib.schema import AssistantRecord, UserRecord
 from lib.sources import SessionFile
 from lib.sources.aider import (
@@ -20,7 +18,6 @@ from lib.sources.aider import (
     USER_LINE,
     AiderSource,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

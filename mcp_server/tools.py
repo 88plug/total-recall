@@ -16,6 +16,7 @@ Sandbox: read-only, no network, no writes to ``~/.claude/projects/``.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import os
@@ -72,10 +73,9 @@ def _traced(event_name: str):
                     attrs["topic_len"] = len(topic)
                 if isinstance(result, list):
                     attrs["hits"] = len(result)
-                try:
+                # pragma: no cover — observability never breaks tools
+                with contextlib.suppress(Exception):
                     _emit(event_name, elapsed_ms=elapsed_ms, error=err, **attrs)
-                except Exception:  # pragma: no cover — observability never breaks tools
-                    pass
 
         return wrapper
 
@@ -136,9 +136,7 @@ def _ts_to_iso(value: Any) -> str | None:
 
 def _row_to_hit(row: Any) -> dict:
     """Coerce a sqlite3.Row / mapping / object into the documented hit dict."""
-    if hasattr(row, "keys"):
-        d = {k: row[k] for k in row.keys()}
-    elif isinstance(row, dict):
+    if hasattr(row, "keys") or isinstance(row, dict):
         d = dict(row)
     else:
         # Dataclass-like object (e.g. QueryHit) — fall back to vars().
@@ -231,7 +229,15 @@ def recall(
     scope: Literal["this_cwd", "all_projects"] = "this_cwd",
     limit: int = 5,
 ) -> list[dict]:
-    """Recall prior session memories about a topic across past Claude Code sessions: decisions, user corrections, failed approaches, progress, domain facts. Use when the user references prior work, asks what they did, or you need to avoid a past mistake. Returns ranked hits {content, session_id, cwd, ts, kind, score}. If `scope="this_cwd"` yields 0 hits the tool automatically retries with `scope="all_projects"` and prepends a `_meta` row indicating the broader scope was used — callers should not re-issue the call."""
+    (
+        "Recall prior session memories about a topic across past Claude Code sessions: "
+        "decisions, user corrections, failed approaches, progress, domain facts. Use when the "
+        "user references prior work, asks what they did, or you need to avoid a past mistake. "
+        "Returns ranked hits {content, session_id, cwd, ts, kind, score}. If `scope=\"this_cwd\"` "
+        "yields 0 hits the tool automatically retries with `scope=\"all_projects\"` and prepends "
+        "a `_meta` row indicating the broader scope was used — callers should not re-issue the "
+        "call."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -269,10 +275,8 @@ def recall(
         log.exception("recall() failed")
         return [{"error": f"recall failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     out: list[dict] = [_row_to_hit(h) for h in hits]
     if fell_back:
@@ -283,7 +287,12 @@ def recall(
 @mcp.tool()
 @_traced("mcp.prior_sessions_for_cwd")
 def prior_sessions_for_cwd(cwd: str | None = None, limit: int = 10) -> list[dict]:
-    """List previous Claude Code sessions for this working directory. Returns ai_title, last_prompt, started_at, message_count. Use when the user asks 'what have we been working on', wants orientation at session start. cwd defaults to current Claude Code cwd."""
+    (
+        "List previous Claude Code sessions for this working directory. Returns ai_title, "
+        "last_prompt, started_at, message_count. Use when the user asks 'what have we been "
+        "working on', wants orientation at session start. cwd defaults to current Claude Code "
+        "cwd."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -308,10 +317,8 @@ def prior_sessions_for_cwd(cwd: str | None = None, limit: int = 10) -> list[dict
         log.exception("prior_sessions_for_cwd() failed")
         return [{"error": f"prior_sessions_for_cwd failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     out: list[dict] = [_row_to_hit(r) for r in rows]
     if fell_back:
@@ -322,7 +329,13 @@ def prior_sessions_for_cwd(cwd: str | None = None, limit: int = 10) -> list[dict
 @mcp.tool()
 @_traced("mcp.find_failed_attempts")
 def find_failed_attempts(pattern: str, cwd: str | None = None, limit: int = 5) -> list[dict]:
-    """Find prior attempts the user rejected — corrections paired with the rejected approach. Use before suggesting something to check if already tried and shot down. Returns {rejected_approach, correction, session_id, ts}. When `cwd` is omitted the tool searches the current cwd first; if that yields 0 hits it automatically retries across all projects and prepends a `_meta` row."""
+    (
+        "Find prior attempts the user rejected — corrections paired with the rejected approach. "
+        "Use before suggesting something to check if already tried and shot down. Returns "
+        "{rejected_approach, correction, session_id, ts}. When `cwd` is omitted the tool "
+        "searches the current cwd first; if that yields 0 hits it automatically retries across "
+        "all projects and prepends a `_meta` row."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -358,10 +371,8 @@ def find_failed_attempts(pattern: str, cwd: str | None = None, limit: int = 5) -
         log.exception("find_failed_attempts() failed")
         return [{"error": f"find_failed_attempts failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     results: list[dict] = []
     for h in hits:
@@ -398,7 +409,14 @@ def find_user_preferences(
     scope: Literal["this_cwd", "all_projects"] = "all_projects",
     limit: int = 10,
 ) -> list[dict]:
-    """Find recurring user preferences and standing rules extracted across past sessions. Examples: provider preferences, formatting preferences, banned tools, repeated corrections. Use when picking defaults that might conflict with user habits. If `scope="this_cwd"` yields 0 hits the tool automatically retries with `scope="all_projects"` and prepends a `_meta` row indicating the broader scope was used."""
+    (
+        "Find recurring user preferences and standing rules extracted across past sessions. "
+        "Examples: provider preferences, formatting preferences, banned tools, repeated "
+        "corrections. Use when picking defaults that might conflict with user habits. If "
+        "`scope=\"this_cwd\"` yields 0 hits the tool automatically retries with "
+        "`scope=\"all_projects\"` and prepends a `_meta` row indicating the broader scope was "
+        "used."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -428,10 +446,8 @@ def find_user_preferences(
         log.exception("find_user_preferences() failed")
         return [{"error": f"find_user_preferences failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     # Truncate to the requested limit by score (desc).
     converted = [_row_to_hit(h) for h in hits]
@@ -445,7 +461,10 @@ def find_user_preferences(
 @mcp.tool()
 @_traced("mcp.get_session_digest")
 def get_session_digest(session_id: str) -> dict:
-    """Return a structured digest of one past session: ai_title, last_prompt, top decisions, top corrections, progress markers. Use when user references a session by id."""
+    (
+        "Return a structured digest of one past session: ai_title, last_prompt, top decisions, "
+        "top corrections, progress markers. Use when user references a session by id."
+    )
     conn = get_conn()
     if conn is None:
         err = _index_missing_error()[0]
@@ -569,10 +588,8 @@ def get_session_digest(session_id: str) -> dict:
         log.exception("get_session_digest() failed")
         return {"error": f"get_session_digest failed: {e!r}"}
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     return digest
 
@@ -585,7 +602,12 @@ def search_messages(
     role: Literal["any", "user", "assistant"] = "any",
     limit: int = 10,
 ) -> list[dict]:
-    """Raw FTS5 search over past message text (not extracted memories). Use as fallback when `recall` doesn't surface what you want. When `cwd` is omitted the tool searches the current cwd first; if that yields 0 hits it automatically retries across all projects and prepends a `_meta` row."""
+    (
+        "Raw FTS5 search over past message text (not extracted memories). Use as fallback when "
+        "`recall` doesn't surface what you want. When `cwd` is omitted the tool searches the "
+        "current cwd first; if that yields 0 hits it automatically retries across all projects "
+        "and prepends a `_meta` row."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -619,10 +641,8 @@ def search_messages(
         log.exception("search_messages() failed")
         return [{"error": f"search_messages failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     out = [_row_to_hit(r) for r in rows]
     if fell_back:

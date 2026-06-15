@@ -11,10 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from lib.schema import AssistantRecord, Record, UserRecord
-from lib.sources import SOURCES, SessionFile, all_sources, source_by_name
+from lib.schema import AssistantRecord, UserRecord
+from lib.sources import SOURCES, all_sources, source_by_name
 from lib.sources.cline import ClineSource
-
 
 # ---------------------------------------------------------------------------
 # helpers

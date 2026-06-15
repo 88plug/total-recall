@@ -16,16 +16,15 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Unit tests for the four newly-implemented functions.
 # ---------------------------------------------------------------------------
 
 
 def _seed(conn: sqlite3.Connection) -> None:
-    from index import goals as goals_idx
-    from index import decisions as dec
     from index import bans as bans_idx
+    from index import decisions as dec
+    from index import goals as goals_idx
     from index import ontology as onto
 
     goals_idx.apply_schema(conn)
@@ -35,8 +34,9 @@ def _seed(conn: sqlite3.Connection) -> None:
 
 
 def test_get_active_goal_for_cwd_pools_worktree():
-    from index.goals import get_active_goal_for_cwd, upsert_from_extractions
     from datetime import datetime, timezone
+
+    from index.goals import get_active_goal_for_cwd, upsert_from_extractions
 
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
@@ -152,9 +152,10 @@ def real_db_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def test_get_operator_context_real_sections_appear(real_db_dir, monkeypatch):
     from datetime import datetime, timezone
-    from index import goals as goals_idx
-    from index import decisions as dec
+
     from index import bans as bans_idx
+    from index import decisions as dec
+    from index import goals as goals_idx
     from index import ontology as onto
     from index import operator as op
 

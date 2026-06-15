@@ -55,6 +55,7 @@ Return shape
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import sqlite3
@@ -576,7 +577,8 @@ def recall_targeted(
         → {finding: "'some-provider' is banned (absolute)", recommendation: "avoid",
            verbatim_quotes: ["never use some-provider — they nuked our box once"]}
       recall_targeted("looking_up_decision", "billing_rail")
-        → {finding: "operator chose 'billing-provider-a' for 'billing_rail' over 'billing-provider-b'",
+        → {finding: "operator chose 'billing-provider-a' for 'billing_rail'
+           over 'billing-provider-b'",
            recommendation: "use", confidence: 0.8}
       recall_targeted("what_is_active_goal", "")
         → {finding: "active goal for '/home/operator/my-project': 'ship v0.3 MCP tools'",
@@ -644,10 +646,8 @@ def recall_targeted(
             recommendation="verify",
         )
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
 
 __all__ = ["recall_targeted"]

@@ -193,7 +193,7 @@ class TestChunkForEmbedding:
         chunks = chunk_for_embedding("Short.", max_tokens=400, overlap=50)
         # No back-to-back identical chunks even though the overlap window
         # would otherwise replicate this short text.
-        for a, b in zip(chunks, chunks[1:]):
+        for a, b in zip(chunks, chunks[1:], strict=False):
             assert a != b
 
 
@@ -512,7 +512,10 @@ class TestIncrementalVecBackfill:
             "INSERT INTO extractions(id, content, cwd, ts, kind) VALUES (?,?,?,?,?)",
             (3, "postgres row level security", "/c", "2025-01-03", "decision"),
         )
-        conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (?,?)", (3, "postgres row level security"))
+        conn.execute(
+            "INSERT INTO extractions_fts(rowid, content) VALUES (?,?)",
+            (3, "postgres row level security"),
+        )
         conn.commit()
 
         second = backfill_all(conn, embedder=_FakeEmbedder())
@@ -634,12 +637,18 @@ class TestHybridSearchFallback:
             "INSERT INTO extractions(id, content, cwd, ts, kind) "
             "VALUES (1, 'rate limiting nginx config', '/proj/a', '2025-01-01', 'decision')"
         )
-        conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (1, 'rate limiting nginx config')")
+        conn.execute(
+            "INSERT INTO extractions_fts(rowid, content) "
+            "VALUES (1, 'rate limiting nginx config')"
+        )
         conn.execute(
             "INSERT INTO extractions(id, content, cwd, ts, kind) "
             "VALUES (2, 'unrelated banana smoothie', '/proj/b', '2025-01-02', 'note')"
         )
-        conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (2, 'unrelated banana smoothie')")
+        conn.execute(
+            "INSERT INTO extractions_fts(rowid, content) "
+            "VALUES (2, 'unrelated banana smoothie')"
+        )
         conn.commit()
 
         hits = hybrid_search(conn, "nginx", embedder=None, limit=5)
@@ -700,12 +709,17 @@ class TestIntegration:
             """
         )
         rows = [
-            (1, "Configure nginx rate limiting with limit_req_zone directive.", "/proj/a", "2025-01-01", "decision"),
-            (2, "Best chocolate cake recipe with cocoa and butter.", "/proj/b", "2025-01-02", "note"),
-            (3, "Use PostgreSQL row-level security for tenant isolation.", "/proj/c", "2025-01-03", "decision"),
+            (1, "Configure nginx rate limiting with limit_req_zone directive.",
+             "/proj/a", "2025-01-01", "decision"),
+            (2, "Best chocolate cake recipe with cocoa and butter.",
+             "/proj/b", "2025-01-02", "note"),
+            (3, "Use PostgreSQL row-level security for tenant isolation.",
+             "/proj/c", "2025-01-03", "decision"),
         ]
         for r in rows:
-            conn.execute("INSERT INTO extractions(id, content, cwd, ts, kind) VALUES (?,?,?,?,?)", r)
+            conn.execute(
+                "INSERT INTO extractions(id, content, cwd, ts, kind) VALUES (?,?,?,?,?)", r
+            )
             conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (?,?)", (r[0], r[1]))
         conn.commit()
 

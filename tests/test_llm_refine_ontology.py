@@ -124,7 +124,9 @@ class TestNormalizeVocabRaw:
         raw = {"sharechain": "A p2pool share chain.", "fan-out": "Parallel agent pattern."}
         result = _normalize_vocab_raw(raw)
         terms = {e["term"]: e["definition"] for e in result}
-        assert terms == {"sharechain": "A p2pool share chain.", "fan-out": "Parallel agent pattern."}
+        assert terms == {
+            "sharechain": "A p2pool share chain.", "fan-out": "Parallel agent pattern."
+        }
 
     def test_single_object_shape(self):
         """{"term": "foo", "definition": "A def."} -> [{term, definition}]"""
@@ -318,10 +320,21 @@ class TestRefineNarrativesShapeVariants:
     def test_summary_alias_end_to_end(self):
         projects = [self._proj("go-service")]
         # Use a narrative that clearly differs from the snippet to avoid the echo filter.
-        payload = {"narratives": [{"cwd": "go-service", "summary": "A lightweight HTTP router that proxies requests to backend pods."}]}
+        payload = {
+            "narratives": [
+                {
+                    "cwd": "go-service",
+                    "summary": (
+                        "A lightweight HTTP router that proxies requests to backend pods."
+                    ),
+                }
+            ]
+        }
         client = _client_returning(payload)
         result = refine_project_narratives(projects, client=client)
-        assert result[0]["narrative"] == "A lightweight HTTP router that proxies requests to backend pods."
+        assert result[0]["narrative"] == (
+            "A lightweight HTTP router that proxies requests to backend pods."
+        )
 
     def test_description_alias_end_to_end(self):
         projects = [self._proj("relay")]
@@ -386,7 +399,10 @@ class TestRefineVocabularyDefinitions:
 
     def test_unknown_term_from_llm_dropped(self):
         """LLM returns a term not in the input -- anti-hallucination guard."""
-        terms = [{"term": "alpha", "frequency": 5, "category": "concept", "context_snippet": "Alpha is X."}]
+        terms = [
+            {"term": "alpha", "frequency": 5, "category": "concept",
+             "context_snippet": "Alpha is X."}
+        ]
         payload = {
             "definitions": [
                 {"term": "alpha", "definition": "Known def."},
@@ -402,7 +418,10 @@ class TestRefineVocabularyDefinitions:
 
     def test_overlong_definition_rejected(self):
         """Definitions longer than 300 chars are rejected (set to None)."""
-        terms = [{"term": "verbose", "frequency": 2, "category": "concept", "context_snippet": "context"}]
+        terms = [
+            {"term": "verbose", "frequency": 2, "category": "concept",
+             "context_snippet": "context"}
+        ]
         long_def = "A" * 301
         payload = {"definitions": [{"term": "verbose", "definition": long_def}]}
         client = _client_returning(payload)
@@ -481,7 +500,10 @@ class TestRefineVocabularyDefinitions:
 
     def test_case_insensitive_term_matching(self):
         """LLM may return the term in a different case -- should still match."""
-        terms = [{"term": "FooBar", "frequency": 3, "category": "concept", "context_snippet": "FooBar does X."}]
+        terms = [
+            {"term": "FooBar", "frequency": 3, "category": "concept",
+             "context_snippet": "FooBar does X."}
+        ]
         payload = {"definitions": [{"term": "foobar", "definition": "Lowercase match."}]}
         client = _client_returning(payload)
         result = refine_vocabulary_definitions(terms, client=client)
@@ -498,7 +520,10 @@ class TestRefineVocabularyDefinitions:
 
     def test_input_dicts_not_mutated(self):
         """Input dicts must not be modified in-place."""
-        terms = [{"term": "immutable", "frequency": 1, "category": "concept", "context_snippet": "ctx"}]
+        terms = [
+            {"term": "immutable", "frequency": 1, "category": "concept",
+             "context_snippet": "ctx"}
+        ]
         original_copy = dict(terms[0])
         payload = {"definitions": [{"term": "immutable", "definition": "A def."}]}
         client = _client_returning(payload)
@@ -732,7 +757,9 @@ class TestAntiEchoVocabulary:
             }
         ]
         # Genuinely synthesised -- different vocabulary, low token overlap
-        synthesised = "A workflow pattern where multiple agents work in parallel on separate subtasks."
+        synthesised = (
+            "A workflow pattern where multiple agents work in parallel on separate subtasks."
+        )
         payload = {"definitions": [{"term": "fan-out", "definition": synthesised}]}
         client = _client_returning(payload)
         result = refine_vocabulary_definitions(terms, client=client)
@@ -763,7 +790,10 @@ class TestAntiEchoNarratives:
             }
         ]
         # Model echoes the joined snippets almost verbatim
-        echo_narrative = "returns the real client IP even behind NAT tiny Go HTTP service used by sidecar relay fleet"
+        echo_narrative = (
+            "returns the real client IP even behind NAT tiny Go HTTP service "
+            "used by sidecar relay fleet"
+        )
         payload = {"narratives": [{"cwd": "ip-service-for-docker", "narrative": echo_narrative}]}
         client = _client_returning(payload)
         result = refine_project_narratives(projects, client=client)

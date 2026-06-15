@@ -44,9 +44,10 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 from lib.schema import (
     AssistantRecord,
@@ -132,10 +133,10 @@ class AiderSource(SessionSource):
 
     def __init__(
         self,
-        search_roots: Optional[list[Path]] = None,
+        search_roots: list[Path] | None = None,
         *,
-        max_files: Optional[int] = None,
-        max_seconds: Optional[float] = None,
+        max_files: int | None = None,
+        max_seconds: float | None = None,
     ) -> None:
         self.search_roots: list[Path] = (
             list(search_roots) if search_roots is not None else [Path.home()]
@@ -145,7 +146,7 @@ class AiderSource(SessionSource):
         if max_seconds is not None:
             self.max_seconds = max_seconds
         # Cached find results — lazily populated by _find_history_files.
-        self._cache: Optional[list[Path]] = None
+        self._cache: list[Path] | None = None
 
     # ---- availability ---------------------------------------------------
 
@@ -328,7 +329,7 @@ class AiderSource(SessionSource):
         except UnicodeDecodeError:
             text = blob.decode("utf-8", errors="replace")
 
-        ts: Optional[datetime] = None
+        ts: datetime | None = None
         if session.started_at is not None:
             try:
                 ts = datetime.fromtimestamp(session.started_at)
@@ -336,10 +337,10 @@ class AiderSource(SessionSource):
                 ts = None
 
         emitted = 0
-        current_role: Optional[str] = None
+        current_role: str | None = None
         buffer: list[str] = []
 
-        def _flush() -> Optional[Record]:
+        def _flush() -> Record | None:
             nonlocal current_role, buffer
             if current_role is None or not buffer:
                 current_role = None
@@ -406,7 +407,7 @@ class AiderSource(SessionSource):
 # ---------------------------------------------------------------------------
 
 
-def _base_kwargs(session: SessionFile, ts: Optional[datetime]) -> dict[str, Any]:
+def _base_kwargs(session: SessionFile, ts: datetime | None) -> dict[str, Any]:
     """Shared :class:`Record` base fields for Aider turns.
 
     Aider doesn't surface per-turn uuids, parent links, git branch, or
@@ -433,7 +434,7 @@ def _make_record(
     role: str,
     content: str,
     session: SessionFile,
-    ts: Optional[datetime],
+    ts: datetime | None,
 ) -> Record:
     """Build a :class:`UserRecord` or :class:`AssistantRecord` for one
     grouped turn of Aider markdown."""

@@ -26,7 +26,6 @@ from index.tentative import (
     promote_eligible,
 )
 
-
 HOUR = 3600
 DAY = 86400
 
@@ -149,7 +148,9 @@ def test_promote_eligible_drops_expired_facts(db):
     far_future = 1_000_000 + 31 * DAY
     promoted = promote_eligible(db, threshold=2, ttl_days=30, now_ts=far_future)
     assert promoted == []
-    row = db.execute("SELECT promoted_at, dropped_at FROM tentative_facts WHERE key='stale'").fetchone()
+    row = db.execute(
+        "SELECT promoted_at, dropped_at FROM tentative_facts WHERE key='stale'"
+    ).fetchone()
     assert row["promoted_at"] is None
     assert row["dropped_at"] == far_future
 

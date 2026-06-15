@@ -20,12 +20,13 @@ import pytest
 from index.db import apply_schema, connect
 from index.goals import (
     apply_schema as goals_apply_schema,
+)
+from index.goals import (
     get_active_goal,
     upsert_from_extractions,
 )
 from index.paths import project_key
 from index.query import search_extractions
-
 
 # ---------------------------------------------------------------------------
 # Unit: project_key

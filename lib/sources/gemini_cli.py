@@ -75,9 +75,10 @@ align 1:1 with Anthropic's. We do best-fit:
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 from lib.schema import (
     AssistantRecord,
@@ -90,13 +91,12 @@ from lib.schema import (
 )
 from lib.sources.base import SOURCES, SessionFile, SessionSource
 
-
 # ---------------------------------------------------------------------------
 # Helpers — parts / tokens / timestamps
 # ---------------------------------------------------------------------------
 
 
-def _parse_ts(raw: Any) -> Optional[datetime]:
+def _parse_ts(raw: Any) -> datetime | None:
     """Best-effort ISO-8601 → UTC datetime (silently returns ``None``)."""
     if not isinstance(raw, str):
         return None
@@ -108,7 +108,7 @@ def _parse_ts(raw: Any) -> Optional[datetime]:
         return None
 
 
-def _ts_seconds(raw: Any) -> Optional[float]:
+def _ts_seconds(raw: Any) -> float | None:
     dt = _parse_ts(raw)
     return dt.timestamp() if dt is not None else None
 
@@ -306,8 +306,8 @@ def _replay(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 def _translate(
     msg: dict[str, Any],
     metadata: dict[str, Any],
-    cwd: Optional[str],
-) -> Optional[Record]:
+    cwd: str | None,
+) -> Record | None:
     """Translate one Gemini ``MessageRecord`` into a :class:`Record` subclass.
 
     Returns ``None`` for messages we have no mapping for (should not
@@ -411,7 +411,7 @@ def _translate(
 # ---------------------------------------------------------------------------
 
 
-def _extract_first_object(path: Path) -> Optional[dict]:
+def _extract_first_object(path: Path) -> dict | None:
     """Return the first decoded JSON object in ``path``, or ``None``."""
     try:
         with path.open("r", encoding="utf-8", errors="replace") as fh:
@@ -447,7 +447,7 @@ def _seed_from_first_line(path: Path) -> dict[str, Any]:
     }
 
 
-def _cwd_from_seed(seed: dict[str, Any]) -> Optional[str]:
+def _cwd_from_seed(seed: dict[str, Any]) -> str | None:
     """Recover ``cwd`` from the seed's ``directories`` array if present."""
     dirs = seed.get("directories")
     if isinstance(dirs, list) and dirs:
@@ -466,7 +466,7 @@ class GeminiCliSource(SessionSource):
 
     name = "gemini_cli"
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Path | None = None) -> None:
         self.root = root if root is not None else Path.home() / ".gemini" / "tmp"
 
     def is_available(self) -> bool:

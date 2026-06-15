@@ -330,7 +330,7 @@ def chunk_for_embedding(text: str, max_tokens: int = 400, overlap: int = 50) -> 
     # produce a tail==chunk duplicate on very short inputs). Protected chunks
     # — products of the hard-splitter — are never deduped against each other.
     out: list[str] = []
-    for c, protected in zip(chunks, chunk_protected):
+    for c, protected in zip(chunks, chunk_protected, strict=False):
         c = c.strip()
         if not c:
             continue

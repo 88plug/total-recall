@@ -66,15 +66,17 @@ Schema drifts — parser is deliberately tolerant.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import sqlite3
 import sys
 import urllib.parse
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 from lib.schema import (
     AssistantRecord,
@@ -93,7 +95,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _parse_cursor_ts(raw: Any) -> Optional[datetime]:
+def _parse_cursor_ts(raw: Any) -> datetime | None:
     """Parse Cursor's timestamp field — both ISO-8601 and epoch seen.
 
     Returns ``None`` on anything that isn't recognisable; never raises.
@@ -116,7 +118,7 @@ def _parse_cursor_ts(raw: Any) -> Optional[datetime]:
     return None
 
 
-def _extract_text(content: Any) -> Optional[str]:
+def _extract_text(content: Any) -> str | None:
     """Flatten Cursor content to plain text where possible.
 
     Cursor content is either a string or a list of ``{type, text}`` blocks
@@ -267,7 +269,10 @@ def _cursor_user_bases() -> list[Path]:
     if sys.platform == "darwin":
         primary = home / "Library" / "Application Support" / "Cursor" / "User"
     elif sys.platform == "win32":
-        primary = Path(os.environ.get("APPDATA", str(home / "AppData" / "Roaming"))) / "Cursor" / "User"
+        primary = (
+            Path(os.environ.get("APPDATA", str(home / "AppData" / "Roaming")))
+            / "Cursor" / "User"
+        )
     else:
         primary = home / ".config" / "Cursor" / "User"
 
@@ -300,7 +305,7 @@ def _discover_vscdb_paths() -> list[Path]:
     return candidates
 
 
-def _resolve_cwd_for_vscdb(vscdb: Path) -> Optional[str]:
+def _resolve_cwd_for_vscdb(vscdb: Path) -> str | None:
     """Read sibling ``workspace.json`` and return the decoded filesystem path.
 
     workspace.json shape (from thomas-pedersen/cursor-chat-browser):
@@ -309,7 +314,7 @@ def _resolve_cwd_for_vscdb(vscdb: Path) -> Optional[str]:
 
     Returns ``None`` if the file is absent or unreadable.
     """
-    for key in ("folder", "workspace"):
+    for _key in ("folder", "workspace"):
         ws_json = vscdb.parent / "workspace.json"
         if not ws_json.exists():
             return None
@@ -328,7 +333,7 @@ def _resolve_cwd_for_vscdb(vscdb: Path) -> Optional[str]:
     return None  # unreachable, but satisfies type-checker
 
 
-def _parse_bubble_ts(data: dict[str, Any]) -> Optional[datetime]:
+def _parse_bubble_ts(data: dict[str, Any]) -> datetime | None:
     """Extract the best available timestamp from a raw bubble dict.
 
     Priority chain (from S2thend/cursor-history extractTimestamp):
@@ -359,7 +364,7 @@ def _parse_bubble_ts(data: dict[str, Any]) -> Optional[datetime]:
     return None
 
 
-def _extract_bubble_text(data: dict[str, Any]) -> Optional[str]:
+def _extract_bubble_text(data: dict[str, Any]) -> str | None:
     """Extract plain-text content from a raw vscdb bubble dict.
 
     Mirrors the priority chain from S2thend/cursor-history extractBubbleText:
@@ -425,7 +430,7 @@ def _bubble_to_record(
         bubble_id = str(bubble_id)
 
     # Token usage: camelCase primary, snake_case fallback
-    usage: Optional[dict[str, Any]] = None
+    usage: dict[str, Any] | None = None
     token_count = bubble_data.get("tokenCount")
     if isinstance(token_count, dict):
         inp = token_count.get("inputTokens", 0) or 0
@@ -441,7 +446,7 @@ def _bubble_to_record(
                 usage = {"input_tokens": inp, "output_tokens": out}
 
     # Model name
-    model: Optional[str] = None
+    model: str | None = None
     model_info = bubble_data.get("modelInfo")
     if isinstance(model_info, dict):
         mn = model_info.get("modelName")
@@ -509,14 +514,17 @@ def _iter_item_table_records(
 
     All field access is try/except tolerant.
     """
-    data_str: Optional[str] = None
+    data_str: str | None = None
     for key in _ITEM_TABLE_CHAT_KEYS:
         try:
             row = conn.execute(
                 "SELECT value FROM ItemTable WHERE [key] = ?", (key,)
             ).fetchone()
             if row and row[0]:
-                data_str = row[0] if isinstance(row[0], str) else row[0].decode("utf-8", errors="replace")
+                data_str = (
+                    row[0] if isinstance(row[0], str)
+                    else row[0].decode("utf-8", errors="replace")
+                )
                 break
         except sqlite3.Error:
             continue
@@ -560,7 +568,10 @@ def _iter_item_table_records(
             if not isinstance(composer, dict):
                 continue
             cid = composer.get("composerId") or session.session_id
-            msgs = composer.get("messages") or composer.get("bubbles") or composer.get("conversation") or []
+            msgs = (
+                composer.get("messages") or composer.get("bubbles")
+                or composer.get("conversation") or []
+            )
             for bubble in msgs:
                 if not isinstance(bubble, dict):
                     continue
@@ -589,8 +600,8 @@ class CursorSource(SessionSource):
 
     def __init__(
         self,
-        cursor_home: Optional[Path] = None,
-        vscdb_paths: Optional[list[Path]] = None,
+        cursor_home: Path | None = None,
+        vscdb_paths: list[Path] | None = None,
     ) -> None:
         self.cursor_home = (
             cursor_home if cursor_home is not None else Path.home() / ".cursor"
@@ -704,16 +715,14 @@ class CursorSource(SessionSource):
         except sqlite3.Error as exc:
             log.warning("cursor vscdb %s skipped: %s", vscdb, exc)
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 conn.close()
-            except Exception:
-                pass
 
     def _yield_cursordiskkv_sessions(
         self,
         conn: sqlite3.Connection,
         vscdb: Path,
-        cwd: Optional[str],
+        cwd: str | None,
     ) -> Iterator[SessionFile]:
         try:
             mtime = vscdb.stat().st_mtime
@@ -744,17 +753,18 @@ class CursorSource(SessionSource):
                 if isinstance(ws_uri, str) and ws_uri.startswith("file://"):
                     resolved_cwd = urllib.parse.unquote(ws_uri[len("file://"):]) or None
 
-            started_at: Optional[float] = None
+            started_at: float | None = None
             raw_ts = meta.get("createdAt") or meta.get("startedAt")
             if isinstance(raw_ts, (int, float)):
-                started_at = float(raw_ts) / 1000.0 if raw_ts > _MIN_VALID_UNIX_MS else float(raw_ts)
+                started_at = (
+                    float(raw_ts) / 1000.0 if raw_ts > _MIN_VALID_UNIX_MS
+                    else float(raw_ts)
+                )
             elif isinstance(raw_ts, str):
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     started_at = datetime.fromisoformat(
                         raw_ts.replace("Z", "+00:00")
                     ).timestamp()
-                except (ValueError, TypeError):
-                    pass
 
             extra: dict[str, Any] = {
                 "storage": "vscdb",
@@ -778,7 +788,7 @@ class CursorSource(SessionSource):
         self,
         conn: sqlite3.Connection,
         vscdb: Path,
-        cwd: Optional[str],
+        cwd: str | None,
     ) -> Iterator[SessionFile]:
         """Yield one SessionFile for a legacy ItemTable workspace DB."""
         try:
@@ -959,10 +969,8 @@ class CursorSource(SessionSource):
                     continue
                 yield seq, rec
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 conn.close()
-            except Exception:
-                pass
 
 
 # Register at import time — :func:`lib.sources.all_sources` walks SOURCES.

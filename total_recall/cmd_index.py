@@ -89,10 +89,7 @@ def index_cmd(
     # for --full backfill. Cap at 8 to avoid OOM on memory-constrained boxes
     # (each worker can hold one session's records in RAM, ~50-200MB peak).
     if jobs is None:
-        if full:
-            jobs = min(os.cpu_count() or 4, 8)
-        else:
-            jobs = 1
+        jobs = min(os.cpu_count() or 4, 8) if full else 1
     jobs = max(1, int(jobs))
 
     if verbose:

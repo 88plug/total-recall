@@ -9,12 +9,7 @@ to choose a different model.
 
 from __future__ import annotations
 
-import os
-
-import pytest
-
 from extractors.llm.client import DEFAULT_MODEL, autoselect_model
-
 
 # ---------------------------------------------------------------------------
 # autoselect_model — always returns DEFAULT_MODEL
@@ -74,6 +69,7 @@ class TestLlmModelCLI:
     def test_llm_model_cmd_prints_default_model(self, monkeypatch):
         """``total-recall llm-model`` prints DEFAULT_MODEL when no env override."""
         from click.testing import CliRunner
+
         from total_recall.__main__ import cli
 
         monkeypatch.delenv("TOTAL_RECALL_LLM_MODEL", raising=False)
@@ -87,6 +83,7 @@ class TestLlmModelCLI:
     def test_llm_model_cmd_respects_env_override(self, monkeypatch):
         """TOTAL_RECALL_LLM_MODEL env var is echoed directly by the CLI."""
         from click.testing import CliRunner
+
         from total_recall.__main__ import cli
 
         monkeypatch.setenv("TOTAL_RECALL_LLM_MODEL", "llama3:8b")

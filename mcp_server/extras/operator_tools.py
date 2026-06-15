@@ -11,6 +11,7 @@ happens during ``total-recall index`` runs.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -28,7 +29,11 @@ def _index_missing_error() -> dict[str, Any]:
 
 @mcp.tool()
 def get_operator_profile() -> dict:
-    """Return the operator's identity profile (name, handles, machines, vendor preferences, philosophy). Use at session start to know WHO is asking and what they prefer. Cheap, reads cached profile from the index — does NOT re-mine the corpus."""
+    (
+        "Return the operator's identity profile (name, handles, machines, vendor preferences, "
+        "philosophy). Use at session start to know WHO is asking and what they prefer. Cheap, "
+        "reads cached profile from the index — does NOT re-mine the corpus."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -62,7 +67,5 @@ def get_operator_profile() -> dict:
 
         return profile
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass

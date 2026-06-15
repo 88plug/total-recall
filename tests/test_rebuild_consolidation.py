@@ -66,7 +66,10 @@ def _build_corpus(tmp_path: Path) -> Path:
     cwd_a = "/home/dana/proj-a"
     cwd_b = "/home/dana/proj-b"
 
-    noisy = "look at github.com/widgetlib — github.com/widgetlib is great, github.com/widgetlib again"
+    noisy = (
+        "look at github.com/widgetlib — github.com/widgetlib is great, "
+        "github.com/widgetlib again"
+    )
     recs_a = [_user(noisy, cwd_a, sid_a), _assistant(noisy, cwd_a, sid_a)] * 3
 
     recs_b = [

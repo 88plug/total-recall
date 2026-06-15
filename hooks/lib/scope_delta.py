@@ -29,8 +29,9 @@ rather than inject a near-empty block.
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 MAX_CHARS = 2000
 MIN_INJECTION_CHARS = 50  # below this, don't bother
@@ -43,7 +44,7 @@ MIN_INJECTION_CHARS = 50  # below this, don't bother
 
 def compute_scope_delta(
     db_path: Path,
-    from_scope: Optional[str],
+    from_scope: str | None,
     to_scope: str,
     max_chars: int = MAX_CHARS,
 ) -> str:
@@ -135,7 +136,7 @@ def compute_scope_delta(
 
 def _assemble(
     sections: list[tuple[str, str]],
-    from_scope: Optional[str],
+    from_scope: str | None,
     to_scope: str,
     max_chars: int,
 ) -> str:
@@ -173,7 +174,7 @@ def _open_conn(db_path: Path):
     return conn
 
 
-def _scope_to_canonical_cwd(scope: str, db_path: Optional[Path] = None) -> Optional[str]:
+def _scope_to_canonical_cwd(scope: str, db_path: Path | None = None) -> str | None:
     """Resolve a scope name to its canonical cwd via the ``projects`` table.
 
     Lookup order:
@@ -186,8 +187,8 @@ def _scope_to_canonical_cwd(scope: str, db_path: Optional[Path] = None) -> Optio
     ``db_path`` argument is accepted (and forwarded by callers that already
     resolved it) but defaults to the same path resolution as ``index/db.py``.
     """
-    import sqlite3 as _sqlite3
     import os as _os
+    import sqlite3 as _sqlite3
     from pathlib import Path as _Path
 
     # Resolve the DB path the same way index/db.py does.
@@ -233,10 +234,8 @@ def _scope_to_canonical_cwd(scope: str, db_path: Optional[Path] = None) -> Optio
     except Exception:
         return None
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
 
 # ---------------------------------------------------------------------------

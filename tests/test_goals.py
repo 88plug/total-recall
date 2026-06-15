@@ -19,6 +19,7 @@ The tests are organised in three groups:
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import sqlite3
 import sys
@@ -483,10 +484,8 @@ def mcp_db_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     c.row_factory = sqlite3.Row
     goals_idx.apply_schema(c)
     yield tmp_path
-    try:
+    with contextlib.suppress(Exception):
         c.close()
-    except Exception:
-        pass
 
 
 def test_mcp_get_active_goal_returns_dict(mcp_db_dir: Path, monkeypatch):

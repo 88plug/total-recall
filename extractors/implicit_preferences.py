@@ -36,11 +36,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-import time
 import unicodedata
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -172,10 +172,7 @@ def _get(rec: Any, *keys: str, default: Any = None) -> Any:
     """Walk a nested dict/object by keys; return default on any miss."""
     cur: Any = rec
     for k in keys:
-        if isinstance(cur, dict):
-            cur = cur.get(k, default)
-        else:
-            cur = getattr(cur, k, default)
+        cur = cur.get(k, default) if isinstance(cur, dict) else getattr(cur, k, default)
         if cur is None:
             return default
     return cur

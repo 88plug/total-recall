@@ -14,7 +14,6 @@ import pytest
 
 from total_recall import cost as C
 
-
 # ---------------------------------------------------------------------------
 # detect_provider
 # ---------------------------------------------------------------------------
@@ -198,5 +197,5 @@ def test_anthropic_cache_constants_back_compat():
     # The module-level CACHE_READ_MULTIPLIER / CACHE_WRITE_MULTIPLIER names
     # are imported elsewhere; preserving them prevents silent breakage in
     # callers that haven't migrated to PROVIDER_CACHE_MULTIPLIERS yet.
-    assert C.CACHE_READ_MULTIPLIER == C.PROVIDER_CACHE_MULTIPLIERS["anthropic"]["read"]
-    assert C.CACHE_WRITE_MULTIPLIER == C.PROVIDER_CACHE_MULTIPLIERS["anthropic"]["create"]
+    assert C.PROVIDER_CACHE_MULTIPLIERS["anthropic"]["read"] == C.CACHE_READ_MULTIPLIER
+    assert C.PROVIDER_CACHE_MULTIPLIERS["anthropic"]["create"] == C.CACHE_WRITE_MULTIPLIER

@@ -22,7 +22,6 @@ from extractors.domain_facts import DomainFacts
 from extractors.progress import Progress
 from extractors.self_corrections import SelfCorrections
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: minimal Record + DAG implementations
 # ---------------------------------------------------------------------------
@@ -782,7 +781,7 @@ def test_pipeline_1000_record_throughput_under_one_second():
     t0 = time.perf_counter()
     out = list(run_all(records, dag=dag))
     elapsed = time.perf_counter() - t0
-    assert elapsed < 1.0, "pipeline too slow: %.3fs" % elapsed
+    assert elapsed < 1.0, f"pipeline too slow: {elapsed:.3f}s"
     assert out  # at least something extracted
 
 

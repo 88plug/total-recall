@@ -128,11 +128,15 @@ def format_table(
 
     sep = "+".join("-" * (w + 2) for w in widths)
     sep = f"+{sep}+"
-    header_line = "| " + " | ".join(h.ljust(w) for h, w in zip(headers_disp, widths)) + " |"
+    header_line = (
+        "| "
+        + " | ".join(h.ljust(w) for h, w in zip(headers_disp, widths, strict=False))
+        + " |"
+    )
     out_lines = [sep, header_line, sep]
     for row in body:
         out_lines.append(
-            "| " + " | ".join(c.ljust(w) for c, w in zip(row, widths)) + " |"
+            "| " + " | ".join(c.ljust(w) for c, w in zip(row, widths, strict=False)) + " |"
         )
     out_lines.append(sep)
     return "\n".join(out_lines)
@@ -147,7 +151,7 @@ def format_human(record: Mapping[str, Any]) -> str:
     """Pretty-print a single record as ``key: value`` pairs."""
     if not record:
         return "(empty)"
-    width = max(len(str(k)) for k in record.keys())
+    width = max(len(str(k)) for k in record)
     return "\n".join(f"{str(k).ljust(width)}  {_stringify(v)}" for k, v in record.items())
 
 
@@ -192,7 +196,13 @@ def human_bytes(n: int | None) -> str:
     return f"{n:.1f} PB"
 
 
-def emit(ctx_obj: Mapping[str, Any] | None, payload: Any, *, table_rows: Iterable[Mapping[str, Any]] | None = None, table_headers: Sequence[str] | None = None) -> None:
+def emit(
+    ctx_obj: Mapping[str, Any] | None,
+    payload: Any,
+    *,
+    table_rows: Iterable[Mapping[str, Any]] | None = None,
+    table_headers: Sequence[str] | None = None,
+) -> None:
     """Write a payload to stdout in the format requested by the global flags.
 
     * If ``ctx_obj["json"]`` → JSON dump of ``payload``.

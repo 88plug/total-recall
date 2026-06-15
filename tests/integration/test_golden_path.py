@@ -29,6 +29,7 @@ written back to ``~/.claude/projects``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import pathlib
@@ -36,7 +37,7 @@ import shutil
 import subprocess
 import sys
 import time
-from typing import Iterable
+from collections.abc import Iterable
 
 import pytest
 
@@ -138,10 +139,8 @@ def test_cold_start_ingests_real_sessions_under_30s(tmp_path: pathlib.Path):
         except Exception:  # noqa: BLE001
             n_extractions = 0
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
     elapsed = time.monotonic() - t0
 
     assert n_messages > 0, "cold-start ingest produced 0 messages"
@@ -327,28 +326,30 @@ def test_mcp_recall_via_stdio_returns_data(tmp_path: pathlib.Path):
     )
 
     async def _run() -> dict:
-        async with stdio_client(params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                tools = await session.list_tools()
-                tool_names = {t.name for t in tools.tools}
-                if "recall" not in tool_names:
-                    return {"_skip": f"recall tool missing; have {tool_names}"}
-                result = await session.call_tool(
-                    "recall",
-                    {"topic": "provider-x", "scope": "all_projects"},
-                )
-                # FastMCP wraps the return value in result.content
-                payload: list = []
-                for c in result.content:
-                    text = getattr(c, "text", None)
-                    if text:
-                        try:
-                            payload = json.loads(text)
-                        except json.JSONDecodeError:
-                            payload = [{"raw": text}]
-                        break
-                return {"result": payload}
+        async with (
+            stdio_client(params) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            tools = await session.list_tools()
+            tool_names = {t.name for t in tools.tools}
+            if "recall" not in tool_names:
+                return {"_skip": f"recall tool missing; have {tool_names}"}
+            result = await session.call_tool(
+                "recall",
+                {"topic": "provider-x", "scope": "all_projects"},
+            )
+            # FastMCP wraps the return value in result.content
+            payload: list = []
+            for c in result.content:
+                text = getattr(c, "text", None)
+                if text:
+                    try:
+                        payload = json.loads(text)
+                    except json.JSONDecodeError:
+                        payload = [{"raw": text}]
+                    break
+            return {"result": payload}
 
     try:
         outcome = asyncio.run(_run())

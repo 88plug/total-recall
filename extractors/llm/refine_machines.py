@@ -114,7 +114,7 @@ def _call_llm_for_chunk(
     chunk: dict[str, dict],
     operator_email: str | None,
     sample_contexts: dict[str, list[str]] | None,
-    client: "LLMClient",
+    client: LLMClient,
 ) -> set[str]:
     """Ask the LLM to classify one chunk; return the set of kept keys."""
     user_prompt = _build_user_prompt(chunk, operator_email, sample_contexts)
@@ -148,7 +148,7 @@ def _call_llm_for_chunk(
 def refine_machines(
     heuristic_machines: dict[str, dict],
     operator_email: str | None = None,
-    client: "LLMClient | None" = None,
+    client: LLMClient | None = None,
     sample_contexts: dict[str, list[str]] | None = None,
 ) -> dict[str, dict]:
     """Return a filtered/refined machines dict.

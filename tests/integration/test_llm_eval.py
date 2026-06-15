@@ -23,7 +23,6 @@ Usage examples
 from __future__ import annotations
 
 import os
-import sys
 import time
 
 import pytest
@@ -204,10 +203,16 @@ def test_vocab_quality_scorecard(eval_client):
         defn = def_map.get(term)
         snippet = t.get("context_snippet", "")
         overlap = _token_overlap(defn or "", snippet)
-        status = "null" if defn is None else (f"echo({overlap:.2f})" if overlap >= 0.6 else f"ok({overlap:.2f})")
+        status = (
+            "null" if defn is None
+            else (f"echo({overlap:.2f})" if overlap >= 0.6 else f"ok({overlap:.2f})")
+        )
         print(f"  {term!r:20s}  [{status}]  {(defn or '')[:80]}")
     print(f"  echo_rate:        {echo_rate:.3f}  (ideally low — model should paraphrase, not copy)")
-    print(f"  define_coverage:  {define_coverage:.3f}  (ideally high — definable terms got real defs)")
+    print(
+        f"  define_coverage:  {define_coverage:.3f}  "
+        "(ideally high — definable terms got real defs)"
+    )
     print(f"  null_rate:        {1 - len(non_null)/len(fx.VOCAB_TERMS):.3f}")
 
 
@@ -278,7 +283,10 @@ def test_machines_latency(eval_client):
     elapsed_ms = (time.monotonic() - t0) * 1000.0
 
     print(f"\n=== LATENCY (model={_EVAL_MODEL}) ===")
-    print(f"  refine_machines wall-clock: {elapsed_ms:.0f} ms  ({len(fx.MACHINES_LABELED)} input tokens)")
+    print(
+        f"  refine_machines wall-clock: {elapsed_ms:.0f} ms  "
+        f"({len(fx.MACHINES_LABELED)} input tokens)"
+    )
     print(f"  kept: {len(result)}/{len(fx.MACHINES_LABELED)}")
 
 
@@ -351,14 +359,14 @@ def test_print_scorecard(eval_client):
     print(f"\n{'='*60}")
     print(f"=== LLM EVAL SCORECARD (model={_EVAL_MODEL}) ===")
     print(f"{'='*60}")
-    print(f"  MACHINES NER")
+    print("  MACHINES NER")
     print(f"    precision:        {prec:.3f}   (>= 0.70 required)")
     print(f"    recall:           {rec:.3f}")
     print(f"    F1:               {f1:.3f}")
     print(f"    false_positives:  {sorted(fp)}")
     print(f"    false_negatives:  {sorted(fn)}")
     print(f"    latency:          {machines_ms:.0f} ms")
-    print(f"  VOCAB DEFINITIONS")
+    print("  VOCAB DEFINITIONS")
     print(f"    echo_rate:        {echo_rate:.3f}   (lower = less parroting)")
     print(f"    define_coverage:  {define_coverage:.3f}   (higher = more real defs)")
     print(f"    null_rate:        {1 - len(non_null)/len(fx.VOCAB_TERMS):.3f}")

@@ -27,7 +27,6 @@ if str(_REPO) not in sys.path:
 
 from hooks.lib import session_state as ss  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # fixture: isolated CLAUDE_PLUGIN_DATA per-test
 # ---------------------------------------------------------------------------

@@ -430,7 +430,10 @@ def get_default_client() -> LLMClient:
     if plugin_data:
         cache_path = Path(plugin_data) / "total-recall" / "llm_cache.db"
     else:
-        cache_path = Path.home() / ".local" / "share" / "total-recall-88plug" / "total-recall" / "llm_cache.db"
+        cache_path = (
+            Path.home() / ".local" / "share" / "total-recall-88plug"
+            / "total-recall" / "llm_cache.db"
+        )
     try:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache = LLMCache(cache_path)

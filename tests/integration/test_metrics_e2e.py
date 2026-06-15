@@ -18,10 +18,9 @@ Read-only on the corpus. Never writes into ``~/.claude/projects/*``.
 
 from __future__ import annotations
 
-import json
+import contextlib
 import os
 import pathlib
-import sqlite3
 import subprocess
 import sys
 
@@ -124,10 +123,8 @@ def _ingest_sessions_into_db(
         except Exception as exc:  # noqa: BLE001
             pytest.skip(f"ingest_all raised on real corpus: {exc}")
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
     return db_path
 
 
@@ -183,10 +180,7 @@ def test_metrics_summary_against_real_corpus(tmp_path: pathlib.Path):
     if busiest is not None:
         # Accept either a {"cwd": "/foo", ...} dict (what cmd_metrics renders)
         # or a bare cwd string.
-        if isinstance(busiest, dict):
-            cwd = busiest.get("cwd")
-        else:
-            cwd = busiest
+        cwd = busiest.get("cwd") if isinstance(busiest, dict) else busiest
         # cwd can legitimately be None / "" when ingested sessions had no
         # usage block AND no resolvable cwd (very small / partial sessions).
         # Only enforce the shape when there's actual content.
@@ -239,10 +233,8 @@ def test_metrics_cost_estimates_match_known_anthropic_rates(tmp_path: pathlib.Pa
             ),
         )
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:  # noqa: BLE001
-            pass
 
     try:
         data = metrics.cost(db_path, since="all")
@@ -308,7 +300,7 @@ def test_metrics_sessions_top_by_tokens_returns_descending(tmp_path: pathlib.Pat
 
     tokens = [int(r.get("tokens", 0) or 0) for r in rows]
     # Descending: each pair (a, b) must have a >= b.
-    for a, b in zip(tokens, tokens[1:]):
+    for a, b in zip(tokens, tokens[1:], strict=False):
         assert a >= b, f"sessions(by='tokens') not descending: {tokens}"
 
 

@@ -28,16 +28,18 @@ pass and the rest of the pipeline can be validated in isolation.
 
 from __future__ import annotations
 
-
+import contextlib
 import json
 import logging
 import os
 import sqlite3
 import time
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
+
 from index.paths import project_key
 
 log = logging.getLogger(__name__)
@@ -89,6 +91,7 @@ except Exception:  # pragma: no cover - exercised only on bare branches
 # module may be absent — in which case we fall back to a no-op and log ONCE
 # per process so the operator knows secrets are NOT being redacted from
 # messages.text. Index leakage is a meaningful risk; surface it loudly.
+_DEFAULT_PROJECTS_ROOT = Path("~/.claude/projects").expanduser()
 _SCRUB_FALLBACK_WARNED = False
 
 
@@ -147,7 +150,7 @@ def _warn_metrics_unavailable_once() -> None:
 
 def _record_ingest_run(
     conn: sqlite3.Connection,
-    reports: list["IngestReport"],
+    reports: list[IngestReport],
     run_t0: float,
     trigger: str,
 ) -> None:
@@ -984,15 +987,17 @@ def _commit_parsed(
     # others. Runs only when there are new records to score against.
     if parsed.profile_records:
         try:
+            from extractors.ontology import (
+                update_vocabulary_counts as _o_inc,
+            )
             from extractors.operator_profile import (
                 extract_incremental as _op_inc,
+            )
+            from extractors.operator_profile import (
                 persist_incremental_profile as _op_persist,
             )
             from extractors.voice_profile import (
                 measure_voice_incremental as _v_inc,
-            )
-            from extractors.ontology import (
-                update_vocabulary_counts as _o_inc,
             )
             from index.voice import persist_voice_profile
 
@@ -1395,7 +1400,7 @@ def _available_sources(names: list[str] | None) -> list[Any]:
 
 def ingest_all(
     conn: sqlite3.Connection | None = None,
-    projects_root: Path | None = Path("~/.claude/projects").expanduser(),
+    projects_root: Path | None = _DEFAULT_PROJECTS_ROOT,
     cwd_filter: str | None = None,
     dry_run: bool = False,
     force_full: bool = False,
@@ -1447,7 +1452,7 @@ def ingest_all(
         owns_conn = True
 
     if projects_root is None:
-        projects_root = Path("~/.claude/projects").expanduser()
+        projects_root = _DEFAULT_PROJECTS_ROOT
     projects_root = Path(projects_root).expanduser()
 
     reports: list[IngestReport] = []
@@ -1465,7 +1470,7 @@ def ingest_all(
         # this, tests passing a synthetic projects_root would silently scan
         # the real ~/.claude/projects/. Other adapters resolve their own paths
         # from env vars / well-known dirs, so they're unaffected.
-        if projects_root and str(projects_root) != str(Path("~/.claude/projects").expanduser()):
+        if projects_root and str(projects_root) != str(_DEFAULT_PROJECTS_ROOT):
             for s in active:
                 if getattr(s, "name", None) == "claude_code":
                     s.projects_root = projects_root  # type: ignore[attr-defined]
@@ -1567,10 +1572,8 @@ def ingest_all(
 
         # Cheap maintenance after a bulk ingest helps the planner pick the
         # right indexes for FTS-joined cwd/kind/ts queries.
-        try:
+        with contextlib.suppress(sqlite3.DatabaseError):
             conn.execute("ANALYZE")
-        except sqlite3.DatabaseError:
-            pass
 
         # WAL files grow without bound between checkpoints; TRUNCATE forces
         # the WAL back to zero bytes once readers have caught up. Skip
@@ -1592,10 +1595,8 @@ def ingest_all(
             log.debug("ingest_all: wal_checkpoint failed: %s", exc)
     finally:
         if owns_conn and conn is not None:
-            try:
+            with contextlib.suppress(Exception):
                 conn.close()
-            except Exception:  # noqa: BLE001
-                pass
 
     return reports
 

@@ -33,8 +33,9 @@ import json
 import logging
 import sqlite3
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 from index.paths import project_key
 
@@ -145,16 +146,16 @@ class GoalRow:
     source_session: str | None = None
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row | tuple) -> "GoalRow":
+    def from_row(cls, row: sqlite3.Row | tuple) -> GoalRow:
         if hasattr(row, "keys"):
-            d = {k: row[k] for k in row.keys()}
+            d = dict(row)
         else:
             cols = (
                 "id", "project", "goal_text", "declared_ts",
                 "last_progress_ts", "status", "related_projects",
                 "source_session",
             )
-            d = dict(zip(cols, row))
+            d = dict(zip(cols, row, strict=False))
         related_raw = d.get("related_projects")
         related: list[str] = []
         if related_raw:

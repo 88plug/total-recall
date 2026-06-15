@@ -28,10 +28,11 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Defensive base-class import
@@ -58,9 +59,9 @@ except Exception:  # noqa: BLE001 - any import failure → use stubs
 
         source: str
         path: Path
-        cwd: Optional[str]
+        cwd: str | None
         session_id: str
-        started_at: Optional[float] = None
+        started_at: float | None = None
         last_modified: float = 0.0
         extra: dict = field(default_factory=dict)
 
@@ -72,15 +73,15 @@ except Exception:  # noqa: BLE001 - any import failure → use stubs
         def is_available(self) -> bool:  # pragma: no cover - stub
             return False
 
-        def discover_sessions(self) -> Iterator["SessionFile"]:  # pragma: no cover
+        def discover_sessions(self) -> Iterator[SessionFile]:  # pragma: no cover
             return iter(())
 
         def iter_records(
-            self, session: "SessionFile", start_offset: int = 0
+            self, session: SessionFile, start_offset: int = 0
         ) -> Iterator[tuple[int, Any]]:  # pragma: no cover
             return iter(())
 
-    SOURCES: list[type["SessionSource"]] = []  # type: ignore[no-redef]
+    SOURCES: list[type[SessionSource]] = []  # type: ignore[no-redef]
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +102,7 @@ from lib.schema import (
 # ---------------------------------------------------------------------------
 
 
-def _ts_from_ms(value: Any) -> Optional[datetime]:
+def _ts_from_ms(value: Any) -> datetime | None:
     """OpenCode stores epoch milliseconds — convert to UTC datetime."""
     if value is None:
         return None
@@ -111,7 +112,7 @@ def _ts_from_ms(value: Any) -> Optional[datetime]:
         return None
 
 
-def _remap_tokens(tokens: Any) -> Optional[dict[str, Any]]:
+def _remap_tokens(tokens: Any) -> dict[str, Any] | None:
     """Translate OpenCode's nested ``tokens`` block to total-recall's flat
     usage dict.
 
@@ -141,7 +142,7 @@ def _remap_tokens(tokens: Any) -> Optional[dict[str, Any]]:
     return out or None
 
 
-def _part_to_block(part_info: dict[str, Any]) -> Optional[Block]:
+def _part_to_block(part_info: dict[str, Any]) -> Block | None:
     """Translate one OpenCode part-info dict to an assistant content
     :class:`Block`.
 
@@ -217,7 +218,7 @@ def _opencode_to_record(
     *,
     message_id: str,
     session_id: str,
-    cwd: Optional[str],
+    cwd: str | None,
     role: str,
 ) -> Record:
     """Translate one OpenCode message+parts pair into the appropriate
@@ -230,7 +231,7 @@ def _opencode_to_record(
     if not isinstance(message_info, dict):
         message_info = {}
 
-    created: Optional[datetime] = None
+    created: datetime | None = None
     time_field = message_info.get("time")
     if isinstance(time_field, dict):
         created = _ts_from_ms(time_field.get("created"))
@@ -252,8 +253,9 @@ def _opencode_to_record(
     )
 
     if role == "assistant":
-        model_block = message_info.get("model") if isinstance(message_info.get("model"), dict) else {}
-        model_id: Optional[str] = None
+        _model = message_info.get("model")
+        model_block = _model if isinstance(_model, dict) else {}
+        model_id: str | None = None
         if isinstance(model_block, dict):
             model_id = model_block.get("modelID") or model_block.get("model")
         if not model_id and isinstance(message_info.get("model"), str):
@@ -312,7 +314,7 @@ class OpenCodeSource(SessionSource):
 
     name = "opencode"
 
-    def __init__(self, data_dirs: Optional[list[Path]] = None) -> None:
+    def __init__(self, data_dirs: list[Path] | None = None) -> None:
         self.data_dirs: list[Path] = (
             list(data_dirs) if data_dirs is not None else self._resolve_data_dirs()
         )
@@ -402,11 +404,11 @@ class OpenCodeSource(SessionSource):
             conn.close()
 
     @staticmethod
-    def _session_cwds_sqlite(conn: sqlite3.Connection) -> dict[str, Optional[str]]:
+    def _session_cwds_sqlite(conn: sqlite3.Connection) -> dict[str, str | None]:
         """Best-effort join of session → project → cwd. OpenCode schema
         has shifted; try a couple of column names before giving up."""
 
-        out: dict[str, Optional[str]] = {}
+        out: dict[str, str | None] = {}
 
         # 0) OpenCode 2026: `session` table has top-level `directory` column.
         try:
@@ -426,7 +428,7 @@ class OpenCodeSource(SessionSource):
             for sid, info in cur.fetchall():
                 if not sid:
                     continue
-                cwd: Optional[str] = None
+                cwd: str | None = None
                 if isinstance(info, str):
                     try:
                         info_obj = json.loads(info)
@@ -479,7 +481,7 @@ class OpenCodeSource(SessionSource):
                 if not session_file.is_file() or session_file.suffix != ".json":
                     continue
                 session_id = session_file.stem
-                cwd: Optional[str] = None
+                cwd: str | None = None
                 try:
                     with session_file.open() as f:
                         data = json.load(f)

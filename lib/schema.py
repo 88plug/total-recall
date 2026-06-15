@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 ContentKind = Literal["string", "tool_result", "text_array", "image", "document", "empty"]
 
@@ -57,10 +57,10 @@ class Block:
     """
 
     type: str
-    text: Optional[str] = None
-    thinking: Optional[str] = None
-    thinking_signature: Optional[str] = None
-    tool_use: Optional[ToolUseRef] = None
+    text: str | None = None
+    thinking: str | None = None
+    thinking_signature: str | None = None
+    tool_use: ToolUseRef | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -94,13 +94,13 @@ class Record:
     """
 
     type: str
-    uuid: Optional[str]
-    parent_uuid: Optional[str]
-    session_id: Optional[str]
-    ts: Optional[datetime]
-    cwd: Optional[str]
-    git_branch: Optional[str]
-    version: Optional[str]
+    uuid: str | None
+    parent_uuid: str | None
+    session_id: str | None
+    ts: datetime | None
+    cwd: str | None
+    git_branch: str | None
+    version: str | None
     is_sidechain: bool
     raw: dict[str, Any]
     byte_offset: int = 0
@@ -116,12 +116,12 @@ class AssistantRecord(Record):
     are private; do not surface raw thinking text back to the user.
     """
 
-    model: Optional[str] = None
+    model: str | None = None
     content: list[Block] = field(default_factory=list)
-    usage: Optional[dict[str, Any]] = None
-    stop_reason: Optional[str] = None
-    message_id: Optional[str] = None
-    request_id: Optional[str] = None
+    usage: dict[str, Any] | None = None
+    stop_reason: str | None = None
+    message_id: str | None = None
+    request_id: str | None = None
 
 
 @dataclass
@@ -143,9 +143,9 @@ class UserRecord(Record):
     """
 
     content_kind: ContentKind = "empty"
-    text: Optional[str] = None
+    text: str | None = None
     tool_results: list[ToolResult] = field(default_factory=list)
-    tool_use_result_payload: Optional[dict[str, Any]] = None
+    tool_use_result_payload: dict[str, Any] | None = None
     is_compact_summary: bool = False
     is_meta: bool = False
 
@@ -187,7 +187,7 @@ class QueueOperationRecord(Record):
     """User input queued mid-turn (``operation: enqueue/...``)."""
 
     operation: str = ""
-    content: Optional[str] = None
+    content: str | None = None
 
 
 @dataclass
@@ -202,7 +202,7 @@ class LastPromptRecord(Record):
     """Most recent user prompt + leaf-uuid pointer. Resume marker."""
 
     last_prompt: str = ""
-    leaf_uuid: Optional[str] = None
+    leaf_uuid: str | None = None
 
 
 @dataclass
@@ -216,7 +216,7 @@ class PermissionModeRecord(Record):
 class FileHistorySnapshotRecord(Record):
     """File-history feature backup pointer."""
 
-    message_id: Optional[str] = None
+    message_id: str | None = None
     is_snapshot_update: bool = False
     snapshot: Any = None
 
@@ -242,7 +242,7 @@ class AgentNameRecord(Record):
 # ---------------------------------------------------------------------------
 
 
-def _parse_ts(raw: Any) -> Optional[datetime]:
+def _parse_ts(raw: Any) -> datetime | None:
     if not isinstance(raw, str):
         return None
     try:
@@ -330,7 +330,7 @@ def _normalize_tool_result_content(c: Any) -> tuple[str, Any]:
     return "", c
 
 
-def _extract_user_text(content: Any) -> Optional[str]:
+def _extract_user_text(content: Any) -> str | None:
     if isinstance(content, str):
         return content
     if isinstance(content, list):

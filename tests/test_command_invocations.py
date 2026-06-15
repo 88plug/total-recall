@@ -31,7 +31,6 @@ written to the TARGET (fully-migrated) state.
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 import pytest
@@ -163,14 +162,17 @@ def test_command_uses_wrapper_not_bare_cli(command_file: Path) -> None:
             continue
 
         # If the line starts with `bash`, verify it uses the approved wrapper.
-        if first_token == "bash":
-            if "recall-cli.sh" in content and not _APPROVED_RE.search(content):
-                violations.append(
-                    f"  Line {lineno}: bash invocation does not use approved "
-                    f"wrapper pattern: {content!r}\n"
-                    f"  -> Approved pattern: "
-                    f'bash "${{CLAUDE_PLUGIN_ROOT}}/scripts/recall-cli.sh" <subcmd>'
-                )
+        if (
+            first_token == "bash"
+            and "recall-cli.sh" in content
+            and not _APPROVED_RE.search(content)
+        ):
+            violations.append(
+                f"  Line {lineno}: bash invocation does not use approved "
+                f"wrapper pattern: {content!r}\n"
+                f"  -> Approved pattern: "
+                f'bash "${{CLAUDE_PLUGIN_ROOT}}/scripts/recall-cli.sh" <subcmd>'
+            )
 
     assert not violations, (
         f"{command_file.name}: CLI invocation violations found:\n"

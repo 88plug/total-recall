@@ -27,6 +27,7 @@ functions. The module imports cleanly without them.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sqlite3
 from dataclasses import dataclass, field
@@ -119,10 +120,8 @@ def _load_sqlite_vec(conn: sqlite3.Connection) -> None:
         sqlite_vec.load(conn)
     finally:
         # Re-disable; the extension stays loaded but we don't want stray loads.
-        try:
+        with contextlib.suppress(Exception):  # pragma: no cover - best-effort
             conn.enable_load_extension(False)
-        except Exception:  # pragma: no cover - best-effort
-            pass
 
     _loaded.add(id(conn))
 
@@ -215,7 +214,7 @@ def _write_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
-def _ensure_dim_matches(conn: sqlite3.Connection, embedder: "Embedder") -> int:
+def _ensure_dim_matches(conn: sqlite3.Connection, embedder: Embedder) -> int:
     """Confirm the embedder's dim matches the on-disk index. Returns the dim."""
     stored = _read_meta(conn, "dim")
     dim = embedder.dim()
@@ -247,7 +246,7 @@ def upsert_extraction_embedding(
     conn: sqlite3.Connection,
     extraction_id: int,
     content: str,
-    embedder: "Embedder",
+    embedder: Embedder,
 ) -> int:
     """Embed `content` (chunked) and (re)write its rows in chunk_embeddings + vec_chunks.
 
@@ -275,7 +274,7 @@ def upsert_extraction_embedding(
 
     _delete_existing(conn, extraction_id)
     cur = conn.cursor()
-    for idx, (chunk, vec) in enumerate(zip(chunks, vectors)):
+    for idx, (chunk, vec) in enumerate(zip(chunks, vectors, strict=False)):
         cur.execute(
             "INSERT INTO chunk_embeddings(extraction_id, chunk_text, chunk_index) "
             "VALUES (?, ?, ?)",
@@ -311,7 +310,7 @@ def _delete_existing(conn: sqlite3.Connection, extraction_id: int) -> None:
 
 def backfill_all(
     conn: sqlite3.Connection,
-    embedder: "Embedder | None" = None,
+    embedder: Embedder | None = None,
     batch_size: int = 64,
     only_kinds: list[str] | None = None,
 ) -> BackfillReport:
@@ -377,7 +376,7 @@ def backfill_all(
 
         # Group vectors back by extraction_id so chunk_index restarts per ext.
         per_ext: dict[int, list[tuple[str, list[float]]]] = {}
-        for (ext_id, chunk), vec in zip(flat, vectors):
+        for (ext_id, chunk), vec in zip(flat, vectors, strict=False):
             per_ext.setdefault(ext_id, []).append((chunk, vec))
 
         cur2 = conn.cursor()
@@ -409,7 +408,7 @@ def backfill_all(
 def vec_search(
     conn: sqlite3.Connection,
     query: str,
-    embedder: "Embedder",
+    embedder: Embedder,
     limit: int = 20,
     cwd: str | None = None,
 ) -> list[VecHit]:

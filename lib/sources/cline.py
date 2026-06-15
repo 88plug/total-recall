@@ -63,8 +63,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 from lib.schema import (
     AssistantRecord,
@@ -74,13 +75,11 @@ from lib.schema import (
     ToolUseRef,
     UserRecord,
     _classify_user_content,
-    _extract_tool_results,
     _extract_user_text,
     _normalize_tool_result_content,
     _parse_ts,
 )
 from lib.sources.base import SOURCES, SessionFile, SessionSource
-
 
 # ---------------------------------------------------------------------------
 # Path resolution
@@ -106,7 +105,8 @@ def _vscode_global_storage_roots() -> list[Path]:
         roots.extend(
             [
                 home / "Library" / "Application Support" / "Code" / "User" / "globalStorage",
-                home / "Library" / "Application Support" / "Code - Insiders" / "User" / "globalStorage",
+                home / "Library" / "Application Support" / "Code - Insiders"
+                / "User" / "globalStorage",
                 home / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage",
             ]
         )
@@ -164,7 +164,7 @@ def _default_data_dirs() -> list[Path]:
     return deduped
 
 
-def _safe_load_json(path: Path) -> Optional[Any]:
+def _safe_load_json(path: Path) -> Any | None:
     """Return parsed JSON or ``None`` on any read / parse error."""
 
     try:
@@ -263,7 +263,7 @@ def _assistant_blocks_from_anthropic(content: Any) -> list[Block]:
     return out
 
 
-def _sum_model_usage(model_usage: Any) -> Optional[dict[str, Any]]:
+def _sum_model_usage(model_usage: Any) -> dict[str, Any] | None:
     """Sum a ``task_metadata.json`` ``model_usage`` array into a usage dict.
 
     Returns ``None`` when nothing is summable. Output keys match the
@@ -299,9 +299,9 @@ def _build_base_kwargs(
     raw: dict[str, Any],
     *,
     session_id: str,
-    cwd: Optional[str],
+    cwd: str | None,
     index: int,
-    ts_seed: Optional[Any],
+    ts_seed: Any | None,
 ) -> dict[str, Any]:
     """Cross-cutting Record fields for a Cline message."""
 
@@ -325,10 +325,10 @@ def _project_message_to_record(
     msg: dict[str, Any],
     *,
     session_id: str,
-    cwd: Optional[str],
+    cwd: str | None,
     index: int,
-    model: Optional[str],
-    attach_usage: Optional[dict[str, Any]],
+    model: str | None,
+    attach_usage: dict[str, Any] | None,
 ) -> Record:
     """Translate one Anthropic ``MessageParam`` into a canonical Record."""
 
@@ -395,7 +395,7 @@ class ClineSource(SessionSource):
 
     name = "cline"
 
-    def __init__(self, data_dirs: Optional[list[Path]] = None) -> None:
+    def __init__(self, data_dirs: list[Path] | None = None) -> None:
         if data_dirs is not None:
             self.data_dirs = list(data_dirs)
         else:
@@ -469,7 +469,7 @@ class ClineSource(SessionSource):
                     workspace = None
                 title = hist.get("task") if isinstance(hist, dict) else None
                 model = hist.get("modelId") if isinstance(hist, dict) else None
-                started_at: Optional[float] = None
+                started_at: float | None = None
                 ts_raw = hist.get("ts") if isinstance(hist, dict) else None
                 if isinstance(ts_raw, (int, float)):
                     # Cline records ms epoch.
@@ -493,7 +493,7 @@ class ClineSource(SessionSource):
     # Records
     # ------------------------------------------------------------------
 
-    def _resolve_model(self, session: SessionFile) -> Optional[str]:
+    def _resolve_model(self, session: SessionFile) -> str | None:
         """Best-effort model id: discovery hint, then task_metadata.json."""
 
         m = session.extra.get("model")
@@ -511,7 +511,7 @@ class ClineSource(SessionSource):
                             return mid
         return None
 
-    def _resolve_usage(self, session: SessionFile) -> Optional[dict[str, Any]]:
+    def _resolve_usage(self, session: SessionFile) -> dict[str, Any] | None:
         """Sum ``task_metadata.json:model_usage`` into a single usage dict."""
 
         meta_path = session.path.with_name("task_metadata.json")
@@ -544,7 +544,7 @@ class ClineSource(SessionSource):
             msg = body[i]
             if not isinstance(msg, dict):
                 continue
-            attach_usage: Optional[dict[str, Any]] = None
+            attach_usage: dict[str, Any] | None = None
             if (
                 msg.get("role") == "assistant"
                 and not first_assistant_seen

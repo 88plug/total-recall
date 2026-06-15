@@ -121,7 +121,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         return row
     if hasattr(row, "keys"):
         try:
-            return {k: row[k] for k in row.keys()}
+            return dict(row)
         except Exception:
             pass
     return {"value": row}

@@ -20,14 +20,12 @@ from lib.schema import AssistantRecord, Record, UserRecord
 from lib.sources.base import SessionFile
 from lib.sources.cursor import (
     CursorSource,
-    _cursor_line_to_record,
-    _resolve_cwd_for_vscdb,
-    _discover_vscdb_paths,
-    _cursor_user_bases,
-    _extract_bubble_text,
     _bubble_to_record,
+    _cursor_line_to_record,
+    _discover_vscdb_paths,
+    _extract_bubble_text,
+    _resolve_cwd_for_vscdb,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -101,7 +99,6 @@ def cursor_home(tmp_path: Path) -> Path:
 def test_registered_in_sources():
     import lib.sources  # noqa: F401 — trigger registration of bundled adapters
     import lib.sources.cursor  # noqa: F401 — explicitly ensure cursor is loaded
-
     from lib.sources.base import SOURCES
 
     names = [cls.name for cls in SOURCES]
@@ -231,7 +228,7 @@ def test_iter_records_translates_user_assistant_tool(cursor_home: Path):
     # Each yielded byte offset is monotonically increasing.
     offsets = [off for off, _ in recs]
     assert offsets == sorted(offsets)
-    assert all(a < b for a, b in zip(offsets, offsets[1:]))
+    assert all(a < b for a, b in zip(offsets, offsets[1:], strict=False))
 
     _, user = recs[0]
     assert isinstance(user, UserRecord)

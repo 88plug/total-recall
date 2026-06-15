@@ -205,7 +205,7 @@ def _normalize_content(content: str) -> str:
     return _WS_RE.sub(" ", (content or "").strip().lower())
 
 
-def _dedup_hits(hits: list["QueryHit"]) -> list["QueryHit"]:
+def _dedup_hits(hits: list[QueryHit]) -> list[QueryHit]:
     """Keep the first hit per (kind, normalized_content), preserving order.
 
     Callers pass an already-ranked list, so "first" == "highest-ranked". Two

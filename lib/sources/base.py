@@ -22,9 +22,10 @@ explicitly imported from :mod:`lib.sources` to trigger registration.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 
 @dataclass
@@ -49,13 +50,13 @@ class SessionFile:
     path: Path
     """Canonical handle — file or DB path."""
 
-    cwd: Optional[str]
+    cwd: str | None
     """Working directory this session ran in (``None`` if unknown)."""
 
     session_id: str
     """Source-specific session id (UUID, ULID, file stem, row id, ...)."""
 
-    started_at: Optional[float]
+    started_at: float | None
     """Unix seconds at which the session started; ``None`` if unknown."""
 
     last_modified: float
@@ -121,10 +122,10 @@ class SessionSource(ABC):
 
 # Adapters register themselves here at import time. Order is priority:
 # earlier adapters get listed first by ``all_sources()``.
-SOURCES: list[type["SessionSource"]] = []
+SOURCES: list[type[SessionSource]] = []
 
 
-def all_sources() -> list["SessionSource"]:
+def all_sources() -> list[SessionSource]:
     """Return instantiated source objects, in priority (registration) order.
 
     Adapter modules must already have been imported (importing
@@ -134,7 +135,7 @@ def all_sources() -> list["SessionSource"]:
     return [cls() for cls in SOURCES]
 
 
-def source_by_name(name: str) -> Optional["SessionSource"]:
+def source_by_name(name: str) -> SessionSource | None:
     """Return the instantiated adapter whose :attr:`name` matches.
 
     Returns ``None`` if no adapter is registered under ``name``. The

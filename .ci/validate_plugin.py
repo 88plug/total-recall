@@ -8,7 +8,14 @@ usage: validate_plugin.py [PLUGIN_ROOT]   (default ".")
 exit 0 = clean, 1 = errors found.
 """
 from __future__ import annotations
-import sys, os, re, json, shutil, subprocess
+
+import contextlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 try:
@@ -26,8 +33,10 @@ def warn(m): warns.append(m)
 
 
 def rel(p):
-    try: return str(Path(p).relative_to(ROOT))
-    except Exception: return str(p)
+    try:
+        return str(Path(p).relative_to(ROOT))
+    except Exception:
+        return str(p)
 
 
 # --- 1. plugin.json: valid JSON + has a name ---------------------------------
@@ -48,10 +57,9 @@ else:
 BAD = re.compile(r'\$\{CLAUDE_PLUGIN_(?:ROOT|DATA):-')
 manifests = [man, ROOT / ".mcp.json", ROOT / "hooks" / "hooks.json"]
 for p in manifests:
-    if p.exists():
-        if BAD.search(p.read_text()):
-            err(f"{rel(p)}: uses ${{CLAUDE_PLUGIN_*:-default}} — Claude Code substitutes "
-                f"only the plain ${{CLAUDE_PLUGIN_ROOT}} form; the :- default is left literal")
+    if p.exists() and BAD.search(p.read_text()):
+        err(f"{rel(p)}: uses ${{CLAUDE_PLUGIN_*:-default}} — Claude Code substitutes "
+            f"only the plain ${{CLAUDE_PLUGIN_ROOT}} form; the :- default is left literal")
 
 # --- 3. skill/command/agent frontmatter must parse (the ': ' YAML break) ------
 # Skills & agents REQUIRE name+description (that pair is the trigger surface, and
@@ -124,10 +132,8 @@ def _mcp_servers():
     servers = {}
     for p in (man, ROOT / ".mcp.json"):
         if p.exists():
-            try:
+            with contextlib.suppress(Exception):
                 servers.update(json.loads(p.read_text()).get("mcpServers") or {})
-            except Exception:
-                pass
     return servers
 
 PATH_FRAGILE = {"uv", "uvx", "npx", "bunx", "pnpm", "yarn", "deno", "bun", "node", "pipx"}
@@ -141,13 +147,18 @@ for key, spec in _mcp_servers().items():
              f"connect'). Use a launcher script under ${{CLAUDE_PLUGIN_ROOT}} that resolves it.")
     url = spec.get("url") or ""
     if url and spec.get("type", "") in ("http", "sse", "streamable-http") and shutil.which("curl"):
-        r = subprocess.run(["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-m", "12", url],
-                           capture_output=True, text=True)
+        r = subprocess.run(
+            ["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-m", "12", url],
+            capture_output=True, text=True)
         code = (r.stdout or "").strip()
         if r.returncode != 0:
-            warn(f".mcp[{key}]: endpoint {url} unreachable (curl exit {r.returncode}) — verify it is live")
+            warn(
+                f".mcp[{key}]: endpoint {url} unreachable "
+                f"(curl exit {r.returncode}) — verify it is live")
         elif code in ("404", "410"):
-            warn(f".mcp[{key}]: endpoint {url} returned HTTP {code} (gone/not-found) — likely dead/moved")
+            warn(
+                f".mcp[{key}]: endpoint {url} returned HTTP {code} "
+                f"(gone/not-found) — likely dead/moved")
 
 # --- 7. agents that reference a tool in their body but don't grant it ---------
 # amnesia's summarizer told the model to "Write … via the `Write` tool" while its
@@ -170,7 +181,9 @@ for md in ROOT.glob("agents/**/*.md"):
         if tool in granted:
             continue
         if re.search(rf'(`{tool}`\s*tool|\bthe\s+{tool}\s+tool|\bvia\s+(?:the\s+)?{tool}\b)', body):
-            warn(f"{rel(md)}: body uses the {tool} tool but frontmatter 'tools' doesn't grant it (silent-failure risk)")
+            warn(
+                f"{rel(md)}: body uses the {tool} tool but frontmatter "
+                f"'tools' doesn't grant it (silent-failure risk)")
 
 # --- report ------------------------------------------------------------------
 for w in warns:

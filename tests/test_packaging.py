@@ -10,11 +10,11 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tomllib
 import zipfile
 from pathlib import Path
 
 import pytest
+import tomllib
 
 ROOT = Path(__file__).parent.parent
 SKIP_SLOW = os.environ.get("SKIP_SLOW_TESTS", "").strip() not in ("", "0")

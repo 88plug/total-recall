@@ -17,18 +17,18 @@ Public API (stable — tests and callers depend on these names):
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # DB access helpers — read-only, fast, never crash
 # ---------------------------------------------------------------------------
 
-def _db_path() -> Optional[Path]:
+def _db_path() -> Path | None:
     """Resolve the index DB path the same way index/db.py does."""
     base_env = os.environ.get("CLAUDE_PLUGIN_DATA")
     if base_env:
@@ -39,7 +39,7 @@ def _db_path() -> Optional[Path]:
     return p if p.exists() else None
 
 
-def _open_ro() -> Optional[sqlite3.Connection]:
+def _open_ro() -> sqlite3.Connection | None:
     """Open the index DB read-only.  Returns None if missing or unreadable."""
     p = _db_path()
     if p is None:
@@ -134,15 +134,13 @@ def _build_scope_keywords() -> dict[str, list[str]]:
     except Exception:
         return {}
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
 
 # Module-level cache — populated lazily on first call to score_scopes().
 # Hooks are short-lived processes so one build per process is fine.
-_SCOPE_KEYWORDS_CACHE: Optional[dict[str, list[str]]] = None
+_SCOPE_KEYWORDS_CACHE: dict[str, list[str]] | None = None
 
 
 def _get_scope_keywords() -> dict[str, list[str]]:
@@ -162,7 +160,7 @@ SCOPE_KEYWORDS: dict[str, list[str]] = {}  # populated lazily
 # Pure-string fallback: derive scope from path basename
 # ---------------------------------------------------------------------------
 
-def _scope_from_cwd_string(cwd: str) -> Optional[str]:
+def _scope_from_cwd_string(cwd: str) -> str | None:
     """Generic scope from the last meaningful path segment.
 
     Works for any installer — no hardcoded paths.
@@ -183,7 +181,7 @@ def _scope_from_cwd_string(cwd: str) -> Optional[str]:
 # Public: infer_scope
 # ---------------------------------------------------------------------------
 
-def infer_scope(cwd: str) -> Optional[str]:
+def infer_scope(cwd: str) -> str | None:
     """Map a cwd to a scope name.
 
     Priority:
@@ -203,10 +201,8 @@ def infer_scope(cwd: str) -> Optional[str]:
         except Exception:
             projects = []
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 conn.close()
-            except Exception:
-                pass
 
         # Exact cwd match
         for p in projects:
@@ -242,7 +238,7 @@ PIVOT_REGEX = re.compile(
 class ScopeShift:
     reason: str                  # "cwd" | "keyword" | "keyword+pivot"
     new: str                     # scope name
-    old: Optional[str]
+    old: str | None
     confidence: float            # 0..1
 
 
@@ -262,7 +258,7 @@ def score_scopes(prompt: str) -> dict[str, int]:
             for scope, kw_list in kws.items()}
 
 
-def dominant_scope(prompts: list[str]) -> Optional[str]:
+def dominant_scope(prompts: list[str]) -> str | None:
     """Majority-vote scope across N recent prompts."""
     if not prompts:
         return None
@@ -280,8 +276,8 @@ def detect_scope_shift(
     current_prompt: str,
     recent_prompts: list[str],   # last 5 user prompts (excluding current)
     current_cwd: str,
-    last_cwd: Optional[str],
-) -> Optional[ScopeShift]:
+    last_cwd: str | None,
+) -> ScopeShift | None:
     """Return a ScopeShift only when confidence is high."""
     # Strong signal: cwd changed
     if last_cwd is not None and current_cwd != last_cwd:

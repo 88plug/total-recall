@@ -49,9 +49,10 @@ import json
 import logging
 import re
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -155,9 +156,7 @@ def _looks_like_person_name(s: str) -> bool:
     parts = (s or "").split()
     if len(parts) != 2:
         return False
-    if parts[1] in _PRODUCT_NOUN_SUFFIXES:
-        return False
-    return True
+    return parts[1] not in _PRODUCT_NOUN_SUFFIXES
 
 
 _PRODUCT_NOUN_SUFFIXES: frozenset[str] = frozenset({
@@ -170,7 +169,7 @@ _PRODUCT_NOUN_SUFFIXES: frozenset[str] = frozenset({
     "Token", "Tokens", "Opus", "Sonnet", "Haiku", "Pro", "Plus", "Max",
     "Mini", "Lite", "Connector", "Connectors", "Plugin", "Plugins",
     "Module", "Modules", "Turnstile", "Manager", "Console", "Dashboard",
-    "Micro", "Macro", "Edge", "Core", "Stack", "Suite", "Studio", "Lab",
+    "Micro", "Macro", "Edge", "Core", "Stack", "Suite", "Lab",
     "Labs", "Gateway", "Proxy", "Filter", "Queue", "Stream", "Event",
 })
 
@@ -190,9 +189,7 @@ def _looks_like_real_name(s: str) -> bool:
     if sl in _NAME_PLACEHOLDERS:
         return False
     # Must contain at least one alphabetic char.
-    if not any(c.isalpha() for c in s):
-        return False
-    return True
+    return any(c.isalpha() for c in s)
 
 
 _NAME_PLACEHOLDERS: frozenset[str] = frozenset({
@@ -947,7 +944,7 @@ def extract_incremental(
     tentative: dict[str, list[dict[str, Any]]] = {}
     merged = OperatorProfile()
     # Start from the existing values, then layer the candidate.
-    for key in base.to_field_dict().keys():
+    for key in base.to_field_dict():
         setattr(merged, key, getattr(base, key))
     merged.confidence = dict(base.confidence)
     merged.sources = {k: list(v) for k, v in base.sources.items()}

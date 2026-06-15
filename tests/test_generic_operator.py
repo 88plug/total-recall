@@ -14,21 +14,18 @@ the ingest layer is unavailable (keeps CI hermetic).
 from __future__ import annotations
 
 import json
-import sqlite3
-import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from extractors.ontology import extract_ontology, persist_ontology
 from extractors.operator_profile import (
     OperatorProfile,
     extract_operator_profile,
     persist_profile,
 )
-from extractors.ontology import extract_ontology, persist_ontology
 from extractors.voice_profile import measure_voice
-
 
 # ---------------------------------------------------------------------------
 # Foreign-operator literals — any appearance in the synthetic Dana operator's
@@ -268,8 +265,8 @@ def test_full_pipeline_no_andrew_leak(dana_projects_root: Path, tmp_path: Path) 
     pytest.importorskip("index.db", reason="index layer unavailable")
 
     from index.db import connect
-    from index.operator import get_profile, OPERATOR_PROFILE_SCHEMA
     from index.ontology import ONTOLOGY_SCHEMA
+    from index.operator import OPERATOR_PROFILE_SCHEMA, get_profile
 
     db_path = tmp_path / "test.db"
     conn = connect(db_path)

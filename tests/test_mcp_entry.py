@@ -10,9 +10,10 @@ drifts from the wrapper's location.
 from __future__ import annotations
 
 import importlib
-import tomllib
 from pathlib import Path
 from unittest import mock
+
+import tomllib
 
 
 def test_module_imports():
@@ -26,8 +27,8 @@ def test_main_is_mcp_server_main():
     """``total_recall.mcp_entry.main`` must be the same function as
     ``mcp_server.server.main`` — otherwise the console script would diverge
     from ``python -m mcp_server`` behaviour."""
-    from total_recall import mcp_entry
     from mcp_server import server as server_mod
+    from total_recall import mcp_entry
 
     assert mcp_entry.main is server_mod.main
 

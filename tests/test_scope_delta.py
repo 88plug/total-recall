@@ -21,12 +21,10 @@ from __future__ import annotations
 import sys
 import types
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from hooks.lib import scope_delta
-
 
 # ---------------------------------------------------------------------------
 # Mock-index plumbing

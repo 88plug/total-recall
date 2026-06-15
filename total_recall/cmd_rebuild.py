@@ -340,7 +340,10 @@ def rebuild_cmd(
             finally:
                 conn.close()
         except Exception as exc:  # noqa: BLE001
-            click.echo(f"total-recall: implicit_preferences consolidation skipped ({exc})", err=True)
+            click.echo(
+                f"total-recall: implicit_preferences consolidation skipped ({exc})",
+                err=True,
+            )
 
         # Satisfaction profile.
         try:
@@ -583,7 +586,10 @@ def rebuild_cmd(
                                     "frequency": getattr(r, "frequency", 1),
                                 }
                                 snips = _snippets_for_term(row["term"])
-                                row["context_snippet"] = " | ".join(snips) if snips else (row.get("definition") or "")
+                                row["context_snippet"] = (
+                                    " | ".join(snips) if snips
+                                    else (row.get("definition") or "")
+                                )
                                 enriched.append(row)
                             refined_vocab = refine_vocabulary_definitions(enriched, client=_llm)
                             for v in refined_vocab:

@@ -23,7 +23,6 @@ import json
 import os
 import re
 import sqlite3
-import tempfile
 import time
 from pathlib import Path
 
@@ -178,7 +177,9 @@ def test_vocab_recall_meets_threshold(discovered_vocab):
 def test_vocab_no_stopword_leakage(discovered_vocab):
     stopwords = {w.lower() for w in GT["vocab"]["stopwords_sample"]}
     leaks = stopwords & discovered_vocab
-    assert not leaks, f"{len(leaks)} stopwords surfaced in vocabulary (sample size {len(stopwords)})"
+    assert not leaks, (
+        f"{len(leaks)} stopwords surfaced in vocabulary (sample size {len(stopwords)})"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -303,7 +304,7 @@ def incremental_profile():
     ``extract_operator_profile`` and was the source of the timezone-garbage
     and wrong-handle bugs.
     """
-    from extractors.operator_profile import extract_incremental, OperatorProfile
+    from extractors.operator_profile import extract_incremental
 
     paths = _all_jsonl_paths()
     t0 = time.time()
@@ -362,7 +363,6 @@ def incremental_persisted_profile(tmp_path_factory):
     from extractors.operator_profile import (
         extract_incremental,
         persist_incremental_profile,
-        OperatorProfile,
     )
     from index.operator import OPERATOR_PROFILE_SCHEMA, ensure_schema, get_profile
 

@@ -41,17 +41,17 @@ without the table chrome — that's what the systemd service ships into
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
-import os
 import sqlite3
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import click
 
 from .util import format_json, format_table, resolve_db_path
-
 
 # --------------------------------------------------------------------------- #
 # Defensive module loaders
@@ -142,7 +142,7 @@ def _decay_one_table(
     archived_col = "archived" if _has_col(conn, table, "archived") else None
 
     select = (
-        f"SELECT rowid AS _rid, confidence, last_reasserted_ts"
+        "SELECT rowid AS _rid, confidence, last_reasserted_ts"
         + (f", {n_col}" if n_col else "")
         + f" FROM {table}"
         + (f" WHERE COALESCE({archived_col},0)=0" if archived_col else "")
@@ -276,14 +276,12 @@ def _promote_vocabulary(
         for r in rows:
             out["tier0_to_1"] += 1
             if not dry_run:
-                try:
+                with contextlib.suppress(sqlite3.Error):
                     conn.execute(
                         "INSERT OR IGNORE INTO vocabulary(term, tier, confidence, "
                         "last_reasserted_ts) VALUES (?, 1, 0.4, ?)",
                         (r["term"], _now_seconds()),
                     )
-                except sqlite3.Error:
-                    pass
 
     if _has_table(conn, "vocabulary"):
         # Tier 1 → 2.
@@ -593,10 +591,8 @@ def consolidate_cmd(ctx: click.Context, dry_run: bool, verbose: bool) -> None:
         else:
             conn.execute("COMMIT")
     except Exception:
-        try:
+        with contextlib.suppress(sqlite3.Error):
             conn.execute("ROLLBACK")
-        except sqlite3.Error:
-            pass
         raise
     finally:
         conn.close()

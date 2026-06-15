@@ -21,7 +21,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 __all__ = [
     "OPERATOR_PROFILE_SCHEMA",
@@ -69,10 +70,7 @@ def upsert_profile_field(
     ensure_schema(conn)
 
     src_list: list[str]
-    if sources is None:
-        src_list = []
-    else:
-        src_list = [str(s) for s in sources]
+    src_list = [] if sources is None else [str(s) for s in sources]
 
     value_json = json.dumps(value, ensure_ascii=False, sort_keys=True)
     sources_json = json.dumps(src_list, ensure_ascii=False)

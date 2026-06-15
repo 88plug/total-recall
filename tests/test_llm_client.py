@@ -6,9 +6,7 @@ urllib.request.urlopen is monkeypatched via pytest's monkeypatch fixture.
 
 from __future__ import annotations
 
-import io
 import json
-import os
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -18,8 +16,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from extractors.llm import LLMCache, LLMClient, get_default_client
-from extractors.llm.client import DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_TIMEOUT_S
-
+from extractors.llm.client import DEFAULT_BASE_URL, DEFAULT_MODEL
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -226,7 +223,9 @@ class TestGenerateJsonCache:
         gen_body = _generate_response(expected)
 
         client = self._client_available_with_cache(tmp_path)
-        with patch("urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)) as mock_open:
+        with patch(
+            "urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)
+        ) as mock_open:
             result1 = client.generate_json(system="sys", user="tell me about machines")
             result2 = client.generate_json(system="sys", user="tell me about machines")
 
@@ -235,7 +234,8 @@ class TestGenerateJsonCache:
         assert result2 == expected
 
     def test_cache_miss_then_put(self, tmp_path: Path):
-        """First call misses the cache (hits network) and stores the result; second call is a hit."""
+        """First call misses the cache (hits network) and stores the result;
+        second call is a hit."""
         from extractors.llm.cache import LLMCache as _LLMCache
 
         expected = {"vocab": ["term1"]}
@@ -245,7 +245,9 @@ class TestGenerateJsonCache:
         client = LLMClient(provider="auto", model=DEFAULT_MODEL, cache=_LLMCache(db))
         client._available = True  # noqa: SLF001
 
-        with patch("urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)) as mock_open:
+        with patch(
+            "urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)
+        ) as mock_open:
             result1 = client.generate_json(system="s", user="u")
 
         assert mock_open.call_count == 1
@@ -257,7 +259,9 @@ class TestGenerateJsonCache:
         assert cached == expected
 
         # Second call from the same client — no new network call.
-        with patch("urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)) as mock_open2:
+        with patch(
+            "urllib.request.urlopen", return_value=_make_urlopen_response(gen_body)
+        ) as mock_open2:
             result2 = client.generate_json(system="s", user="u")
 
         assert mock_open2.call_count == 0

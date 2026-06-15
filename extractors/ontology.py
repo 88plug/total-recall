@@ -33,9 +33,10 @@ import logging
 import re
 import time
 from collections import Counter, defaultdict
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # English wordlist — loaded once, used by the vocabulary specificity filter.
@@ -210,78 +211,107 @@ VOCAB_MIN_FREQ: int = 4       # must appear at least N times total
 # operator-specific and are pre-populated as universal concepts rather
 # than mined. None of these are author-private.
 _UNIVERSAL_CLAUDE_CODE_TERMS: list[VocabularyTerm] = [
-    VocabularyTerm("cwd-slug", "Filesystem slug derived from cwd by replacing / with -, used as ~/.claude/projects/<slug>/ dir name.", "concept"),
-    VocabularyTerm("session DAG", "Sessions are DAGs via parentUuid, not flat lists — branches and sidechains exist.", "concept"),
-    VocabularyTerm("sidechain", "isSidechain=true records — subagent runs that should fold under their parent turn.", "concept"),
-    VocabularyTerm("compaction", "Mid-session context reduction event recorded as system.subtype=compact_boundary.", "concept"),
+    VocabularyTerm(
+        "cwd-slug",
+        "Filesystem slug derived from cwd by replacing / with -, "
+        "used as ~/.claude/projects/<slug>/ dir name.",
+        "concept",
+    ),
+    VocabularyTerm(
+        "session DAG",
+        "Sessions are DAGs via parentUuid, not flat lists — branches and sidechains exist.",
+        "concept",
+    ),
+    VocabularyTerm(
+        "sidechain",
+        "isSidechain=true records — subagent runs that should fold under their parent turn.",
+        "concept",
+    ),
+    VocabularyTerm(
+        "compaction",
+        "Mid-session context reduction event recorded as system.subtype=compact_boundary.",
+        "concept",
+    ),
 ]
 
 # Common English stopwords — single-word only (2-grams checked separately).
 # Also includes generic path-segment noise (home, user, name, state, read,
 # agent, …) that leaks through the length filter but is never operator-specific.
 _STOPWORDS: frozenset[str] = frozenset(
-    """
-    a about above after again against all also am an and any are aren't as at
-    be because been before being below between both but by can can't cannot
-    could couldn't did didn't do does doesn't doing don't down during each
-    few for from further get go goes going got had hadn't has hasn't have
-    haven't having he he'd he'll he's her here here's hers herself him
-    himself his how how's i i'd i'll i'm i've if in into is isn't it it's
-    its itself just let's me more most mustn't my myself no nor not of off
-    on once only or other ought our ours ourselves out over own same shan't
-    she she'd she'll she's should shouldn't so some such than that that's
-    the their theirs them themselves then there there's these they they'd
-    they'll they're they've this those through to too under until up very
-    was wasn't we we'd we'll we're we've were weren't what what's when
-    when's where where's which while who who's whom why why's will with
-    won't would wouldn't you you'd you'll you're you've your yours yourself
-    yourselves
-    also already always another back been being best better both call called
-    check come comes create done each else end even every example first
-    following found get given good here however instead just keep last like
-    look made make many may maybe might much must need never new next non now
-    old one other our own part please put really right run same see set show
-    since still take then there thing things think though time too true until
-    upon use used using via want way well where while without yet
-    home name state read user file path type item node root base info send
-    load save mode view step task line main plan repo role rule side size
-    sort spec text tree unit word note host link cast bind feel flag form
-    gate give grab hard hash head hold hook idea init join kind lack mark
-    mean meet miss near need nice null once pair pass ping pipe poll pool
-    post prep rate wrap wait warn sign skip slow snap span spin stat stem
-    swap sync tail tell tend tick trim turn vary void walk watch agent open
-    data code work test true real done fail help push pull keep next make
-    move show stop start some more find just over back into this from also
-    """.split()
+    [
+        'a', 'about', 'above', 'after', 'again', 'against', 'all', 'also', 'am', 'an', 'and',
+        'any', 'are', "aren't", 'as', 'at', 'be', 'because', 'been', 'before', 'being',
+        'below', 'between', 'both', 'but', 'by', 'can', "can't", 'cannot', 'could', "couldn't",
+        'did', "didn't", 'do', 'does', "doesn't", 'doing', "don't", 'down', 'during', 'each',
+        'few', 'for', 'from', 'further', 'get', 'go', 'goes', 'going', 'got', 'had', "hadn't",
+        'has', "hasn't", 'have', "haven't", 'having', 'he', "he'd", "he'll", "he's", 'her',
+        'here', "here's", 'hers', 'herself', 'him', 'himself', 'his', 'how', "how's", 'i',
+        "i'd", "i'll", "i'm", "i've", 'if', 'in', 'into', 'is', "isn't", 'it', "it's", 'its',
+        'itself', 'just', "let's", 'me', 'more', 'most', "mustn't", 'my', 'myself', 'no',
+        'nor', 'not', 'of', 'off', 'on', 'once', 'only', 'or', 'other', 'ought', 'our', 'ours',
+        'ourselves', 'out', 'over', 'own', 'same', "shan't", 'she', "she'd", "she'll", "she's",
+        'should', "shouldn't", 'so', 'some', 'such', 'than', 'that', "that's", 'the', 'their',
+        'theirs', 'them', 'themselves', 'then', 'there', "there's", 'these', 'they', "they'd",
+        "they'll", "they're", "they've", 'this', 'those', 'through', 'to', 'too', 'under',
+        'until', 'up', 'very', 'was', "wasn't", 'we', "we'd", "we'll", "we're", "we've",
+        'were', "weren't", 'what', "what's", 'when', "when's", 'where', "where's", 'which',
+        'while', 'who', "who's", 'whom', 'why', "why's", 'will', 'with', "won't", 'would',
+        "wouldn't", 'you', "you'd", "you'll", "you're", "you've", 'your', 'yours', 'yourself',
+        'yourselves', 'also', 'already', 'always', 'another', 'back', 'been', 'being', 'best',
+        'better', 'both', 'call', 'called', 'check', 'come', 'comes', 'create', 'done', 'each',
+        'else', 'end', 'even', 'every', 'example', 'first', 'following', 'found', 'get',
+        'given', 'good', 'here', 'however', 'instead', 'just', 'keep', 'last', 'like', 'look',
+        'made', 'make', 'many', 'may', 'maybe', 'might', 'much', 'must', 'need', 'never',
+        'new', 'next', 'non', 'now', 'old', 'one', 'other', 'our', 'own', 'part', 'please',
+        'put', 'really', 'right', 'run', 'same', 'see', 'set', 'show', 'since', 'still',
+        'take', 'then', 'there', 'thing', 'things', 'think', 'though', 'time', 'too', 'true',
+        'until', 'upon', 'use', 'used', 'using', 'via', 'want', 'way', 'well', 'where',
+        'while', 'without', 'yet', 'home', 'name', 'state', 'read', 'user', 'file', 'path',
+        'type', 'item', 'node', 'root', 'base', 'info', 'send', 'load', 'save', 'mode', 'view',
+        'step', 'task', 'line', 'main', 'plan', 'repo', 'role', 'rule', 'side', 'size', 'sort',
+        'spec', 'text', 'tree', 'unit', 'word', 'note', 'host', 'link', 'cast', 'bind', 'feel',
+        'flag', 'form', 'gate', 'give', 'grab', 'hard', 'hash', 'head', 'hold', 'hook', 'idea',
+        'init', 'join', 'kind', 'lack', 'mark', 'mean', 'meet', 'miss', 'near', 'need', 'nice',
+        'null', 'once', 'pair', 'pass', 'ping', 'pipe', 'poll', 'pool', 'post', 'prep', 'rate',
+        'wrap', 'wait', 'warn', 'sign', 'skip', 'slow', 'snap', 'span', 'spin', 'stat', 'stem',
+        'swap', 'sync', 'tail', 'tell', 'tend', 'tick', 'trim', 'turn', 'vary', 'void', 'walk',
+        'watch', 'agent', 'open', 'data', 'code', 'work', 'test', 'true', 'real', 'done',
+        'fail', 'help', 'push', 'pull', 'keep', 'next', 'make', 'move', 'show', 'stop',
+        'start', 'some', 'more', 'find', 'just', 'over', 'back', 'into', 'this', 'from',
+        'also',
+    ]
 )
 
 # Generic dev / Claude Code terms that appear for ALL operators — not worth
 # mining as operator-specific vocabulary.
 _GENERIC_TECH: frozenset[str] = frozenset(
-    """
-    git github gitlab branch commit push pull merge rebase diff patch tag
-    branch checkout clone fetch stash cherry-pick bisect worktree
-    python javascript typescript node npm yarn pnpm pip uv virtualenv venv
-    docker container image registry volume mount bind
-    bash shell sh zsh fish script curl wget grep find sed awk jq
-    json yaml toml ini xml html css sql sqlite postgres mysql redis
-    function class method import export module package library
-    test pytest unittest jest mocha spec mock fixture assert
-    api rest graphql grpc http https webhook endpoint route handler
-    config env variable secret token key value flag option argument
-    error exception warning debug log trace stdout stderr
-    file path directory folder symlink stat chmod chown
-    process thread async await promise callback event loop queue
-    server client request response status code header body
-    index schema table column row query insert update delete select
-    claude anthropic mcp tool skill hook plugin command slash
-    session transcript jsonl record turn message content assistant user
-    context window token prompt completion inference model
-    readme changelog license makefile dockerfile pyproject toml
-    pr pull request review comment issue milestone label
-    ci cd pipeline stage job artifact deploy release version tag
-    """.split()
+    [
+        'git', 'github', 'gitlab', 'branch', 'commit', 'push', 'pull', 'merge', 'rebase',
+        'diff', 'patch', 'tag', 'branch', 'checkout', 'clone', 'fetch', 'stash', 'cherry-pick',
+        'bisect', 'worktree', 'python', 'javascript', 'typescript', 'node', 'npm', 'yarn',
+        'pnpm', 'pip', 'uv', 'virtualenv', 'venv', 'docker', 'container', 'image', 'registry',
+        'volume', 'mount', 'bind', 'bash', 'shell', 'sh', 'zsh', 'fish', 'script', 'curl',
+        'wget', 'grep', 'find', 'sed', 'awk', 'jq', 'json', 'yaml', 'toml', 'ini', 'xml',
+        'html', 'css', 'sql', 'sqlite', 'postgres', 'mysql', 'redis', 'function', 'class',
+        'method', 'import', 'export', 'module', 'package', 'library', 'test', 'pytest',
+        'unittest', 'jest', 'mocha', 'spec', 'mock', 'fixture', 'assert', 'api', 'rest',
+        'graphql', 'grpc', 'http', 'https', 'webhook', 'endpoint', 'route', 'handler',
+        'config', 'env', 'variable', 'secret', 'token', 'key', 'value', 'flag', 'option',
+        'argument', 'error', 'exception', 'warning', 'debug', 'log', 'trace', 'stdout',
+        'stderr', 'file', 'path', 'directory', 'folder', 'symlink', 'stat', 'chmod', 'chown',
+        'process', 'thread', 'async', 'await', 'promise', 'callback', 'event', 'loop', 'queue',
+        'server', 'client', 'request', 'response', 'status', 'code', 'header', 'body', 'index',
+        'schema', 'table', 'column', 'row', 'query', 'insert', 'update', 'delete', 'select',
+        'claude', 'anthropic', 'mcp', 'tool', 'skill', 'hook', 'plugin', 'command', 'slash',
+        'session', 'transcript', 'jsonl', 'record', 'turn', 'message', 'content', 'assistant',
+        'user', 'context', 'window', 'token', 'prompt', 'completion', 'inference', 'model',
+        'readme', 'changelog', 'license', 'makefile', 'dockerfile', 'pyproject', 'toml', 'pr',
+        'pull', 'request', 'review', 'comment', 'issue', 'milestone', 'label', 'ci', 'cd',
+        'pipeline', 'stage', 'job', 'artifact', 'deploy', 'release', 'version', 'tag',
+    ]
 )
+
+_DEFAULT_PROJECTS_ROOT = Path("~/.claude/projects").expanduser()
 
 # Minimum token length to consider for vocabulary mining.
 _VOCAB_MIN_TOKEN_LEN: int = 4
@@ -400,10 +430,10 @@ def _has_specificity_marker(tok: str) -> bool:
 # never operator vocabulary — they come from Claude Code harness scaffolding
 # (task-notification blocks, tool call IDs, tmp dirs, ls output, cwd slugs).
 _HARNESS_ARTIFACT_EXACT: frozenset[str] = frozenset(
-    """
-    task-notification task-id tool-use-id output-file
-    rw-rw-r rw-rw-rw drwxr-xr drwxrwxr
-    """.split()
+    [
+        'task-notification', 'task-id', 'tool-use-id', 'output-file', 'rw-rw-r', 'rw-rw-rw',
+        'drwxr-xr', 'drwxrwxr',
+    ]
 )
 
 # Regex patterns for harness/path artifact shapes.
@@ -430,9 +460,7 @@ def _is_harness_artifact(tok: str) -> bool:
     lower = tok.lower()
     if lower in _HARNESS_ARTIFACT_EXACT:
         return True
-    if _HARNESS_ARTIFACT_RE.search(lower):
-        return True
-    return False
+    return bool(_HARNESS_ARTIFACT_RE.search(lower))
 
 
 def _is_boring_token(tok: str, operator_usernames: frozenset[str] | None = None) -> bool:
@@ -457,9 +485,7 @@ def _is_boring_token(tok: str, operator_usernames: frozenset[str] | None = None)
         return True
     # Specificity filter: drop generic English words that have no structural
     # marker making them operator-specific.
-    if not _has_specificity_marker(tok):
-        return True
-    return False
+    return bool(not _has_specificity_marker(tok))
 
 
 def _extract_operator_tokens(
@@ -639,7 +665,7 @@ _CONTEXT_WINDOW = 200
 
 
 def iter_project_dirs(
-    projects_root: Path = Path("~/.claude/projects").expanduser(),
+    projects_root: Path = _DEFAULT_PROJECTS_ROOT,
 ) -> Iterator[Path]:
     """Yield each ``<slug>`` directory under ``projects_root``.
 
@@ -891,12 +917,14 @@ def _looks_like_hex_id(token: str) -> bool:
     segs = f.replace(".", "-").split("-")
     if any(_HEX_RUN_RE.match(seg) for seg in segs):
         return True
-    if len(segs) >= 3 and all(
-        re.fullmatch(r"[0-9a-f]+", seg, re.IGNORECASE) and any(c.isdigit() for c in seg)
-        for seg in segs
-    ):
-        return True
-    return False
+    return bool(
+        len(segs) >= 3
+        and all(
+            re.fullmatch(r"[0-9a-f]+", seg, re.IGNORECASE)
+            and any(c.isdigit() for c in seg)
+            for seg in segs
+        )
+    )
 
 
 def _extract_machines_from_text(
@@ -953,7 +981,7 @@ def _extract_machines_from_text(
 
 
 def extract_ontology(
-    projects_root: Path = Path("~/.claude/projects").expanduser(),
+    projects_root: Path = _DEFAULT_PROJECTS_ROOT,
 ) -> OntologySnapshot:
     """Run a full ontology pass over ``projects_root``.
 
@@ -1034,10 +1062,11 @@ _CO_MENTION_TOP_N: int = 5
 # treated as project identifiers.  These are structural artifacts of the
 # filesystem layout, not project names.  No operator-specific literals.
 _CO_MENTION_STOPWORDS: frozenset[str] = frozenset(
-    """
-    home tmp src code github gitlab users opt local share bin lib
-    projects project work workspace dev repos repo user
-    """.split()
+    [
+        'home', 'tmp', 'src', 'code', 'github', 'gitlab', 'users', 'opt', 'local', 'share',
+        'bin', 'lib', 'projects', 'project', 'work', 'workspace', 'dev', 'repos', 'repo',
+        'user',
+    ]
 )
 
 
@@ -1054,9 +1083,7 @@ def _name_is_generic(name: str) -> bool:
     if low.isdigit():
         return True
     # Whole-word check against the combined stopword sets.
-    if low in _CO_MENTION_STOPWORDS or low in _STOPWORDS or low in _GENERIC_TECH:
-        return True
-    return False
+    return bool(low in _CO_MENTION_STOPWORDS or low in _STOPWORDS or low in _GENERIC_TECH)
 
 
 def _candidate_names_for_project(proj: ProjectRecord) -> list[str]:
@@ -1317,7 +1344,8 @@ def extract_ontology_from_records(records: Iterable[Any]) -> OntologySnapshot:
             raw_dict: dict | None = rec
             rec_obj: Any = None
         else:
-            raw_dict = getattr(rec, "raw", None) if isinstance(getattr(rec, "raw", None), dict) else None
+            _raw = getattr(rec, "raw", None)
+            raw_dict = _raw if isinstance(_raw, dict) else None
             rec_obj = rec
 
         # --- Text extraction ---
@@ -1428,7 +1456,6 @@ def persist_ontology(conn, snap: OntologySnapshot) -> dict[str, int]:
     storage layer preserves anything that's already there.
     """
     from index.ontology import (
-        upsert_project,
         upsert_machine,
         upsert_vocabulary_term,
     )
@@ -1459,8 +1486,12 @@ def persist_ontology(conn, snap: OntologySnapshot) -> dict[str, int]:
                 purpose          = COALESCE(excluded.purpose, projects.purpose),
                 primary_language = COALESCE(excluded.primary_language, projects.primary_language),
                 related_projects = COALESCE(excluded.related_projects, projects.related_projects),
-                first_seen_ts    = COALESCE(MIN(excluded.first_seen_ts, projects.first_seen_ts), projects.first_seen_ts, excluded.first_seen_ts),
-                last_active_ts   = COALESCE(MAX(excluded.last_active_ts, projects.last_active_ts), projects.last_active_ts, excluded.last_active_ts),
+                first_seen_ts    = COALESCE(
+                    MIN(excluded.first_seen_ts, projects.first_seen_ts),
+                    projects.first_seen_ts, excluded.first_seen_ts),
+                last_active_ts   = COALESCE(
+                    MAX(excluded.last_active_ts, projects.last_active_ts),
+                    projects.last_active_ts, excluded.last_active_ts),
                 message_count    = COALESCE(excluded.message_count, projects.message_count)
             """,
             (
@@ -1562,7 +1593,7 @@ def update_vocabulary_counts(records: Iterable[Any], conn) -> int:
         patterns.append((term, re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)))
 
     counts: Counter[str] = Counter()
-    now = int(time.time())
+    int(time.time())
     for rec in records:
         text = _record_to_text(rec)
         if not text:

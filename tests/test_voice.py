@@ -37,7 +37,6 @@ from index.voice import (
     upsert_voice_field,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers — build Record-like dicts cheap. We use plain dicts since
 # :func:`measure_voice` accepts either ducktyped objects or raw JSONL

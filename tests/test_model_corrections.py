@@ -26,7 +26,6 @@ import pytest
 
 from extractors.model_corrections import ModelCorrections
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: minimal Record + DAG (mirrors test_extractors.py)
 # ---------------------------------------------------------------------------
@@ -431,7 +430,10 @@ def test_recall_corrections_about_returns_documented_shape(
         # Documented shape:
         assert {"correction", "rejected_approach", "preceding_uuid", "severity",
                 "session_id", "cwd", "ts"} <= h.keys()
-        assert "provider-y" in (h["correction"] or "") or "provider-y" in (h["rejected_approach"] or "")
+        assert (
+            "provider-y" in (h["correction"] or "")
+            or "provider-y" in (h["rejected_approach"] or "")
+        )
 
     # Sort: severity DESC then ts DESC. Row 1 (sev 0.85) comes before row 2 (sev 0.70).
     assert hits[0]["severity"] >= hits[1]["severity"]

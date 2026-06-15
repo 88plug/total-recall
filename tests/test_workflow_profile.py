@@ -12,9 +12,9 @@ Strategy:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -25,12 +25,10 @@ from extractors.workflow import (
     extract_workflow_incremental,
 )
 from index.workflow import (
-    WORKFLOW_PROFILE_SCHEMA,
     ensure_schema,
     get_workflow,
     persist_workflow,
 )
-
 
 # ---------------------------------------------------------------------------
 # JSONL corpus builder helpers
@@ -232,7 +230,12 @@ class TestExtractWorkflowActionBias:
 class TestExtractWorkflowMalformedInput:
     def test_skips_bad_json_lines(self, tmp_path):
         f = tmp_path / "bad.jsonl"
-        f.write_text("not json at all\n{\"type\": \"user\", \"sessionId\": \"x\", \"message\": {\"role\": \"user\", \"content\": \"ok\"}}\nbad again\n")
+        f.write_text(
+            "not json at all\n"
+            "{\"type\": \"user\", \"sessionId\": \"x\", "
+            "\"message\": {\"role\": \"user\", \"content\": \"ok\"}}\n"
+            "bad again\n"
+        )
         # Should not raise; should return a valid profile.
         p = extract_workflow([f])
         assert isinstance(p, WorkflowProfile)
@@ -259,10 +262,8 @@ def _corpus_records(tmp_path: Path) -> list[dict]:
         for line in f.read_text().splitlines():
             line = line.strip()
             if line:
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     records.append(json.loads(line))
-                except json.JSONDecodeError:
-                    pass
     return records
 
 
@@ -494,10 +495,8 @@ class TestExtractWorkflowFromRecords:
             for line in f.read_text().splitlines():
                 line = line.strip()
                 if line:
-                    try:
+                    with contextlib.suppress(json.JSONDecodeError):
                         records.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        pass
         p_files = extract_workflow(files)
         p_recs = extract_workflow_from_records(records)
         assert p_recs.sample_size == p_files.sample_size
@@ -506,8 +505,8 @@ class TestExtractWorkflowFromRecords:
 
     def test_record_objects_unwrapped_via_raw(self):
         """Record objects carrying .raw dicts are correctly unwrapped."""
+
         from extractors.workflow import extract_workflow_from_records
-        from datetime import datetime, timezone
 
         class FakeRecord:
             def __init__(self, raw):

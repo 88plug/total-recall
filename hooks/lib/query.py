@@ -24,7 +24,6 @@ import os
 import sys
 from pathlib import Path
 
-
 # --------------------------------------------------------------------------- #
 # defensive bootstrap
 # --------------------------------------------------------------------------- #
@@ -271,7 +270,10 @@ def cmd_prompt_relevant(args):
     if not hits and fts_query:
         # WT-4's real signature: search_extractions(conn, query, cwd, kind, scope, since, limit).
         hits = (
-            _safe_call(q, "search_extractions", conn, fts_query, args.cwd, None, None, None, args.limit)
+            _safe_call(
+                q, "search_extractions", conn, fts_query, args.cwd,
+                None, None, None, args.limit,
+            )
             or _safe_call(q, "search_messages", conn, fts_query, args.cwd, None, args.limit)
             or _safe_call(q, "search", conn, fts_query, args.limit)
         )
@@ -294,10 +296,8 @@ def cmd_prompt_relevant(args):
         score = d.get("score")
         score_str = ""
         if isinstance(score, (int, float)):
-            score_str = " (score={:.2f})".format(score)
-        lines.append(("- **{title}**{sc}: {sn}").format(
-            title=title, sc=score_str, sn=snippet,
-        ).rstrip())
+            score_str = f" (score={score:.2f})"
+        lines.append((f"- **{title}**{score_str}: {snippet}").rstrip())
 
     text = "\n".join(lines).strip()
     if len(text) <= len(lines[0].strip()):

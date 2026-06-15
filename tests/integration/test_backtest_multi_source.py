@@ -18,8 +18,6 @@ No real operator name / hostname / email appears anywhere in this file.
 from __future__ import annotations
 
 import sqlite3
-import tempfile
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -117,7 +115,7 @@ def test_synthetic_per_source_tagging() -> None:
     distinct ``source`` values in ``messages``, and the non-CC row counts
     are each > 0.
     """
-    from index.ingest import _ParsedFile, _commit_parsed, _row_for_message
+    from index.ingest import _commit_parsed, _ParsedFile, _row_for_message
 
     conn = _open_fresh_db()
 

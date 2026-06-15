@@ -12,9 +12,9 @@ absent on this branch (defensive import — mirrors how
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sqlite3
-from typing import Any
 
 from mcp_server.server import DB_PATH, get_conn, mcp
 
@@ -64,7 +64,13 @@ def _goals_module_missing_error() -> list[dict]:
 
 @mcp.tool()
 def get_active_goal(cwd: str | None = None) -> dict | None:
-    """Return the most-recently-progressed active goal for a project. Use at session start to lead with 'Last in-flight: <goal>. Continue?' instead of asking the operator to re-state context. Returns {project, goal_text, declared_ts, last_progress_ts, status, source_session} or None if no active/blocked goal exists for the project. ``cwd`` defaults to the current Claude Code cwd."""
+    (
+        "Return the most-recently-progressed active goal for a project. Use at session start to "
+        "lead with 'Last in-flight: <goal>. Continue?' instead of asking the operator to "
+        "re-state context. Returns {project, goal_text, declared_ts, last_progress_ts, status, "
+        "source_session} or None if no active/blocked goal exists for the project. ``cwd`` "
+        "defaults to the current Claude Code cwd."
+    )
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -85,10 +91,8 @@ def get_active_goal(cwd: str | None = None) -> dict | None:
         log.exception("get_active_goal failed")
         return {"error": f"get_active_goal failed: {e!r}"}
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     if row is None:
         return None
@@ -101,7 +105,13 @@ def list_goals(
     status: str = "active",
     limit: int = 10,
 ) -> list[dict]:
-    """List goals by project + status. Useful for 'show me what I've been working on'. ``status`` is one of active|paused|blocked|done|abandoned|any. ``cwd`` defaults to the current Claude Code cwd; pass an empty string to list across ALL projects. Returns up to ``limit`` rows {project, goal_text, declared_ts, last_progress_ts, status, ...} ordered by most-recently-progressed first."""
+    (
+        "List goals by project + status. Useful for 'show me what I've been working on'. "
+        "``status`` is one of active|paused|blocked|done|abandoned|any. ``cwd`` defaults to the "
+        "current Claude Code cwd; pass an empty string to list across ALL projects. Returns up "
+        "to ``limit`` rows {project, goal_text, declared_ts, last_progress_ts, status, ...} "
+        "ordered by most-recently-progressed first."
+    )
     conn = get_conn()
     if conn is None:
         return [_index_missing_error()]
@@ -131,10 +141,8 @@ def list_goals(
         log.exception("list_goals failed")
         return [{"error": f"list_goals failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     return [r.to_dict() for r in rows]
 

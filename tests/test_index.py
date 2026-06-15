@@ -28,8 +28,8 @@ from index import db as index_db  # noqa: E402
 from index import ingest as index_ingest  # noqa: E402
 from index import query as index_query  # noqa: E402
 from index.db import apply_schema, connect  # noqa: E402
-from index.paths import project_key
 from index.ingest import IngestReport, ingest_file  # noqa: E402
+from index.paths import project_key  # noqa: E402
 from index.query import (  # noqa: E402
     get_session_meta,
     list_sessions_for_cwd,
@@ -38,7 +38,6 @@ from index.query import (  # noqa: E402
     session_count_for_cwd,
     top_topics_for_cwd,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -702,7 +701,7 @@ def test_turns_unique_message_uuid(conn: sqlite3.Connection) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _fake_assistant_with_usage(uuid: str, session_id: str = "s1") -> "object":
+def _fake_assistant_with_usage(uuid: str, session_id: str = "s1") -> object:
     from types import SimpleNamespace
 
     raw = {
@@ -737,7 +736,7 @@ def _fake_assistant_with_usage(uuid: str, session_id: str = "s1") -> "object":
 
 def _fake_compact_boundary(
     uuid: str, session_id: str = "s1", trigger: str = "auto"
-) -> "object":
+) -> object:
     from types import SimpleNamespace
 
     payload = {
@@ -844,7 +843,6 @@ def test_ingest_writes_ingest_runs_row(
 ) -> None:
     """`ingest_all` must record exactly one row in `ingest_runs` per top-level
     invocation, carrying the trigger label + summed counters."""
-    from types import SimpleNamespace
 
     # Build a one-slug projects root with a real two-line JSONL.
     # Post-v0.5: multi-source path uses the real walker (via the
@@ -933,7 +931,7 @@ def _fake_turn_duration(
     message_count: int = 12,
     uuid: str = "u-td-1",
     session_id: str = "s1",
-) -> "object":
+) -> object:
     from types import SimpleNamespace
 
     payload = {"durationMs": duration_ms, "messageCount": message_count}
@@ -1260,9 +1258,13 @@ def test_ingest_all_jobs_parallel_is_idempotent(tmp_path: Path) -> None:
     db = tmp_path / "idem.db"
     c = connect(db)
     try:
-        index_ingest.ingest_all(conn=c, projects_root=projects_root, jobs=4, sources=["claude_code"])
+        index_ingest.ingest_all(
+            conn=c, projects_root=projects_root, jobs=4, sources=["claude_code"]
+        )
         n_msgs_1 = c.execute("SELECT COUNT(*) AS n FROM messages").fetchone()["n"]
-        index_ingest.ingest_all(conn=c, projects_root=projects_root, jobs=4, sources=["claude_code"])
+        index_ingest.ingest_all(
+            conn=c, projects_root=projects_root, jobs=4, sources=["claude_code"]
+        )
         n_msgs_2 = c.execute("SELECT COUNT(*) AS n FROM messages").fetchone()["n"]
         assert n_msgs_1 == n_msgs_2 > 0
     finally:

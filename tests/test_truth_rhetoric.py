@@ -14,7 +14,6 @@ import pytest
 
 from extractors.truth_rhetoric import CATEGORIES, TruthRhetoric
 
-
 # ---------------------------------------------------------------------------
 # Minimal RecordLike fixture (mirrors tests/test_extractors.py to keep this
 # file self-contained — see that module for the master copy).

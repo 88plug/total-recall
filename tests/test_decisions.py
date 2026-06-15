@@ -36,7 +36,6 @@ from index.decisions import (
     upsert_decision,
 )
 
-
 # ---------------------------------------------------------------------------
 # FakeRecord — match the duck-typed RecordLike protocol the extractor uses.
 # ---------------------------------------------------------------------------

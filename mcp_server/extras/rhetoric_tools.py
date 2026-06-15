@@ -16,6 +16,7 @@ transport.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import datetime
@@ -75,9 +76,7 @@ def _ts_to_iso(value: Any) -> str | None:
 
 def _row_to_assertion(row: Any) -> dict:
     """Coerce a sqlite row / mapping into the documented truth-assertion shape."""
-    if hasattr(row, "keys"):
-        d = {k: row[k] for k in row.keys()}
-    elif isinstance(row, dict):
+    if hasattr(row, "keys") or isinstance(row, dict):
         d = dict(row)
     else:
         try:
@@ -122,7 +121,12 @@ def get_past_truth_assertions(
     category: str | None = None,
     limit: int = 5,
 ) -> list[dict]:
-    """Return past moments where the operator pushed back hard. Categories: restatement, quote_back, standing_rule, past_logs_appeal, drift_callout, capability_insult, verify_yourself_push. Use this to recognize when the model is about to repeat a pattern that already triggered a hard correction."""
+    (
+        "Return past moments where the operator pushed back hard. Categories: restatement, "
+        "quote_back, standing_rule, past_logs_appeal, drift_callout, capability_insult, "
+        "verify_yourself_push. Use this to recognize when the model is about to repeat a "
+        "pattern that already triggered a hard correction."
+    )
     if category is not None and category not in _VALID_CATEGORIES:
         return [
             {
@@ -137,10 +141,8 @@ def get_past_truth_assertions(
 
     query_mod = _load_query_module()
     if query_mod is None:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
         return [{"error": "index.query module not available on this branch"}]
 
     # Over-fetch so post-filtering by category still leaves us with `limit` rows.
@@ -173,10 +175,8 @@ def get_past_truth_assertions(
         log.exception("get_past_truth_assertions() failed")
         return [{"error": f"get_past_truth_assertions failed: {e!r}"}]
     finally:
-        try:
+        with contextlib.suppress(Exception):
             conn.close()
-        except Exception:
-            pass
 
     out = [_row_to_assertion(h) for h in hits]
 

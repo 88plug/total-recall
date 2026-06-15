@@ -49,18 +49,18 @@ def cli(ctx: click.Context, db_path: str | None, verbose: bool, as_json: bool) -
 # ---- subcommand registration ---------------------------------------------- #
 # Imports are deferred to function scope inside each cmd_* module, not here,
 # so registering the group is essentially free.
-from .cmd_index import index_cmd  # noqa: E402
-from .cmd_query import query_cmd  # noqa: E402
-from .cmd_stats import stats_cmd  # noqa: E402
-from .cmd_inspect import inspect_cmd  # noqa: E402
-from .cmd_tail import tail_cmd  # noqa: E402
-from .cmd_dump import dump_cmd  # noqa: E402
-from .cmd_rebuild import rebuild_cmd  # noqa: E402
-from .cmd_metrics import metrics_cmd  # noqa: E402
 from .cmd_adaptive import adaptive_cmd  # noqa: E402
 from .cmd_consolidate import consolidate_cmd  # noqa: E402
-from .cmd_sources import sources_cmd  # noqa: E402
+from .cmd_dump import dump_cmd  # noqa: E402
+from .cmd_index import index_cmd  # noqa: E402
+from .cmd_inspect import inspect_cmd  # noqa: E402
 from .cmd_llm import llm_model_cmd  # noqa: E402
+from .cmd_metrics import metrics_cmd  # noqa: E402
+from .cmd_query import query_cmd  # noqa: E402
+from .cmd_rebuild import rebuild_cmd  # noqa: E402
+from .cmd_sources import sources_cmd  # noqa: E402
+from .cmd_stats import stats_cmd  # noqa: E402
+from .cmd_tail import tail_cmd  # noqa: E402
 
 cli.add_command(index_cmd, name="index")
 cli.add_command(query_cmd, name="query")

@@ -25,7 +25,7 @@ separate sidechain transcript; use :mod:`lib.sidechain` for those.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
 from lib.schema import Record
 
@@ -100,7 +100,7 @@ def find_branches(dag: Dag) -> list[tuple[str, list[str]]]:
 def _walk_up(dag: Dag, leaf_uuid: str) -> list[Record]:
     """Walk parents from ``leaf_uuid`` up to a root, return chronological path."""
     path: list[Record] = []
-    cur: Optional[str] = leaf_uuid
+    cur: str | None = leaf_uuid
     seen: set[str] = set()  # cycle guard, defensive
     while cur is not None:
         if cur in seen:
@@ -147,7 +147,7 @@ def _leaf_depths(dag: Dag) -> dict[str, int]:
 
 def linearize_main_branch(
     dag: Dag,
-    leaf_uuid: Optional[str] = None,
+    leaf_uuid: str | None = None,
     policy: LinearizePolicy = "deepest",
 ) -> list[Record]:
     """Walk parents from a chosen leaf up to its root, return chronological path.

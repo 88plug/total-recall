@@ -23,7 +23,6 @@ from index.bans import (
     upsert_failed_attempt,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -211,7 +210,8 @@ def test_reassertion_increments_count(conn):
 def test_failed_attempts_capture_and_lookup(conn):
     """End-to-end: text → extractor → upsert → list_failed_attempts."""
     rec_switch = _assistant(
-        "We switched from python-provider-y to provider-y-cloud because of auth and rate-limit issues."
+        "We switched from python-provider-y to provider-y-cloud "
+        "because of auth and rate-limit issues."
     )
     rec_migrate = _user("MIGRATED AWAY FROM kubernetes after the cert rotation broke")
     rec_tried = _user("we tried fly.io but it failed on the persistent volume side")
