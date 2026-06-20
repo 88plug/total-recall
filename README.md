@@ -2,6 +2,8 @@
 
 # Total Recall
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/88plug/total-recall)
+
 Cross-session, cross-CLI memory for Claude Code and other AI coding assistants — it mines your own session transcripts so a new session already knows your decisions, corrections, bans, and goals.
 
 [![plugin-validate](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml/badge.svg)](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml)
