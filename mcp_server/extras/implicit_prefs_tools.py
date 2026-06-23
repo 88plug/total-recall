@@ -56,7 +56,7 @@ def _table_exists(conn: sqlite3.Connection) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="List Implicit Preferences", annotations=ToolAnnotations(readOnlyHint=True))
 def list_implicit_preferences(
     min_confidence: float = 0.6,
     category: str | None = None,

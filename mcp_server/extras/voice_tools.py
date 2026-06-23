@@ -29,7 +29,7 @@ def _index_missing_error() -> dict[str, Any]:
     }
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Voice Profile", annotations=ToolAnnotations(readOnlyHint=True))
 def get_voice_profile() -> dict:
     (
         "Return the operator's measured communication style — casing, brevity, profanity rate, "

@@ -49,7 +49,7 @@ def _index_missing_error() -> dict:
     }
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Check Banned", annotations=ToolAnnotations(readOnlyHint=True))
 def check_banned(thing: str) -> dict:
     (
         "Check if a thing (provider, tool, library, framework, pattern) is banned by the "
@@ -96,12 +96,15 @@ def check_banned(thing: str) -> dict:
     }
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="List Failed Attempts", annotations=ToolAnnotations(readOnlyHint=True))
 def list_failed_attempts(topic: str | None = None, limit: int = 10) -> list[dict]:
     (
-        "Failed approaches the operator has documented. Use before suggesting something that "
-        "'sounds reasonable' — it might already be on the failed-attempts log. Returns "
-        "chronological list with replaced_by + reason."
+        "Failed approaches the operator has documented, sourced from the bans index. Use before "
+        "suggesting something that 'sounds reasonable' — it might already be on the failed-attempts "
+        "log. Params: topic filters to a subject (None = all); limit caps results (default 10). "
+        "Returns a list of dicts each with attempt, replaced_by, reason, cwd, attempted_ts, and "
+        "abandoned_ts. Distinct from tools.py find_failed_attempts, which is a semantic search over "
+        "the corrections index; this is a structured listing over the bans index."
     )
     conn = get_conn()
     if conn is None:

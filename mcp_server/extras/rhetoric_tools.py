@@ -116,7 +116,7 @@ def _row_to_assertion(row: Any) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Past Truth Assertions", annotations=ToolAnnotations(readOnlyHint=True))
 def get_past_truth_assertions(
     topic: str | None = None,
     category: str | None = None,

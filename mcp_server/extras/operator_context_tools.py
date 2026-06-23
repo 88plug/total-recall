@@ -319,7 +319,7 @@ def _current_cwd(cwd: str | None) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Operator Context", annotations=ToolAnnotations(readOnlyHint=True))
 def get_operator_context(cwd: str | None = None, max_chars: int = 1800) -> dict:
     """Return a unified operator-context payload for the current session.
 

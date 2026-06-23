@@ -77,7 +77,7 @@ def _row_to_dict(row: Any) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Project Graph", annotations=ToolAnnotations(readOnlyHint=True))
 def get_project_graph() -> dict:
     (
         "Return the operator's project graph: cwd -> {purpose, primary_language, "
@@ -139,7 +139,7 @@ def get_project_graph() -> dict:
         _close(conn)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Machine Inventory", annotations=ToolAnnotations(readOnlyHint=True))
 def get_machine_inventory(name_pattern: str | None = None) -> list[dict]:
     (
         "Return the operator's machine inventory: hostname -> {role, lan_ip, tailscale_ip, "
@@ -192,7 +192,7 @@ def get_machine_inventory(name_pattern: str | None = None) -> list[dict]:
         _close(conn)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Define Term", annotations=ToolAnnotations(readOnlyHint=True))
 def define_term(term: str) -> dict | None:
     (
         "Lookup operator-specific vocabulary. E.g. define_term('relay fleet') returns the "

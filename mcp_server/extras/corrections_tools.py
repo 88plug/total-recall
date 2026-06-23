@@ -105,7 +105,7 @@ def _current_cwd() -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Recall Corrections About", annotations=ToolAnnotations(readOnlyHint=True))
 def recall_corrections_about(
     topic: str,
     scope: Literal["this_cwd", "all_projects"] = "all_projects",
@@ -169,7 +169,7 @@ def recall_corrections_about(
     return out[:limit]
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Recent Corrections", annotations=ToolAnnotations(readOnlyHint=True))
 def get_recent_corrections(
     cwd: str | None = None,
     since_days: int = 30,
@@ -177,7 +177,11 @@ def get_recent_corrections(
 ) -> list[dict]:
     (
         "Return recent operator corrections, useful at session start to know what the model has "
-        "been doing wrong lately."
+        "been doing wrong lately. Pulls from the corrections index (kind='model_correction'). "
+        "Params: cwd scopes to a project (None = all projects); since_days bounds how far back to "
+        "look (default 30); limit caps how many are returned (default 5, most recent first). "
+        "Returns a list of dicts each describing one correction (the corrected behavior, context, "
+        "and timestamp); returns an error envelope if the index is missing."
     )
     conn = get_conn()
     if conn is None:

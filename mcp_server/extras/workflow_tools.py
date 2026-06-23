@@ -32,7 +32,7 @@ def _index_missing_error() -> dict[str, Any]:
     }
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Workflow Profile", annotations=ToolAnnotations(readOnlyHint=True))
 def get_workflow_profile() -> dict:
     (
         "Return the operator's measured workflow behaviour — fan-out vocabulary, autonomy "

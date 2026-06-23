@@ -28,7 +28,7 @@ def _index_missing_error() -> dict[str, Any]:
     }
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Operator Profile", annotations=ToolAnnotations(readOnlyHint=True))
 def get_operator_profile() -> dict:
     (
         "Return the operator's identity profile (name, handles, machines, vendor preferences, "

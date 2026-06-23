@@ -45,7 +45,7 @@ def _index_missing_error() -> dict[str, Any]:
     }
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Satisfaction Profile", annotations=ToolAnnotations(readOnlyHint=True))
 def get_satisfaction_profile() -> dict:
     """Return the bidirectional satisfaction cross-tab: which assistant
     behaviors earn praise vs. frustration.

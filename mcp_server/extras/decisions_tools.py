@@ -92,7 +92,7 @@ def _table_exists(conn: sqlite3.Connection) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="List Standing Decisions", annotations=ToolAnnotations(readOnlyHint=True))
 def list_standing_decisions(
     topic: str | None = None,
     scope: str | None = None,
@@ -146,14 +146,18 @@ def list_standing_decisions(
             conn.close()
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Get Decision for Topic", annotations=ToolAnnotations(readOnlyHint=True))
 def get_decision_for_topic(
     topic: str,
     cwd: str | None = None,
 ) -> dict | None:
     (
-        "Quick lookup: 'what did the operator decide about X for this project?' Returns None if "
-        "no decision recorded."
+        "Quick lookup: 'what did the operator decide about X for this project?' Resolves scope "
+        "with a fallback chain: first a project-scoped row matching cwd (defaults to the current "
+        "cwd when omitted), then a global row, preferring the most-asserted / most-recently "
+        "reasserted match. Returns a single standing_decisions row (topic, scope, the decision, "
+        "assertion_count, last_reasserted_ts, etc.), or None if no decision is recorded; returns "
+        "an error envelope if the index or standing_decisions table is missing."
     )
     conn = get_conn()
     if conn is None:

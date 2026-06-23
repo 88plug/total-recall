@@ -524,7 +524,7 @@ def _route_before_suggesting_default(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Recall Targeted", annotations=ToolAnnotations(readOnlyHint=True))
 def recall_targeted(
     intent: Literal[
         "before_suggesting_default",

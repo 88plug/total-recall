@@ -14,7 +14,7 @@ from mcp_server.server import mcp
 from mcp.types import ToolAnnotations
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(title="Assess Escalation Risk", annotations=ToolAnnotations(readOnlyHint=True))
 def assess_escalation_risk(
     last_user: str,
     previous_user: str | None = None,
