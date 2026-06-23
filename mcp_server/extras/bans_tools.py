@@ -26,6 +26,7 @@ import logging
 from typing import Any
 
 from mcp_server.server import DB_PATH, get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ def _index_missing_error() -> dict:
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def check_banned(thing: str) -> dict:
     (
         "Check if a thing (provider, tool, library, framework, pattern) is banned by the "
@@ -95,7 +96,7 @@ def check_banned(thing: str) -> dict:
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def list_failed_attempts(topic: str | None = None, limit: int = 10) -> list[dict]:
     (
         "Failed approaches the operator has documented. Use before suggesting something that "

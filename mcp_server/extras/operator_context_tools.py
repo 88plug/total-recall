@@ -40,6 +40,7 @@ import sqlite3
 from typing import Any
 
 from mcp_server.server import DB_PATH, get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -318,7 +319,7 @@ def _current_cwd(cwd: str | None) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def get_operator_context(cwd: str | None = None, max_chars: int = 1800) -> dict:
     """Return a unified operator-context payload for the current session.
 

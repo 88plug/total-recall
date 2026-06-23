@@ -23,6 +23,7 @@ from datetime import datetime
 from typing import Any
 
 from mcp_server.server import DB_PATH, get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ def _row_to_assertion(row: Any) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def get_past_truth_assertions(
     topic: str | None = None,
     category: str | None = None,

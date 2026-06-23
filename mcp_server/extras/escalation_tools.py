@@ -11,9 +11,10 @@ from __future__ import annotations
 
 from detector.escalation import assess_escalation
 from mcp_server.server import mcp
+from mcp.types import ToolAnnotations
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def assess_escalation_risk(
     last_user: str,
     previous_user: str | None = None,

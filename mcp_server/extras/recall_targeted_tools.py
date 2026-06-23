@@ -62,6 +62,7 @@ import sqlite3
 from typing import Any, Literal
 
 from mcp_server.server import DB_PATH, get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -523,7 +524,7 @@ def _route_before_suggesting_default(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def recall_targeted(
     intent: Literal[
         "before_suggesting_default",

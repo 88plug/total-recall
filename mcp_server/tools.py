@@ -26,6 +26,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from mcp_server.server import DB_PATH, get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -213,7 +214,7 @@ def _run_with_scope_fallback(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 @_traced("mcp.recall")
 def recall(
     topic: str,
@@ -284,7 +285,7 @@ def recall(
     return out
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 @_traced("mcp.prior_sessions_for_cwd")
 def prior_sessions_for_cwd(cwd: str | None = None, limit: int = 10) -> list[dict]:
     (
@@ -326,7 +327,7 @@ def prior_sessions_for_cwd(cwd: str | None = None, limit: int = 10) -> list[dict
     return out
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 @_traced("mcp.find_failed_attempts")
 def find_failed_attempts(pattern: str, cwd: str | None = None, limit: int = 5) -> list[dict]:
     (
@@ -402,7 +403,7 @@ def find_failed_attempts(pattern: str, cwd: str | None = None, limit: int = 5) -
     return results
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 @_traced("mcp.find_user_preferences")
 def find_user_preferences(
     domain: str | None = None,
@@ -458,7 +459,7 @@ def find_user_preferences(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 @_traced("mcp.get_session_digest")
 def get_session_digest(session_id: str) -> dict:
     (
@@ -594,7 +595,7 @@ def get_session_digest(session_id: str) -> dict:
     return digest
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 @_traced("mcp.search_messages")
 def search_messages(
     query: str,

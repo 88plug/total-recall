@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from mcp_server.server import DB_PATH, get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +105,7 @@ def _current_cwd() -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def recall_corrections_about(
     topic: str,
     scope: Literal["this_cwd", "all_projects"] = "all_projects",
@@ -168,7 +169,7 @@ def recall_corrections_about(
     return out[:limit]
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def get_recent_corrections(
     cwd: str | None = None,
     since_days: int = 30,

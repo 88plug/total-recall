@@ -17,6 +17,7 @@ import logging
 import sqlite3
 
 from mcp_server.server import DB_PATH, get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def _goals_module_missing_error() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def get_active_goal(cwd: str | None = None) -> dict | None:
     (
         "Return the most-recently-progressed active goal for a project. Use at session start to "
@@ -99,7 +100,7 @@ def get_active_goal(cwd: str | None = None) -> dict | None:
     return row.to_dict()
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def list_goals(
     cwd: str | None = None,
     status: str = "active",

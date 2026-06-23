@@ -17,6 +17,7 @@ import logging
 from typing import Any
 
 from mcp_server.server import DB_PATH, get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def _index_missing_error() -> dict[str, Any]:
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def get_voice_profile() -> dict:
     (
         "Return the operator's measured communication style — casing, brevity, profanity rate, "

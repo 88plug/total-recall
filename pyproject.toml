@@ -48,7 +48,7 @@ classifiers = [
     "Environment :: Plugins",
 ]
 dependencies = [
-    "mcp>=1.0",
+    "mcp>=1.28.0",
     "click>=8",
 ]
 

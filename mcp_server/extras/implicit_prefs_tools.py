@@ -20,6 +20,7 @@ import logging
 import sqlite3
 
 from mcp_server.server import get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ def _table_exists(conn: sqlite3.Connection) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def list_implicit_preferences(
     min_confidence: float = 0.6,
     category: str | None = None,

@@ -26,6 +26,7 @@ from datetime import datetime
 from typing import Any
 
 from mcp_server.server import DB_PATH, get_conn, mcp
+from mcp.types import ToolAnnotations
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ def _table_exists(conn: sqlite3.Connection) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def list_standing_decisions(
     topic: str | None = None,
     scope: str | None = None,
@@ -145,7 +146,7 @@ def list_standing_decisions(
             conn.close()
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def get_decision_for_topic(
     topic: str,
     cwd: str | None = None,
