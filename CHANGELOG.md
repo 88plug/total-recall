@@ -2,7 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.1.2] - 2026-06-13
+## 2026.6.23
+
+### Changed
+- `.claude-plugin/plugin.json`: added `version` (calver `2026.6.23`), wired the MCP server (`mcpServers`) and hooks (`hooks: ./hooks/hooks.json`) into the canonical manifest so the 26 MCP tools and 6 hooks load, and rebuilt `keywords` to the 88plug-standard set of exactly 20 (base + `claude-skills` + MCP trio + memory niche).
+- `hooks/hooks.json`: aligned fast/deterministic hook timeouts to the 88plug spec (SessionStart/compact-restore/recovery=15, UserPromptSubmit=10, PreCompact=30); async re-index hooks (Stop, PostCompact index) keep timeout=60 by design.
+- CI: bumped `actions/checkout@v7.0.0`, `actions/setup-python@v6.2.0`, Python `3.13`; added a `tests/smoke.sh` step to `plugin-validate.yml`; refreshed all five Pages action versions; dropped the stale `master` branch ref from `ci.yml`.
+- `.ci/validate_plugin.py`: now asserts no root `plugin.json` and exactly 20 keywords.
+- Docs: removed the `<div align="center">` wrapper from `docs/index.md` (it forced the whole page to render raw), converted GFM `> [!NOTE]` alerts to MkDocs `!!! note`, fixed in-site/LICENSE links, added `md_in_html` plus `site_url`/`repo_url`/`repo_name`/`edit_uri` to `mkdocs.yml`, and added `docs/.nojekyll`.
+- `.gitignore`: added the canonical real-corpus/eval artifact guards.
+
+### Added
+- `tests/smoke.sh`: lightweight manifest-JSON + hook/mcp `bash -n` wiring check.
+
+## 2026.6.13 (2.1.2)
 
 ### Fixed
 - `hooks/hooks.json`: all 7 hook command paths now use the plain `${CLAUDE_PLUGIN_ROOT}` token instead of the bash `${CLAUDE_PLUGIN_ROOT:-.}` default form. Claude Code's manifest variable expansion does not interpret `${VAR:-default}`, so the literal `:-.` was left in the resolved path and every hook (SessionStart signpost/compact-restore, UserPromptSubmit retrieval, Stop re-index, PreCompact seed, both PostCompact hooks) failed to launch. Any `:-default` fallback must live inside the shell scripts, not in the manifest.
@@ -11,7 +24,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - `author.email` set to the 88plug-convention `andrew@88plug.com`.
 
-## [2.1.0] - 2026-06-04
+## 2026.6.4 (2.1.0)
 
 ### Added
 - Dense embedding model upgraded to `Alibaba-NLP/gte-modernbert-base` (768-d) for hybrid recall, chosen via a real-corpus bake-off (vs bge-small/granite-r2); auto-registered through fastembed `add_custom_model` with a ModernBERT `model_max_length` clamp.
@@ -27,7 +40,7 @@ All notable changes to this project will be documented in this file.
 - `cmd_rebuild` vec backfill uses the embedder's true dimension instead of a hardcoded 384.
 - `prior_sessions_for_cwd` gained the `this_cwd -> all_projects` fallback.
 
-## [2.0.1] - 2026-06-01
+## 2026.6.1 (2.0.1)
 
 ### Changed — CI dependency bumps (dependabot)
 
@@ -40,7 +53,7 @@ workflow only — no runtime code touched.
 - `actions/download-artifact` v4 → v8
 - `softprops/action-gh-release` v2 → v3
 
-## [2.0.0] - 2026-05-31
+## 2026.5.31 (2.0.0)
 
 ### Added — hybrid (dense-vector) recall by default
 
@@ -72,7 +85,7 @@ The +0.800 P@5 win measured in v1.6.0 is now produced by a normal
   now the default-produced index shape), not an API break.
 - Python floor stays 3.10 (per council chair: zero gain, would drop real users).
 
-## [1.6.0] - 2026-05-31
+## 2026.5.31 (1.6.0)
 
 ### Added — vec hybrid recall eval harness (go/no-go for v2.0)
 
@@ -94,7 +107,7 @@ by default in v2.0 (the council's planned breaking window).
 
 Gate: pytest tests/ exit 0 — 1317 passed, 15 skipped; vec eval 1 passed (8.1s).
 
-## [1.5.0] - 2026-05-31
+## 2026.5.31 (1.5.0)
 
 ### Improved — near-duplicate dedup + score floor
 
@@ -117,7 +130,7 @@ discriminating — the collapse tests fail when dedup is disabled.
 
 Gate: pytest tests/ exit 0 — 1317 passed, 15 skipped.
 
-## [1.4.1] - 2026-05-31
+## 2026.5.31 (1.4.1)
 
 ### Fixed — v1.4.0 composite re-rank was inert (helpers added but never wired)
 
@@ -140,7 +153,7 @@ This release actually wires it:
 
 Gate: pytest tests/ exit 0 — 1313 passed, 15 skipped.
 
-## [1.4.0] - 2026-05-31
+## 2026.5.31 (1.4.0)
 
 ### Improved — composite re-rank: recency + kind priority over raw BM25
 
@@ -165,7 +178,7 @@ index — multi-word recall returns composite-ordered hits.
 
 Gate: pytest tests/ exit 0 — 1320 passed, 10 skipped.
 
-## [1.3.0] - 2026-05-31
+## 2026.5.31 (1.3.0)
 
 ### Improved — multi-word recall: OR-join queries (accuracy/results)
 
@@ -193,7 +206,7 @@ vec hybrid (needs a measurement harness first).
 
 Gate: pytest tests/ exit 0 — 1317 passed, 10 skipped.
 
-## [1.2.0] - 2026-05-31
+## 2026.5.31 (1.2.0)
 
 ### Validated — default ollama qwen3.5:2b refinement on CPU, live-tested
 
@@ -218,7 +231,7 @@ Default model is qwen3.5:2b across every surface (`extractors/llm/client.py`,
 `hooks/lib/common.sh`, `total-recall llm-model`). No behavior change — this
 release adds the live-path test coverage that proves the default works on CPU.
 
-## [1.1.0] - 2026-05-30
+## 2026.5.30 (1.1.0)
 
 ### Added — doc/code drift linter (tests/test_command_docs.py)
 
@@ -238,7 +251,7 @@ the drift classes that caused repeated bugs this cycle:
 subcommand and a `stats --json` ordering, passes `--json stats`).
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-## [1.0.0] - 2026-05-30
+## 2026.5.30 (1.0.0)
 
 ### Stable release
 
@@ -264,7 +277,7 @@ Stability commitments from this point:
 No code changes in this release beyond the version bump and classifier — it is a
 stability marker on the green v0.14.1 tree (1254 tests passing).
 
-## [0.14.1] - 2026-05-30
+## 2026.5.30 (0.14.1)
 
 ### Fixed — v0.14.0 shipped with a broken test import (suite could not collect)
 
@@ -277,7 +290,7 @@ home/usr/tmp/var/etc/opt/mnt/srv/root) and the guard in
 `_extract_machines_from_text`. Full suite green again (1242 passed). The defect-4
 machine-NER fix is now genuinely in effect.
 
-## [0.14.0] - 2026-05-30
+## 2026.5.30 (0.14.0)
 
 ### Fixed — machine inventory no longer mistakes cwd slugs for hostnames (defect 4)
 
@@ -295,7 +308,7 @@ mixed-text extraction yields only the host).
 **Note:** applies to future ingest only. Run `total-recall rebuild` (or
 `total-recall index --full`) to purge the garbage rows from an existing index.
 
-## [0.13.6] - 2026-05-30
+## 2026.5.30 (0.13.6)
 
 ### Added — end-to-end coverage for the UserPromptSubmit hook (defect 6)
 
@@ -308,7 +321,7 @@ the bootstrap banner / log bootstrap="started"; short (<10 char) and `<`-stub
 prompts are skipped with empty stdout. Verified discriminating (a 0-byte DB does
 log the bootstrap branch).
 
-## [0.13.5] - 2026-05-30
+## 2026.5.30 (0.13.5)
 
 ### Fixed — schema/test/config hygiene (verify-sweep follow-up, defects 5/10/11)
 
@@ -326,7 +339,7 @@ log the bootstrap branch).
   paths. (The earlier `${CLAUDE_PLUGIN_ROOT:-.}` form was wrong — manifest token
   expansion does not interpret bash `${VAR:-default}`; corrected in v2.1.2.)
 
-## [0.13.4] - 2026-05-30
+## 2026.5.30 (0.13.4)
 
 ### Fixed — bans read-only fix from v0.13.3 never actually applied
 
@@ -339,7 +352,7 @@ write. The accompanying regression test (`tests/test_bans_readonly.py`) now
 genuinely exercises a `mode=ro` connection and passes (it was also failing,
 undetected, in 0.13.3).
 
-## [0.13.3] - 2026-05-30
+## 2026.5.30 (0.13.3)
 
 ### Fixed — bans read paths crash on the read-only MCP connection
 
@@ -351,7 +364,7 @@ misleading "not banned" / empty result returned — the model could not tell
 never write; an absent table correctly means "nothing recorded". Writers keep
 `ensure_schema`. Regression: `tests/test_bans_readonly.py` (real mode=ro conn).
 
-## [0.13.2] - 2026-05-30
+## 2026.5.30 (0.13.2)
 
 ### Fixed — v0.13.1 shipped with a NameError in the partial-schema handler
 
@@ -362,7 +375,7 @@ non-zero, but by accident, with a confusing traceback). Added `import sqlite3`.
 `tests/test_partial_schema.py` now passes (was failing in 0.13.1 — that release
 should not have been tagged).
 
-## [0.13.1] - 2026-05-30
+## 2026.5.30 (0.13.1)
 
 ### Fixed — partial-schema CLI crashes + doc/flag drift (verify-sweep follow-up)
 
@@ -381,7 +394,7 @@ should not have been tagged).
 
 Added `KNOWN_ISSUES.md` tracking the remaining verify-sweep defects.
 
-## [0.13.0] - 2026-05-30
+## 2026.5.30 (0.13.0)
 
 ### Fixed — two critical `total-recall tail` crashes + version drift
 
@@ -410,7 +423,7 @@ CLI/plugin harness does.
 - `tests/test_version_consistency.py`: every version-bearing file
   (plugin.json, marketplace-entry.json, pyproject.toml, __init__.py) must agree.
 
-## [0.12.0] - 2026-05-30
+## 2026.5.30 (0.12.0)
 
 ### Added — `total-recall sources verify`
 
@@ -425,7 +438,7 @@ recall?" across all eight adapters at once.
 - `tests/test_cmd_sources.py`: verify runs all known sources, JSON shape carries
   is_available/session_count/registered, empty-registry path still succeeds.
 
-## [0.11.0] - 2026-05-30
+## 2026.5.30 (0.11.0)
 
 ### Fixed — LLM refinement no longer drops rows on truncated JSON
 
@@ -448,7 +461,7 @@ row. Root cause: the model's output hit the `num_predict` ceiling mid-JSON.
   bash helper — asserts a tick detaches a worker, and a second tick is skipped
   via `flock -n` while the lock is held. Locks the v0.10.1 watermark-stall fix.
 
-## [0.10.1] - 2026-05-30
+## 2026.5.30 (0.10.1)
 
 ### Validated — 6-model bake-off confirms qwen3.5:2b as the default
 
@@ -488,7 +501,7 @@ the model choice for this task.
 
 Full unit suite: 1186 passed.
 
-## [0.10.0] - 2026-05-30
+## 2026.5.30 (0.10.0)
 
 ### Added — zero-config local-LLM: auto-provision + text-gen on by default
 
@@ -537,7 +550,7 @@ steps and no sudo.
 network/ollama). Full unit suite: 1185 passed, 12 skipped. Eval is the
 authority on the model choice; numbers above are measured, not assumed.
 
-## [0.9.9] - 2026-05-30
+## 2026.5.30 (0.9.9)
 
 ### Changed — default local model → qwen3.5:2b (won a live head-to-head eval)
 
@@ -586,7 +599,7 @@ source-repo runs (no `cache/` path) keep their existing fallback.
 Full unit suite: 1163 passed. Live eval: qwen3.5:2b machines 1.0/1.0,
 echo_rate 0.14, define_coverage 0.60.
 
-## [0.9.8] - 2026-05-29
+## 2026.5.29 (0.9.8)
 
 ### Fixed — multi-source collector tags records with their origin
 
@@ -599,7 +612,7 @@ were always genuinely multi-source (real rebuild: claude_code=133,911 +
 opencode=1,526 messages mined into the profile); the log just couldn't
 attribute them. Now the verbose line reports true per-source counts.
 
-## [0.9.7] - 2026-05-29
+## 2026.5.29 (0.9.7)
 
 ### Added — operator profile now mined from ALL CLI sources, not just Claude Code
 
@@ -643,7 +656,7 @@ updated to assert multi-source coverage.
 
 Full unit suite: 1162 passed. Multi-source backtest: 5 passed (real data).
 
-## [0.9.6] - 2026-05-29
+## 2026.5.29 (0.9.6)
 
 ### Fixed — real-usage reliability + guards so the bug classes can't recur
 
@@ -689,7 +702,7 @@ command invocations, and the hot-path try/except suppressed the failure.
 
 Full unit suite: 1149 passed.
 
-## [0.9.5] - 2026-05-29
+## 2026.5.29 (0.9.5)
 
 ### Added — advanced LLM-refinement round (measured against live gemma4:e2b)
 
@@ -734,7 +747,7 @@ refinement (classification) remains always-on when a model is available.
 
 Full unit suite: 1130 passed. Live e2b eval: machines 1.0/1.0, echo_rate 0.0.
 
-## [0.9.4] - 2026-05-28
+## 2026.5.28 (0.9.4)
 
 ### Fixed — vocab harness-artifact filter + gate generation-based LLM refinement
 
@@ -763,7 +776,7 @@ surfaced two things:
 
 New test: `test_mine_vocabulary_drops_harness_artifacts`. Full suite: 1107 passed.
 
-## [0.9.3] - 2026-05-28
+## 2026.5.28 (0.9.3)
 
 ### Fixed — vocabulary miner specificity (lifts both heuristic + LLM-refined vocab)
 
@@ -792,7 +805,7 @@ fixed a stale `speak-like-andrew` → `speak-like-operator` skill reference.
 New ontology tests: `test_mine_vocabulary_drops_generic_english`,
 `test_mine_vocabulary_keeps_operator_specific`. Full unit suite: 1106 passed.
 
-## [0.9.2] - 2026-05-28
+## 2026.5.28 (0.9.2)
 
 ### Fixed — LLM refinement now fires + persists during rebuild (validated end-to-end on real corpus + live ollama)
 
@@ -831,7 +844,7 @@ the miner (drop common-English single words, require cross-project
 specificity) — tracked as the next follow-up. The LLM layer itself is
 working as designed (no crash, no hallucination).
 
-## [0.9.1] - 2026-05-28
+## 2026.5.28 (0.9.1)
 
 ### Added — LLM refinement: CPU-tuned defaults + auto-setup UX (validated end-to-end)
 
@@ -900,7 +913,7 @@ surfaced two real wiring gaps:
   specificity score, hyphen/digit/length-6+ requirement) is the right
   follow-up. Tracked as a known limitation.
 
-## [0.9.0] - 2026-05-28
+## 2026.5.28 (0.9.0)
 
 ### Added — optional local-LLM refinement (off by default)
 
@@ -916,7 +929,7 @@ Env vars: `TOTAL_RECALL_LLM_PROVIDER` (default `auto`), `TOTAL_RECALL_LLM_MODEL`
 skipped silently if ollama/model not present, heuristic baseline stays
 authoritative.
 
-## [0.8.0] - 2026-05-28
+## 2026.5.28 (0.8.0)
 
 ### Added — modeling HOW the operator works, not just WHO they are
 
@@ -967,7 +980,7 @@ Adds 103 new unit tests (workflow 30, implicit_preferences 21, satisfaction
 20 + escalation 25 still green, ontology +1 co-mention). Full unit suite:
 1038 passed.
 
-## [0.7.3] - 2026-05-27
+## 2026.5.27 (0.7.3)
 
 ### Fixed — data-driven operator discovery quality
 
@@ -995,7 +1008,7 @@ New tests: timezone-garbage rejection, handle email-reinforcement,
 full-vs-incremental agreement guard, and backtest assertions that exercise
 the incremental + persisted path against a real corpus.
 
-## [0.7.2] - 2026-05-27
+## 2026.5.27 (0.7.2)
 
 ### Reverted
 
@@ -1060,7 +1073,7 @@ rm -rf ~/.local/share/claude-recall \
 The active index lives at `$CLAUDE_PLUGIN_DATA/total-recall/index.db` and
 is unaffected.
 
-## [0.7.1] - 2026-05-27 — reverted by 0.7.2
+## 2026.5.27 (0.7.1) — reverted by 0.7.2
 
 Moved MCP registration inline into `.claude-plugin/plugin.json`'s `mcpServers`
 block and removed `.mcp.json` / `.mcp.json.README.md`, to fix a duplicate
@@ -1070,7 +1083,7 @@ marketplace-bundled copy, only when working inside the plugin source repo),
 so this public-surface change was unnecessary. **Fully reverted in 0.7.2** —
 see that entry. Tag remains on `origin` as immutable history.
 
-## [0.7.0] - 2026-05-27
+## 2026.5.27 (0.7.0)
 
 ### Changed
 - **Eliminated the host-python prereq.** v0.6.2 still required `python3.10+`
@@ -1110,7 +1123,7 @@ see that entry. Tag remains on `origin` as immutable history.
   updates (`$CLAUDE_PLUGIN_ROOT` is wiped on update; `$CLAUDE_PLUGIN_DATA` is
   not).
 
-## [0.6.2] - 2026-05-26
+## 2026.5.26 (0.6.2)
 
 ### Fixed
 - **Critical: Fresh marketplace installs were broken.** Hooks invoked bare
@@ -1147,7 +1160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.1] — 2026-05-26
+## 2026.5.26 (0.6.1)
 
 ### Changed
 - First public GitHub release. v0.6.0 was tagged briefly during local
@@ -1188,7 +1201,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fully open source on its second anniversary, so the historical record
   remains permanently auditable and forkable for non-competing uses.
 
-## [0.5.0] — 2026-05-26
+## 2026.5.26 (0.5.0)
 
 ### Added — multi-CLI session adapters
 - total-recall now mines transcripts from **8 clients**: Claude Code, OpenCode, Codex CLI, Gemini CLI, Cursor, Continue, Cline, Aider. One operator profile, served across every coding assistant on the machine.
@@ -1213,7 +1226,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OpenCode adapter: table names corrected from camelCase to lowercase snake_case (2026 Drizzle schema). Legacy fallback kept.
 - `lib/sources/__init__.py` now imports all 8 adapters (was 2). `all_sources()` now sees the full set everywhere.
 
-## [0.4.0] — 2026-05-25
+## 2026.5.25 (0.4.0)
 
 ### Added — continuous-fresh memory
 - `detector/reinjection.py` — `should_reinject()` with hard/soft signal taxonomy; calibrated on real corpus (`escalation_risk>=5` solo hard trigger at 2.5% fire rate, `>=3` requires soft combo, `repetition_callout` always fires).
@@ -1233,7 +1246,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 3-6 re-injection events per session hard cap. Signal dilution is the constraint, not cost (~$0.015/session).
 - Append-supersede never destructive-overwrite.
 
-## [0.3.0] — 2026-05-25
+## 2026.5.25 (0.3.0)
 
 ### Added
 - 10 new extractors covering operator-level signals: `bans`, `goals`, `standing_decisions`, `self_corrections`, `model_corrections`, `operator_profile`, `voice_profile`, `truth_rhetoric`, `away_summaries`, `secrets` (redaction).
@@ -1251,7 +1264,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `recall-inspect` invocation missing `--show-extractions`, which suppressed the "Top 5 extractions by score" output.
 - CHANGELOG mislabel: prior `0.2.0` heading corrected to `0.2.1` (no `v0.2.0` tag exists).
 
-## [0.2.1] — 2026-05-25
+## 2026.5.25 (0.2.1)
 
 ### Added
 - `total-recall metrics` Click subcommand with `summary`, `cost`, `sessions`, `topics`, `health` sub-subcommands.

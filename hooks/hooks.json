@@ -1,5 +1,5 @@
 {
-  "description": "total-recall: cross-session memory layer. SessionStart emits a tiny signpost pointing at prior sessions for this cwd; UserPromptSubmit (async) fetches highly-relevant memories on demand; Stop/PostCompact (async) re-index. Matcher 'startup|clear' on SessionStart keeps us out of amnesia's way for compact/resume.",
+  "description": "total-recall: cross-session memory layer. SessionStart emits a tiny signpost pointing at prior sessions for this cwd; UserPromptSubmit (async) fetches highly-relevant memories on demand; Stop/PostCompact (async) re-index. Matcher 'startup|clear' on SessionStart keeps us out of amnesia's way for compact/resume. Timeout note: fast/deterministic hooks follow the 88plug spec (SessionStart/compact-restore/recovery=15, UserPromptSubmit=10, PreCompact=30); the async re-index hooks (Stop, PostCompact index) intentionally keep timeout=60 since corpus indexing runs detached and must not be killed mid-write.",
   "hooks": {
     "SessionStart": [
       {
@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start-signpost.sh",
-            "timeout": 5
+            "timeout": 15
           }
         ]
       },
@@ -18,7 +18,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start-compact-restore.sh",
-            "timeout": 5
+            "timeout": 15
           }
         ]
       }
@@ -29,7 +29,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-retrieve.sh",
-            "timeout": 8,
+            "timeout": 10,
             "async": true
           }
         ]
@@ -53,7 +53,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact-seed.sh",
-            "timeout": 5
+            "timeout": 30
           }
         ]
       }
@@ -64,7 +64,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-compact-recovery.sh",
-            "timeout": 5
+            "timeout": 15
           }
         ]
       },

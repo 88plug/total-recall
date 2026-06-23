@@ -32,6 +32,16 @@ data/*.db-journal
 # Local-only backtest (real-corpus, PII-bearing — never tracked)
 tests/local/
 
+# Real eval/corpus data — never commit (PII-bearing session paths/content)
+eval_real_corpus.json
+.real_corpus_manifest.json
+scripts/sweep_r*.py
+eval_run_*.json
+EVAL_REPORT.md
+*.jsonl
+profiles/real_*
+corpus/real_*
+
 # Local model bake-off / diagnostic scratch (regenerable, machine-specific)
 .bench_*
 .diag_*

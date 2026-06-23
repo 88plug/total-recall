@@ -1,14 +1,10 @@
-<div align="center">
-
 # Total Recall
 
 Cross-session, cross-CLI memory for Claude Code and other AI coding assistants — it mines your own session transcripts so a new session already knows your decisions, corrections, bans, and goals.
 
 [![plugin-validate](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml/badge.svg)](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml)
-[![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat)](LICENSE.md)
+[![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat)](https://github.com/88plug/total-recall/blob/main/LICENSE.md)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2?style=flat)](https://github.com/88plug/claude-code-plugins)
-
-</div>
 
 Every session you run is already on disk as append-only JSONL: every decision, every "no, do it this way", every dead end. Total Recall reads that history locally and feeds the high-signal parts back to new sessions in a low-token form, so the model stops re-asking what you already told it.
 
@@ -30,8 +26,8 @@ pip install -e .[vec]
 claude --plugin-dir "$PWD"
 ```
 
-> [!NOTE]
-> Requirements are `bash` + `curl` + internet. The plugin bootstraps everything else (`uv`, Python, deps) into its own data dir on first hook fire. No system-wide `pip install` and no system Python required.
+!!! note
+    Requirements are `bash` + `curl` + internet. The plugin bootstraps everything else (`uv`, Python, deps) into its own data dir on first hook fire. No system-wide `pip install` and no system Python required.
 
 ## Quickstart
 
@@ -216,8 +212,8 @@ All subcommands support `--json`.
 
 Everything stays under `${CLAUDE_PLUGIN_DATA}/total-recall/` (env-resolved by Claude Code; do not hardcode the path). It holds the SQLite index (`index.db`, FTS5 for keyword recall), optional `vec.db` embeddings (only with the `[vec]` extra), `state.json` offsets, and rotating logs. The session JSONLs themselves are never written to.
 
-> [!NOTE]
-> Read-only on `~/.claude/projects/*.jsonl`, local-only, and no re-uploading. Transcripts contain secrets, internal URLs, and private code, so they never leave the machine. Embeddings, if enabled, run in-process via `fastembed`.
+!!! note
+    Read-only on `~/.claude/projects/*.jsonl`, local-only, and no re-uploading. Transcripts contain secrets, internal URLs, and private code, so they never leave the machine. Embeddings, if enabled, run in-process via `fastembed`.
 
 ## Optional local-LLM refinement
 
@@ -250,7 +246,7 @@ Everything stays on your machine: the model runs on-device via ollama, and trans
 
 </details>
 
-To disable everything, set `TOTAL_RECALL_LLM_PROVIDER=none` before the plugin starts. The `/total-recall:llm-setup` command is a manual fallback if auto-provisioning fails. See [`docs/llm-refinement.md`](docs/llm-refinement.md) for troubleshooting.
+To disable everything, set `TOTAL_RECALL_LLM_PROVIDER=none` before the plugin starts. The `/total-recall:llm-setup` command is a manual fallback if auto-provisioning fails. See [`llm-refinement.md`](llm-refinement.md) for troubleshooting.
 
 ## Relation to amnesia
 
@@ -265,10 +261,10 @@ mypy total_recall
 pytest
 ```
 
-The architecture is a flat 4-layer pipeline; see [`docs/architecture.md`](docs/architecture.md).
+The architecture is a flat 4-layer pipeline; see [`architecture.md`](architecture.md).
 
 ## License
 
-[Functional Source License, Version 1.1, ALv2 Future License](LICENSE.md) (`FSL-1.1-ALv2`).
+[Functional Source License, Version 1.1, ALv2 Future License](https://github.com/88plug/total-recall/blob/main/LICENSE.md) (`FSL-1.1-ALv2`).
 
 In plain English: free to use, copy, modify, and redistribute for any purpose except a Competing Use — offering this software (or a substantially similar substitute) as a commercial product or service. Each released version converts to the Apache License 2.0 on the second anniversary of its release date. For commercial-use inquiries outside the Permitted Purpose: claude@cryptoandcoffee.com.

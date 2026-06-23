@@ -1,5 +1,9 @@
 site_name: Total Recall
 site_description: Cross-session, cross-CLI memory for Claude Code and other AI coding assistants — mines your session transcripts so new sessions know your decisions, corrections, bans, and goals.
+site_url: https://88plug.github.io/total-recall/
+repo_url: https://github.com/88plug/total-recall
+repo_name: 88plug/total-recall
+edit_uri: edit/main/docs/
 use_directory_urls: true
 
 theme:
@@ -26,6 +30,7 @@ theme:
 markdown_extensions:
   - admonition
   - attr_list
+  - md_in_html
   - def_list
   - footnotes
   - tables

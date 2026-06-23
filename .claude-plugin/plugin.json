@@ -7,26 +7,41 @@
     "name": "88plug",
     "email": "andrew@88plug.com"
   },
+  "version": "2026.6.23",
   "license": "FSL-1.1-ALv2",
   "homepage": "https://github.com/88plug/total-recall",
   "repository": "https://github.com/88plug/total-recall.git",
   "keywords": [
     "claude-code",
+    "claude",
+    "anthropic",
+    "ai",
+    "llm",
+    "ai-agents",
+    "developer-tools",
+    "productivity",
+    "automation",
+    "cli",
+    "claude-code-plugin",
+    "claude-skills",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
     "memory",
     "recall",
-    "session-logs",
     "cross-session",
-    "cross-cli",
-    "mcp",
-    "hooks",
-    "data-mining",
     "operator-profile",
-    "opencode",
-    "codex",
-    "gemini-cli",
-    "cursor",
-    "continue",
-    "cline",
-    "aider"
-  ]
+    "data-mining"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": {
+    "total-recall": {
+      "command": "bash",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/mcp-server.sh"],
+      "env": {
+        "TOTAL_RECALL_DB_DIR": "${CLAUDE_PLUGIN_DATA}/total-recall",
+        "TOTAL_RECALL_EMBED_MODEL": "Alibaba-NLP/gte-modernbert-base"
+      }
+    }
+  }
 }
