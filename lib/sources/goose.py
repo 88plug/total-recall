@@ -481,7 +481,7 @@ SOURCES.append(GooseSource)
 # ---------------------------------------------------------------------------
 
 
-def _ts_from_epoch_s(raw: Any) -> "datetime | None":
+def _ts_from_epoch_s(raw: Any) -> datetime | None:
     """Alias for tests: convert epoch-seconds int to aware datetime."""
     return _parse_unix_seconds(raw)
 
@@ -492,8 +492,8 @@ def _goose_msg_to_record(
     content: Any,
     ts: Any,
     message_id: str | None,
-    session: "SessionFile",
-) -> "Record":
+    session: SessionFile,
+) -> Record:
     """Alias for tests: build a Record from explicit message fields."""
     row = {
         "role": role,

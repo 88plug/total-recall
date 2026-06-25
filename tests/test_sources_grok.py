@@ -405,7 +405,10 @@ def test_iter_records_tolerates_blank_lines(tmp_path):
         f.write(json.dumps({"type": "user", "content": [{"type": "text", "text": "hi"}]}) + "\n")
         f.write("\n")  # blank line must not raise
         f.write(json.dumps(_assistant("ok")) + "\n")
-    _write_json(s / "summary.json", _summary("019ecdef-0000-0000-0000-00000000blank", "/home/u/repo"))
+    _write_json(
+        s / "summary.json",
+        _summary("019ecdef-0000-0000-0000-00000000blank", "/home/u/repo"),
+    )
     src = GrokSource(sessions_root=root)
     sf = next(iter(src.discover_sessions()))
     recs = [r for _, r in src.iter_records(sf)]
@@ -421,7 +424,10 @@ def test_iter_records_malformed_lines_skipped(tmp_path):
     with (s / "chat_history.jsonl").open("w", encoding="utf-8") as f:
         f.write("{not json\n")
         f.write(json.dumps({"type": "user", "content": [{"type": "text", "text": "ok"}]}) + "\n")
-    _write_json(s / "summary.json", _summary("019ecdef-0000-0000-0000-0000000bad00", "/home/u/repo"))
+    _write_json(
+        s / "summary.json",
+        _summary("019ecdef-0000-0000-0000-0000000bad00", "/home/u/repo"),
+    )
     src = GrokSource(sessions_root=root)
     sf = next(iter(src.discover_sessions()))
     recs = [r for _, r in src.iter_records(sf)]
@@ -436,9 +442,14 @@ def test_iter_records_bad_tool_call_arguments_preserved(tmp_path):
     s = ws / "019ecdef-0000-0000-0000-00000badargs"
     _write_jsonl(
         s / "chat_history.jsonl",
-        [_assistant("calling", tool_calls=[{"id": "c9", "name": "Shell", "arguments": "not-json"}])],
+        [_assistant("calling", tool_calls=[
+            {"id": "c9", "name": "Shell", "arguments": "not-json"},
+        ])],
     )
-    _write_json(s / "summary.json", _summary("019ecdef-0000-0000-0000-00000badargs", "/home/u/repo"))
+    _write_json(
+        s / "summary.json",
+        _summary("019ecdef-0000-0000-0000-00000badargs", "/home/u/repo"),
+    )
     src = GrokSource(sessions_root=root)
     sf = next(iter(src.discover_sessions()))
     rec = next(
@@ -469,7 +480,10 @@ def test_iter_records_empty_chat_history_yields_nothing(tmp_path):
     ws = root / urllib.parse.quote("/home/u/repo", safe="")
     s = ws / "019ecdef-0000-0000-0000-000000empty0"
     _write_jsonl(s / "chat_history.jsonl", [])
-    _write_json(s / "summary.json", _summary("019ecdef-0000-0000-0000-000000empty0", "/home/u/repo"))
+    _write_json(
+        s / "summary.json",
+        _summary("019ecdef-0000-0000-0000-000000empty0", "/home/u/repo"),
+    )
     src = GrokSource(sessions_root=root)
     sf = next(iter(src.discover_sessions()))
     assert list(src.iter_records(sf)) == []

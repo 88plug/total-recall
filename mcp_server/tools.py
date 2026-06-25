@@ -25,8 +25,9 @@ import time
 from datetime import datetime
 from typing import Any, Literal
 
-from mcp_server.server import DB_PATH, get_conn, mcp
 from mcp.types import ToolAnnotations
+
+from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
 

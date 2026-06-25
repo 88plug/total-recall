@@ -25,8 +25,9 @@ import contextlib
 import logging
 from typing import Any
 
-from mcp_server.server import DB_PATH, get_conn, mcp
 from mcp.types import ToolAnnotations
+
+from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
 
@@ -100,11 +101,12 @@ def check_banned(thing: str) -> dict:
 def list_failed_attempts(topic: str | None = None, limit: int = 10) -> list[dict]:
     (
         "Failed approaches the operator has documented, sourced from the bans index. Use before "
-        "suggesting something that 'sounds reasonable' — it might already be on the failed-attempts "
-        "log. Params: topic filters to a subject (None = all); limit caps results (default 10). "
-        "Returns a list of dicts each with attempt, replaced_by, reason, cwd, attempted_ts, and "
-        "abandoned_ts. Distinct from tools.py find_failed_attempts, which is a semantic search over "
-        "the corrections index; this is a structured listing over the bans index."
+        "suggesting something that 'sounds reasonable' — it might already be on the "
+        "failed-attempts log. Params: topic filters to a subject (None = all); limit caps "
+        "results (default 10). Returns a list of dicts each with attempt, replaced_by, reason, "
+        "cwd, attempted_ts, and abandoned_ts. Distinct from tools.py find_failed_attempts, "
+        "which is a semantic search over the corrections index; this is a structured listing "
+        "over the bans index."
     )
     conn = get_conn()
     if conn is None:

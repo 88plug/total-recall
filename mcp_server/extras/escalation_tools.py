@@ -9,9 +9,10 @@ type) here so the detector module stays free of MCP imports.
 
 from __future__ import annotations
 
+from mcp.types import ToolAnnotations
+
 from detector.escalation import assess_escalation
 from mcp_server.server import mcp
-from mcp.types import ToolAnnotations
 
 
 @mcp.tool(title="Assess Escalation Risk", annotations=ToolAnnotations(readOnlyHint=True))

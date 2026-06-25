@@ -43,7 +43,7 @@ from pathlib import Path
 
 import pytest
 
-from lib.schema import AssistantRecord, Record, UserRecord
+from lib.schema import AssistantRecord, UserRecord
 from lib.sources.base import SessionFile
 from lib.sources.goose import (
     GooseSource,
@@ -209,7 +209,10 @@ def _make_db(
                         "status": "success",
                         "value": {
                             "content": [
-                                {"type": "text", "text": "src/providers/xai.rs\nsrc/providers/mod.rs"}
+                                {
+                                    "type": "text",
+                                    "text": "src/providers/xai.rs\nsrc/providers/mod.rs",
+                                }
                             ],
                             "structuredContent": {"exit_code": 0},
                             "isError": False,
