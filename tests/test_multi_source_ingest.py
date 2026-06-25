@@ -505,7 +505,8 @@ def test_source_file_key_disambiguates_sqlite_sessions():
     f = index_ingest._source_file_key_for_session(sf_file)
     # Same DB, different sessions → distinct keys (key includes session_id).
     assert a != b
-    assert a == "/data/opencode.db#ses-A"
-    assert b == "/data/opencode.db#ses-B"
+    # Normalise to forward slashes for cross-platform comparison.
+    assert a.replace("\\", "/") == "/data/opencode.db#ses-A"
+    assert b.replace("\\", "/") == "/data/opencode.db#ses-B"
     # File-per-session adapter just uses the path.
-    assert f == "/x/y.jsonl"
+    assert f.replace("\\", "/") == "/x/y.jsonl"

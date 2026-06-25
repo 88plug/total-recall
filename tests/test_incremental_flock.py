@@ -27,13 +27,16 @@ pytestmark = pytest.mark.skipif(
 
 
 def _has_flock() -> bool:
-    return (
-        subprocess.run(
-            ["bash", "-c", "command -v flock"],
-            capture_output=True,
-        ).returncode
-        == 0
-    )
+    try:
+        return (
+            subprocess.run(
+                ["bash", "-c", "command -v flock"],
+                capture_output=True,
+            ).returncode
+            == 0
+        )
+    except FileNotFoundError:
+        return False
 
 
 def _make_stub_py(path: Path) -> Path:
@@ -64,6 +67,8 @@ def _call_helper(data_root: Path, stub: Path, label: str) -> None:
 
 def test_incremental_tick_dispatches_child(tmp_path: Path) -> None:
     """A single tick detaches a child that runs the python shim once."""
+    if not _has_flock():
+        pytest.skip("bash/flock not available on this host")
     data_root = tmp_path
     (data_root / "total-recall").mkdir(parents=True, exist_ok=True)
     stub = _make_stub_py(tmp_path)

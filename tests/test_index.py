@@ -118,6 +118,7 @@ def _insert_extraction(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="unix permission bits not supported on Windows")
 def test_connect_creates_parent_dir_with_0700(tmp_path: Path) -> None:
     db = tmp_path / "subdir" / "nested" / "index.db"
     c = connect(db)

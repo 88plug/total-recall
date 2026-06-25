@@ -44,6 +44,7 @@ def plugin_data(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="unix permission bits not supported on Windows")
 def test_state_path_layout(plugin_data):
     p = ss.state_path("abc-123")
     assert p == plugin_data / "total-recall" / "sessions" / "abc-123.json"
