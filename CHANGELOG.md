@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-06-25
+
+### Added
+- Goose CLI source adapter (`lib/sources/goose.py`): reads sessions from SQLite DB at `~/.local/share/goose/sessions/sessions.db`. Supports 10 CLI clients total.
+- Grok CLI source adapter (`lib/sources/grok.py`): reads JSONL chat history from `~/.grok/sessions/`. URL-decodes CWD from directory names.
+- `docs/install/goose.md`, `docs/install/grok.md`: install guides for new adapters.
+- Support matrix updated: 10 clients (was 8).
+
+### Changed
+- `hooks/lib/common.sh`: GPU-aware ollama resolver. Bundled binary takes priority over system PATH. `RECALL_OLLAMA` env override bypasses GPU check entirely.
+- MCP: added `title=` to all 26 tools; annotated all with `readOnlyHint=True` via `ToolAnnotations`; bumped `mcp>=1.28.0` SDK floor.
+- CI: bumped checkout@v7.0.0, setup-python@v6.2.0, Python 3.13 across all workflows; added `workflow_dispatch` trigger.
+
 ## 2026.6.25
 
 ### Added
