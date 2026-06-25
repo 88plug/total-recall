@@ -13,7 +13,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - `hooks/lib/common.sh`: GPU-aware ollama resolver. Bundled binary takes priority over system PATH. `RECALL_OLLAMA` env override bypasses GPU check entirely.
 - MCP: added `title=` to all 26 tools; annotated all with `readOnlyHint=True` via `ToolAnnotations`; bumped `mcp>=1.28.0` SDK floor.
-- CI: bumped checkout@v7.0.0, setup-python@v6.2.0, Python 3.13 across all workflows; added `workflow_dispatch` trigger.
+- CI: bumped checkout@v7.0.0, setup-python@v6.3.0, Python 3.13 across all workflows; added `workflow_dispatch` trigger.
 
 ## 2026.6.25
 
@@ -34,7 +34,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - `.claude-plugin/plugin.json`: added `version` (calver `2026.6.23`), wired the MCP server (`mcpServers`) and hooks (`hooks: ./hooks/hooks.json`) into the canonical manifest so the 26 MCP tools and 6 hooks load, and rebuilt `keywords` to the 88plug-standard set of exactly 20 (base + `claude-skills` + MCP trio + memory niche).
 - `hooks/hooks.json`: aligned fast/deterministic hook timeouts to the 88plug spec (SessionStart/compact-restore/recovery=15, UserPromptSubmit=10, PreCompact=30); async re-index hooks (Stop, PostCompact index) keep timeout=60 by design.
-- CI: bumped `actions/checkout@v7.0.0`, `actions/setup-python@v6.2.0`, Python `3.13`; added a `tests/smoke.sh` step to `plugin-validate.yml`; refreshed all five Pages action versions; dropped the stale `master` branch ref from `ci.yml`.
+- CI: bumped `actions/checkout@v7.0.0`, `actions/setup-python@v6.3.0`, Python `3.13`; added a `tests/smoke.sh` step to `plugin-validate.yml`; refreshed all five Pages action versions; dropped the stale `master` branch ref from `ci.yml`.
 - `.ci/validate_plugin.py`: now asserts no root `plugin.json` and exactly 20 keywords.
 - Docs: removed the `<div align="center">` wrapper from `docs/index.md` (it forced the whole page to render raw), converted GFM `> [!NOTE]` alerts to MkDocs `!!! note`, fixed in-site/LICENSE links, added `md_in_html` plus `site_url`/`repo_url`/`repo_name`/`edit_uri` to `mkdocs.yml`, and added `docs/.nojekyll`.
 - `.gitignore`: added the canonical real-corpus/eval artifact guards.

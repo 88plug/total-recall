@@ -14,7 +14,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os:
+          - ${{ vars.RUNNER || 'ubuntu-latest' }}
+          - macos-latest
         python: ["3.10", "3.11", "3.12"]
     runs-on: ${{ matrix.os }}
     steps:
@@ -69,7 +71,7 @@ jobs:
           PY
 
   packaging:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7.0.0
 
