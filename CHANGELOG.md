@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2026.6.25
+
+### Added
+- `lib/sources/goose.py`: SQLite adapter for Block's Goose CLI (`~/.local/share/goose/sessions/sessions.db`). Reads user messages, assistant turns, tool calls/responses. Skips empty and archived sessions. Env override: `GOOSE_DATA_DIR`.
+- `lib/sources/grok.py`: JSONL adapter for xAI's Grok CLI (`~/.grok/sessions/<url-encoded-cwd>/<uuid>/chat_history.jsonl`). URL-decodes CWD from directory names. Tool call arguments are double-JSON-decoded (same encoding as Codex). Env override: `GROK_HOME`.
+- `index/multi_source.py`: added `goose` and `grok` to `SOURCE_PRIORITY` (after `aider`, lowest dedup priority — Claude Code wins on conflict).
+- `total_recall/cmd_sources.py`: registered `goose` and `grok` in `KNOWN_SOURCES` and `_load_sources()` import list.
+- `docs/install/goose.md`, `docs/install/grok.md`: install and caveats pages.
+- `docs/install/README.md`: added Goose and Grok rows to the support matrix (10 clients total).
+
+### Changed
+- `hooks/lib/common.sh`: GPU-aware ollama resolver rewritten. Bundled binary (`$RECALL_DATA_ROOT/bin/ollama`) now takes priority over any system PATH install. `RECALL_OLLAMA` env override bypasses GPU checking entirely and wins unconditionally. Two-pass GPU selection (ldd CUDA check + live `/api/ps` VRAM probe) only applies when no override is set.
+- `marketplace-entry.json`: updated description to list Goose and Grok; added `goose` and `grok` tags.
+
 ## 2026.6.23
 
 ### Changed

@@ -66,6 +66,14 @@ try:
     from lib.sources.aider import AiderSource  # noqa: F401
 except Exception:  # pragma: no cover
     AiderSource = None  # type: ignore[assignment]
+try:
+    from lib.sources.goose import GooseSource  # noqa: F401
+except Exception:  # pragma: no cover
+    GooseSource = None  # type: ignore[assignment]
+try:
+    from lib.sources.grok import GrokSource  # noqa: F401
+except Exception:  # pragma: no cover
+    GrokSource = None  # type: ignore[assignment]
 
 __all__ = [
     "SessionFile",
@@ -81,4 +89,6 @@ __all__ = [
     "ContinueSource",
     "ClineSource",
     "AiderSource",
+    "GooseSource",
+    "GrokSource",
 ]

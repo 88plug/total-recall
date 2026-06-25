@@ -507,6 +507,121 @@ recall::_can_run_ollama() {
   [ -x "$bin" ] && "$bin" --version >/dev/null 2>&1
 }
 
+# True (0) iff an NVIDIA GPU is visible on this host. Cheap, cached. Used to
+# decide whether GPU preference is even worth evaluating — on a CPU-only host
+# the whole GPU pass is skipped and resolution is identical to before.
+RECALL_HAS_NVIDIA_GPU=""   # "", "1" (yes), "0" (no)
+recall::_has_nvidia_gpu() {
+  if [ -n "$RECALL_HAS_NVIDIA_GPU" ]; then
+    [ "$RECALL_HAS_NVIDIA_GPU" = "1" ]
+    return
+  fi
+  if command -v nvidia-smi >/dev/null 2>&1 \
+     && nvidia-smi -L >/dev/null 2>&1; then
+    RECALL_HAS_NVIDIA_GPU=1
+  elif ls /dev/nvidia[0-9]* >/dev/null 2>&1; then
+    # nvidia-smi can be absent in containers that still pass through /dev/nvidia*.
+    RECALL_HAS_NVIDIA_GPU=1
+  else
+    RECALL_HAS_NVIDIA_GPU=0
+  fi
+  [ "$RECALL_HAS_NVIDIA_GPU" = "1" ]
+}
+
+# Decide whether a given ollama binary can use the GPU. Returns 0 = GPU-capable,
+# 1 = CPU-only / unknown. Two tiers, cheapest first; result is memoized per-bin.
+#
+#   Tier 1 (static, no daemon): does the binary — or the CUDA runtime libs it
+#     dlopen's from its sibling lib/ollama/ dir — link/ship CUDA? ollama loads
+#     CUDA at runtime, so `ldd` on the launcher alone under-reports; we also
+#     glob the lib dir. This is the decisive signal for the bundled/fetched
+#     binary (which ships libggml-cuda) vs a distro CPU-only build.
+#   Tier 2 (live, only if a daemon is ALREADY reachable): GET /api/ps and check
+#     whether any loaded model reports size_vram>0 (the field behind the
+#     "100% GPU" column of `ollama ps`). We never start a daemon just to probe.
+# True (0) iff the given binary is the executable backing the currently-running
+# `ollama serve` process. Used to gate the live /api/ps GPU probe so a non-serving
+# binary is never credited with another binary's GPU status. Best-effort: if we
+# can't determine the serving exe, returns false (so Tier 2 is simply skipped).
+recall::_ollama_is_serving_bin() {
+  local bin="$1" want pid exe
+  want="$(readlink -f "$bin" 2>/dev/null || printf '%s' "$bin")"
+  command -v pgrep >/dev/null 2>&1 || return 1
+  # `ollama serve` is the daemon; there may be short-lived `ollama run` procs too.
+  for pid in $(pgrep -x ollama 2>/dev/null); do
+    exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null)" || continue
+    [ "$exe" = "$want" ] && return 0
+  done
+  return 1
+}
+
+declare -A RECALL_OLLAMA_GPU_CACHE 2>/dev/null || true
+recall::_ollama_gpu_capable() {
+  local bin="$1"
+  [ -n "$bin" ] || return 1
+
+  if [ -n "${RECALL_OLLAMA_GPU_CACHE[$bin]:-}" ]; then
+    [ "${RECALL_OLLAMA_GPU_CACHE[$bin]}" = "1" ]
+    return
+  fi
+
+  local verdict=0   # 0 = CPU-only until proven otherwise
+
+  # --- Tier 1: static link / shipped-lib inspection (no daemon needed) -------
+  if command -v ldd >/dev/null 2>&1 \
+     && ldd "$bin" 2>/dev/null | grep -qiE 'libcud(a|art)|libcublas|cuda'; then
+    verdict=1
+  else
+    # ollama dlopen's its compute backend from lib/ollama/ next to the binary
+    # (real path, so resolve symlinks first). The official tarball nests the
+    # CUDA backend one level deeper, in lib/ollama/cuda_v12|cuda_v13/, so we
+    # search recursively for libggml-cuda / libcudart across the likely roots.
+    # Roots are resolved RELATIVE to this binary's own install prefix only —
+    # never a global /usr path — so testing some unrelated binary can't be
+    # credited with a system ollama's CUDA libs. Layouts: prefix/bin/ollama with
+    # prefix/lib/ollama/... (tarball), or .../bin/ollama with sibling lib/ollama.
+    local real bindir root
+    real="$(readlink -f "$bin" 2>/dev/null || printf '%s' "$bin")"
+    bindir="$(dirname "$real")"
+    for root in "${bindir}/../lib/ollama" "${bindir}/lib/ollama"; do
+      [ -d "$root" ] || continue
+      if find "$root" \( -name 'libggml-cuda*' -o -name 'libcudart*' \) \
+              -print -quit 2>/dev/null | grep -q .; then
+        verdict=1
+        break
+      fi
+    done
+  fi
+
+  # --- Tier 2: ask a daemon that is ALREADY running (only if Tier 1 unsure) --
+  # Guard: only attribute a daemon's GPU status to THIS binary if this binary
+  # is the one actually serving — otherwise a CPU build gets falsely credited
+  # for a GPU daemon that some other binary started. We match the candidate's
+  # resolved path against the running `ollama serve` process's executable.
+  if [ "$verdict" -eq 0 ] && command -v curl >/dev/null 2>&1 \
+     && recall::_ollama_is_serving_bin "$bin"; then
+    local base_url="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
+    local ps_json
+    if ps_json="$(curl -sf --max-time 2 "${base_url}/api/ps" 2>/dev/null)" \
+       && [ -n "$ps_json" ]; then
+      if command -v jq >/dev/null 2>&1; then
+        # Any loaded model with VRAM allocated ⇒ this daemon is on the GPU.
+        if printf '%s' "$ps_json" \
+           | jq -e '[.models[]? | select((.size_vram // 0) > 0)] | length > 0' \
+           >/dev/null 2>&1; then
+          verdict=1
+        fi
+      else
+        # jq-less fallback: a nonzero size_vram anywhere in the payload.
+        printf '%s' "$ps_json" | grep -qE '"size_vram"[[:space:]]*:[[:space:]]*[1-9]' && verdict=1
+      fi
+    fi
+  fi
+
+  RECALL_OLLAMA_GPU_CACHE[$bin]="$verdict"
+  [ "$verdict" -eq 1 ]
+}
+
 # Detect CPU arch and map to the ollama tarball suffix (amd64 / arm64).
 recall::_ollama_arch() {
   local m; m="$(uname -m 2>/dev/null || echo unknown)"
@@ -560,12 +675,21 @@ recall::_install_ollama() {
   return 0
 }
 
-# Resolve a usable ollama binary. Resolution order:
+# Resolve a usable ollama binary. Candidate order (highest priority first):
 #   1. $RECALL_OLLAMA env override
-#   2. ollama on PATH
-#   3. /snap/bin/ollama (Ubuntu snap install)
-#   4. ${RECALL_DATA_ROOT}/bin/ollama (our previously-bootstrapped copy)
-#   5. auto-fetch (downloads CPU tarball, no sudo)
+#   2. ${RECALL_DATA_ROOT}/bin/ollama (our managed copy — predictable version/GPU)
+#   3. ollama on PATH (system install — fallback only)
+#   4. /snap/bin/ollama (Ubuntu snap install)
+#   5. auto-fetch (downloads the official tarball, no sudo — ships CUDA libs)
+#
+# GPU preference (RECALL_PREFER_GPU=1, the default): when an NVIDIA GPU is
+# present we make TWO passes over the candidates — pass 1 returns the first
+# GPU-capable candidate, pass 2 falls back to the first runnable one. This
+# stops a distro CPU-only build (e.g. Arch's /usr/bin/ollama, no CUDA linked)
+# from shadowing the CUDA-capable bundled/fetched binary. On a CPU-only host,
+# or with RECALL_PREFER_GPU=0, this collapses to the original first-runnable
+# behavior with zero extra work.
+#
 # Prints the resolved path to stdout; returns non-zero if none found/fetchable.
 recall::ollama() {
   if [ -n "$RECALL_OLLAMA_CACHED" ]; then
@@ -573,32 +697,76 @@ recall::ollama() {
     return 0
   fi
 
-  # 1. Explicit env override.
+  local prefer_gpu="${RECALL_PREFER_GPU:-1}"
+  local bundled="${RECALL_DATA_ROOT}/bin/ollama"
+
+  # Build the candidate list in priority order. Auto-fetch is handled inline
+  # below (it has a side effect) rather than pre-listed.
+  local -a candidates=()
+  [ -n "${RECALL_OLLAMA:-}" ] && candidates+=("$RECALL_OLLAMA")
+  # Bundled binary takes priority over whatever the user has installed — we own
+  # and manage this copy so its version and GPU support are predictable.
+  candidates+=("$bundled")
+  command -v ollama >/dev/null 2>&1 && candidates+=("$(command -v ollama)")
+  candidates+=("/snap/bin/ollama")
+
+  local want_gpu=0
+  if [ "$prefer_gpu" = "1" ] && recall::_has_nvidia_gpu; then
+    want_gpu=1
+  fi
+
+  local cand
+
+  # RECALL_OLLAMA explicit override bypasses GPU checking — operator said
+  # exactly which binary to use, so respect it unconditionally.
   if [ -n "${RECALL_OLLAMA:-}" ] && recall::_can_run_ollama "$RECALL_OLLAMA"; then
     RECALL_OLLAMA_CACHED="$RECALL_OLLAMA"
+    recall::log "ollama: using explicit RECALL_OLLAMA override $RECALL_OLLAMA"
     printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
   fi
 
-  # 2. ollama on PATH.
-  if command -v ollama >/dev/null 2>&1 && recall::_can_run_ollama "$(command -v ollama)"; then
-    RECALL_OLLAMA_CACHED="$(command -v ollama)"
-    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+  # Pass 1: GPU-capable candidate (only when we want GPU). We deliberately do
+  # NOT auto-fetch here yet — we first see if any already-present binary is
+  # GPU-capable before paying for a download.
+  if [ "$want_gpu" -eq 1 ]; then
+    for cand in "${candidates[@]}"; do
+      [ "$cand" = "${RECALL_OLLAMA:-}" ] && continue  # already handled above
+      if recall::_can_run_ollama "$cand" && recall::_ollama_gpu_capable "$cand"; then
+        RECALL_OLLAMA_CACHED="$cand"
+        recall::log "ollama: selected GPU-capable binary $cand"
+        printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+      fi
+    done
+
+    # No present binary is GPU-capable. The official tarball ships CUDA libs,
+    # so fetch it and prefer it over any CPU-only binary we found.
+    if recall::_can_run_ollama "$bundled" || { recall::_install_ollama && recall::_can_run_ollama "$bundled"; }; then
+      if recall::_ollama_gpu_capable "$bundled"; then
+        RECALL_OLLAMA_CACHED="$bundled"
+        recall::log "ollama: selected GPU-capable fetched binary $bundled (no CUDA binary was on PATH)"
+        printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+      fi
+    fi
+
+    # Still nothing GPU-capable. Warn (do NOT kill any running CPU daemon) and
+    # fall through to the CPU pass so refinement still works, just slower.
+    local base_url="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
+    if curl -sf --max-time 2 "${base_url}/api/tags" >/dev/null 2>&1; then
+      recall::log "ollama: NVIDIA GPU present but a CPU-only daemon is already serving ${base_url}; using CPU. To switch, stop that daemon and re-run — total-recall will not kill it."
+    else
+      recall::log "ollama: NVIDIA GPU present but no GPU-capable binary found; falling back to CPU-only."
+    fi
   fi
 
-  # 3. Snap install.
-  if recall::_can_run_ollama "/snap/bin/ollama"; then
-    RECALL_OLLAMA_CACHED="/snap/bin/ollama"
-    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
-  fi
+  # Pass 2 (and the only pass when want_gpu=0): first runnable candidate.
+  for cand in "${candidates[@]}"; do
+    if recall::_can_run_ollama "$cand"; then
+      RECALL_OLLAMA_CACHED="$cand"
+      printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+    fi
+  done
 
-  # 4. Previously-bootstrapped copy.
-  local bundled="${RECALL_DATA_ROOT}/bin/ollama"
-  if recall::_can_run_ollama "$bundled"; then
-    RECALL_OLLAMA_CACHED="$bundled"
-    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
-  fi
-
-  # 5. Auto-fetch (no sudo, writes to plugin data dir).
+  # Auto-fetch as last resort (no GPU preference, or every present binary failed).
   if recall::_install_ollama && recall::_can_run_ollama "$bundled"; then
     RECALL_OLLAMA_CACHED="$bundled"
     printf '%s' "$RECALL_OLLAMA_CACHED"; return 0

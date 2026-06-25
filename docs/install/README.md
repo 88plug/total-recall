@@ -12,6 +12,8 @@ total-recall ships an **MCP server** (26 tools — recall, get_operator_context,
 | Continue | yes | no | yes | [continue.md](./continue.md) |
 | Cline | yes | no | yes | [cline.md](./cline.md) |
 | Aider | no | no | yes | [aider.md](./aider.md) |
+| Goose | yes | no | yes | [goose.md](./goose.md) |
+| Grok | yes | no | yes | [grok.md](./grok.md) |
 
 ## After installing
 
