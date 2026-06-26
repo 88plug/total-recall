@@ -5,7 +5,7 @@
     "repo": "88plug/total-recall"
   },
   "description": "Cross-session, cross-CLI memory for Claude Code and other AI coding assistants. Mines the operator's transcripts from Claude Code, OpenCode, Codex CLI, Gemini CLI, Cursor, Continue, Cline, Aider, Goose, Grok. Surfaces identity / decisions / bans / corrections / workflow / implicit preferences / satisfaction via 26 MCP tools + 6 hooks + 15 slash commands + 3 skills. Optional local-LLM refinement layer ([llm] extra, ollama, off by default). The operator becomes the source of truth; the model stops re-asking what they already told it.",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "category": "productivity",
   "tags": [
     "type:plugin",

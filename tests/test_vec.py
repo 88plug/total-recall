@@ -34,7 +34,21 @@ def _have(modname: str) -> bool:
 
 
 HAS_FASTEMBED = _have("fastembed")
-HAS_SQLITE_VEC = _have("sqlite_vec")
+
+
+def _have_sqlite_vec() -> bool:
+    if not _have("sqlite_vec"):
+        return False
+    try:
+        conn = sqlite3.connect(":memory:")
+        conn.enable_load_extension(True)
+        conn.enable_load_extension(False)
+        return True
+    except (AttributeError, sqlite3.NotSupportedError):
+        return False
+
+
+HAS_SQLITE_VEC = _have_sqlite_vec()
 
 
 # ----------------------------------------------------------------------------
