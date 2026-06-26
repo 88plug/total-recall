@@ -573,8 +573,8 @@ def rebuild_cmd(
                         if vocab_rows:
                             ranked = sorted(
                                 vocab_rows,
-                                key=lambda r: (r.get("frequency", 0) if isinstance(r, dict)
-                                               else getattr(r, "frequency", 0)),
+                                key=lambda r: (r.get("frequency") or 0) if isinstance(r, dict)
+                                               else (getattr(r, "frequency", None) or 0),
                                 reverse=True,
                             )[:50]
                             enriched = []
@@ -607,8 +607,8 @@ def rebuild_cmd(
                         if proj_rows:
                             ranked_p = sorted(
                                 proj_rows,
-                                key=lambda p: (p.get("message_count", 0) if isinstance(p, dict)
-                                               else getattr(p, "message_count", 0)),
+                                key=lambda p: (p.get("message_count") or 0) if isinstance(p, dict)
+                                               else (getattr(p, "message_count", None) or 0),
                                 reverse=True,
                             )[:25]
                             enriched_p = []

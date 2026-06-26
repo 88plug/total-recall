@@ -2389,7 +2389,9 @@ version = "2.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
+    { name = "fastembed" },
     { name = "mcp" },
+    { name = "sqlite-vec" },
 ]
 
 [package.optional-dependencies]
@@ -2405,23 +2407,19 @@ dev = [
 llm = [
     { name = "ollama" },
 ]
-vec = [
-    { name = "fastembed" },
-    { name = "sqlite-vec" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "click", specifier = ">=8" },
-    { name = "fastembed", marker = "extra == 'vec'", specifier = ">=0.4" },
+    { name = "fastembed", specifier = ">=0.4" },
     { name = "mcp", specifier = ">=1.28.0" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "ollama", marker = "extra == 'llm'", specifier = ">=0.4.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
-    { name = "sqlite-vec", marker = "extra == 'vec'", specifier = ">=0.1.6" },
+    { name = "sqlite-vec", specifier = ">=0.1.6" },
     { name = "tomli", marker = "python_full_version < '3.11' and extra == 'dev'" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=4.0" },
 ]

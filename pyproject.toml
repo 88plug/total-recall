@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "total-recall"
-version = "2.2.0"
+version = "2.3.0"
 description = "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 10 supported CLI clients; surfaces operator identity / decisions / bans / corrections via MCP."
 readme = "README.md"
 license = "LicenseRef-FSL-1.1-ALv2"
@@ -39,7 +39,6 @@ classifiers = [
     "Topic :: Utilities",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
-    "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -50,28 +49,21 @@ classifiers = [
 dependencies = [
     "mcp>=1.28.0",
     "click>=8",
-]
-
-[project.optional-dependencies]
-vec = [
     "fastembed>=0.4",
     "sqlite-vec>=0.1.6",
 ]
-llm = [
-    # Local LLM refinement (ollama). Ollama itself is a separate binary
-    # the operator installs (https://ollama.com); pulling the model
-    # (default: qwen3.5:2b) is also up to the operator. This extra is
-    # only the optional Python client conveniences.
-    "ollama>=0.4.0",
-]
+
+[project.optional-dependencies]
+vec = []  # bundled in core since v2.3.0; kept for backwards compatibility
+llm = []  # ollama is an external daemon binary, not a Python package; no pip dep needed
 dev = [
-  "tomli; python_version < '3.11'",
-    "pytest>=8",
-    "pytest-cov",
-    "ruff",
-    "mypy",
-    "build>=1.0",
-    "twine>=4.0",
+    "tomli; python_version < '3.11'",
+    "pytest>=9",
+    "pytest-cov>=7",
+    "ruff>=0.15",
+    "mypy>=2",
+    "build>=1.5",
+    "twine>=6",
 ]
 
 [project.urls]

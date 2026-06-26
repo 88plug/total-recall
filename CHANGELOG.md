@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.0] - 2026-06-26
+
+### Fixed
+- LLM refinement crash: `'<' not supported between instances of 'NoneType' and 'int'` — sort keys in `cmd_rebuild.py` now use `or 0` to handle SQLite NULL frequency/message_count values.
+
+### Changed
+- `fastembed>=0.4` and `sqlite-vec>=0.1.6` moved from optional `[vec]` extra to core dependencies — vec/hybrid search works out of the box with no extra install step.
+- `[vec]` and `[llm]` extras emptied (kept for backwards compatibility); ollama is an external daemon, not a Python package dep.
+- Dev dep floors raised: `pytest>=9`, `pytest-cov>=7`, `ruff>=0.15`, `mypy>=2`, `build>=1.5`, `twine>=6`.
+- Removed `Operating System :: Microsoft :: Windows` classifier (hooks are bash-only; no Windows CI).
+
 ## [2.2.0] - 2026-06-25
 
 ### Added
