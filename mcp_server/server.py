@@ -7,11 +7,23 @@ from here so they can decorate their handlers.
 
 Path resolution order for the SQLite index, highest to lowest precedence:
 
-1. ``$TOTAL_RECALL_DB_DIR`` (set by ``.mcp.json``)
-2. ``$CLAUDE_PLUGIN_DATA`` (set by Claude Code itself)
+1. ``$TOTAL_RECALL_DB_DIR`` (set by ``.mcp.json``) — used verbatim as the dir.
+2. ``$CLAUDE_PLUGIN_DATA`` (set by Claude Code itself) — the ``total-recall/``
+   subdir *within* it, matching every writer (:mod:`index.db`,
+   :func:`total_recall.util.resolve_db_path`, ``cmd_sources``, and the hook
+   helpers ``scope_detect`` / ``scope_delta`` / ``session_state``).
 3. ``~/.local/share/total-recall`` (dev/test fallback)
 
 The DB filename is always ``index.db`` (matches what :mod:`index.db` writes).
+
+NB: the ``$CLAUDE_PLUGIN_DATA`` branch MUST append ``total-recall/``. The
+launcher ``scripts/mcp-server.sh`` only guarantees ``CLAUDE_PLUGIN_DATA`` to
+the spawned server — ``TOTAL_RECALL_DB_DIR`` is set only if the harness expands
+it in the manifest ``env`` block, which is not guaranteed. Omitting the subdir
+(the pre-fix behavior) made the reader resolve one level too shallow whenever
+``TOTAL_RECALL_DB_DIR`` was absent, so recall read an empty ``…/index.db``
+while every writer had populated ``…/total-recall/index.db`` — recall was dead
+on a clean install. See ``tests/test_mcp_entry.py`` for the regression guard.
 
 Connections are opened **read-only** via SQLite URI mode (`mode=ro`) so a
 crashing tool cannot corrupt the index mid-conversation. If the file does not
@@ -42,12 +54,17 @@ def _resolve_db_dir() -> Path:
     See module docstring for precedence. Always returns an expanded absolute
     path; does not create the directory (read-only consumer).
     """
-    raw = (
-        os.environ.get("TOTAL_RECALL_DB_DIR")
-        or os.environ.get("CLAUDE_PLUGIN_DATA")
-        or "~/.local/share/total-recall"
-    )
-    return Path(raw).expanduser().resolve()
+    explicit = os.environ.get("TOTAL_RECALL_DB_DIR")
+    if explicit:
+        # An explicit dir override (what .mcp.json sets, already
+        # ``${CLAUDE_PLUGIN_DATA}/total-recall``) is used verbatim.
+        return Path(explicit).expanduser().resolve()
+    plugin_data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if plugin_data:
+        # CLAUDE_PLUGIN_DATA is the plugin data *root*; the index lives in the
+        # total-recall/ subdir within it. Must match index.db._default_db_path.
+        return (Path(plugin_data).expanduser() / "total-recall").resolve()
+    return Path("~/.local/share/total-recall").expanduser().resolve()
 
 
 DB_DIR: Path = _resolve_db_dir()
