@@ -40,11 +40,18 @@ def _have_sqlite_vec() -> bool:
     if not _have("sqlite_vec"):
         return False
     try:
+        import sqlite_vec
         conn = sqlite3.connect(":memory:")
         conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
         conn.enable_load_extension(False)
+        # enable_load_extension not raising only proves the *capability* exists;
+        # actually create the vec0 virtual table to prove the extension truly
+        # loaded (some builds allow the toggle but still fail to load vec0).
+        conn.execute("CREATE VIRTUAL TABLE _probe_vec0 USING vec0(embedding float[4])")
+        conn.close()
         return True
-    except (AttributeError, sqlite3.NotSupportedError):
+    except (AttributeError, sqlite3.NotSupportedError, sqlite3.OperationalError):
         return False
 
 
