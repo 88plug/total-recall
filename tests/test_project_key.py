@@ -36,22 +36,22 @@ from index.query import search_extractions
     "cwd,expected",
     [
         (
-            "/home/andrew/geostrata/.claude/worktrees/wf_63c6fea0-181-1",
-            "/home/andrew/geostrata",
+            "/home/operator/falcon-core/.claude/worktrees/wf_63c6fea0-181-1",
+            "/home/operator/falcon-core",
         ),
         (
-            "/home/andrew/ai-speed/aispeed/.claude/worktrees/wf_24c04719-907-1",
-            "/home/andrew/ai-speed/aispeed",
+            "/home/operator/acme-net/acmenet/.claude/worktrees/wf_24c04719-907-1",
+            "/home/operator/acme-net/acmenet",
         ),
         (
-            "/home/andrew/control-plane-zero-human-companies/.worktrees/"
+            "/home/operator/beta-services/.worktrees/"
             "m0-safety-floor/apps/atria-council",
-            "/home/andrew/control-plane-zero-human-companies",
+            "/home/operator/beta-services",
         ),
         # No marker -> unchanged (do not over-strip plugin cache paths).
         (
-            "/home/andrew/.claude/plugins/cache/88plug/total-recall/2.0.1",
-            "/home/andrew/.claude/plugins/cache/88plug/total-recall/2.0.1",
+            "/home/operator/.claude/plugins/cache/88plug/total-recall/2.0.1",
+            "/home/operator/.claude/plugins/cache/88plug/total-recall/2.0.1",
         ),
         (None, None),
         ("/home/x/", "/home/x"),
@@ -111,8 +111,8 @@ def _build_v4_db(db_path: Path, wt_cwd: str, parent: str) -> None:
 
 
 def test_schema_v4_to_v5_migration(tmp_path: Path) -> None:
-    wt_cwd = "/home/andrew/geostrata/.claude/worktrees/wf_abc-1"
-    parent = "/home/andrew/geostrata"
+    wt_cwd = "/home/operator/falcon-core/.claude/worktrees/wf_abc-1"
+    parent = "/home/operator/falcon-core"
     db_path = tmp_path / "v4.db"
     _build_v4_db(db_path, wt_cwd, parent)
 
@@ -188,8 +188,8 @@ def _insert_ext(c, *, content, cwd, source_uuid, kind="note", ts=1_700_000_000):
 
 def test_search_extractions_pools_worktree_to_parent():
     c = _conn()
-    wt = "/home/andrew/geostrata/.claude/worktrees/wf_x-1"
-    parent = "/home/andrew/geostrata"
+    wt = "/home/operator/falcon-core/.claude/worktrees/wf_x-1"
+    parent = "/home/operator/falcon-core"
     _insert_ext(c, content="fact from worktree", cwd=wt, source_uuid="u1")
 
     # Search by parent finds the worktree-scoped extraction.
@@ -199,8 +199,8 @@ def test_search_extractions_pools_worktree_to_parent():
 
 def test_search_extractions_pools_parent_to_worktree():
     c = _conn()
-    wt = "/home/andrew/geostrata/.claude/worktrees/wf_x-1"
-    parent = "/home/andrew/geostrata"
+    wt = "/home/operator/falcon-core/.claude/worktrees/wf_x-1"
+    parent = "/home/operator/falcon-core"
     _insert_ext(c, content="fact from parent", cwd=parent, source_uuid="u1")
 
     # Search by worktree cwd finds the parent-scoped extraction (reverse).
@@ -210,8 +210,8 @@ def test_search_extractions_pools_parent_to_worktree():
 
 def test_search_extractions_exact_cwd_does_not_pool():
     c = _conn()
-    wt = "/home/andrew/geostrata/.claude/worktrees/wf_x-1"
-    parent = "/home/andrew/geostrata"
+    wt = "/home/operator/falcon-core/.claude/worktrees/wf_x-1"
+    parent = "/home/operator/falcon-core"
     _insert_ext(c, content="fact from worktree", cwd=wt, source_uuid="u1")
 
     # exact_cwd=True keeps per-worktree precision: parent query misses it.
@@ -225,17 +225,17 @@ def test_search_extractions_exact_cwd_does_not_pool():
 def test_search_extractions_different_projects_never_pool():
     c = _conn()
     _insert_ext(
-        c, content="geostrata fact",
-        cwd="/home/andrew/geostrata/.claude/worktrees/wf_a-1", source_uuid="u1",
+        c, content="falcon-core fact",
+        cwd="/home/operator/falcon-core/.claude/worktrees/wf_a-1", source_uuid="u1",
     )
     _insert_ext(
         c, content="aispeed fact",
-        cwd="/home/andrew/ai-speed/aispeed/.claude/worktrees/wf_b-1",
+        cwd="/home/operator/acme-net/acmenet/.claude/worktrees/wf_b-1",
         source_uuid="u2",
     )
-    hits = search_extractions(c, cwd="/home/andrew/geostrata")
+    hits = search_extractions(c, cwd="/home/operator/falcon-core")
     contents = {h.content for h in hits}
-    assert "geostrata fact" in contents
+    assert "falcon-core fact" in contents
     assert "aispeed fact" not in contents
 
 
@@ -256,8 +256,8 @@ def test_goal_pooling_worktree_retrievable_via_parent():
     c = sqlite3.connect(":memory:")
     c.row_factory = sqlite3.Row
     goals_apply_schema(c)
-    wt = "/home/andrew/geostrata/.claude/worktrees/wf_x-1"
-    parent = "/home/andrew/geostrata"
+    wt = "/home/operator/falcon-core/.claude/worktrees/wf_x-1"
+    parent = "/home/operator/falcon-core"
     n, _ = upsert_from_extractions(c, [_goal_ext("ship the thing", wt)])
     assert n == 1
     # Stored project is the collapsed root.
@@ -276,8 +276,8 @@ def test_goals_apply_schema_backfills_legacy_worktree_project():
     c = sqlite3.connect(":memory:")
     c.row_factory = sqlite3.Row
     goals_apply_schema(c)
-    wt = "/home/andrew/geostrata/.claude/worktrees/wf_x-1"
-    parent = "/home/andrew/geostrata"
+    wt = "/home/operator/falcon-core/.claude/worktrees/wf_x-1"
+    parent = "/home/operator/falcon-core"
     # Simulate a legacy row written before normalization (raw worktree project).
     c.execute(
         "INSERT INTO goal_stack(project, goal_text, declared_ts, "

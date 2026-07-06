@@ -32,11 +32,12 @@
     "operator-profile",
     "data-mining"
   ],
-  "hooks": "./hooks/hooks.json",
   "mcpServers": {
     "total-recall": {
       "command": "bash",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/mcp-server.sh"],
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/mcp-server.sh"
+      ],
       "env": {
         "TOTAL_RECALL_DB_DIR": "${CLAUDE_PLUGIN_DATA}/total-recall",
         "TOTAL_RECALL_EMBED_MODEL": "Alibaba-NLP/gte-modernbert-base"
