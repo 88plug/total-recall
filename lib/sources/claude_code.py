@@ -61,6 +61,17 @@ class ClaudeCodeSource(SessionSource):
         Lazy: no file body is read. Order is project-then-filename, both
         sorted lexicographically, so callers can checkpoint. Files whose
         ``stat()`` fails (e.g. broken symlink) are silently skipped.
+
+        Also yields the ``Workflow`` tool's per-subagent transcripts at
+        ``<session-uuid>/subagents/workflows/wf_*/agent-*.jsonl`` — these
+        carry the same ``sessionId``/``cwd`` fields as their parent session
+        (see :mod:`lib.sidechain`), so their rows join the existing session
+        rather than creating a new one; only ``source_file`` (this path)
+        differs, which is what incremental resume keys on. The sibling
+        ``journal.jsonl`` in each ``wf_*`` dir is deliberately skipped: its
+        ``started``/``result`` records carry no ``sessionId``/``cwd``, and
+        the result text it holds is already present as the closing
+        assistant turn inside the matching ``agent-*.jsonl``.
         """
 
         if not self.is_available():
@@ -85,6 +96,29 @@ class ClaudeCodeSource(SessionSource):
                     last_modified=stat.st_mtime,
                     extra={"slug": proj_dir.name},
                 )
+
+                workflows_dir = jsonl.with_suffix("") / "subagents" / "workflows"
+                if not workflows_dir.is_dir():
+                    continue
+                for agent_jsonl in sorted(workflows_dir.glob("wf_*/agent-*.jsonl")):
+                    if not agent_jsonl.is_file():
+                        continue
+                    try:
+                        astat = agent_jsonl.stat()
+                    except OSError:
+                        continue
+                    yield SessionFile(
+                        source=self.name,
+                        path=agent_jsonl,
+                        cwd=cwd,
+                        session_id=jsonl.stem,
+                        started_at=None,
+                        last_modified=astat.st_mtime,
+                        extra={
+                            "slug": proj_dir.name,
+                            "workflow_run_id": agent_jsonl.parent.name,
+                        },
+                    )
 
     def iter_records(
         self, session: SessionFile, start_offset: int = 0

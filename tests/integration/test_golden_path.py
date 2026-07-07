@@ -161,6 +161,19 @@ def _find_hook(name: str) -> pathlib.Path | None:
 def _hook_run(
     hook: pathlib.Path, payload: dict, cwd: pathlib.Path, timeout: int = 15
 ) -> subprocess.CompletedProcess:
+    """Run a hook script with an isolated ``CLAUDE_PLUGIN_DATA``.
+
+    Without this, ``hooks/lib/common.sh``'s ``${CLAUDE_PLUGIN_DATA:-$HOME/...}``
+    fallback silently resolves to the real, unscoped
+    ``~/.claude/plugins/data/total-recall`` whenever the invoking process
+    (a bare ``pytest`` shell, unlike the harness-spawned MCP server) never
+    had ``CLAUDE_PLUGIN_DATA`` injected — writing real hook logs and, worse,
+    triggering a real multi-hundred-MB corpus reingest into a directory
+    disconnected from the actual live index at
+    ``.../total-recall-88plug/total-recall/``. Point it at ``cwd``
+    (a ``tmp_path``) so hook side effects never escape the test.
+    """
+    env = {**os.environ, "CLAUDE_PLUGIN_DATA": str(cwd)}
     return subprocess.run(
         [str(hook)],
         input=json.dumps(payload),
@@ -168,6 +181,7 @@ def _hook_run(
         text=True,
         timeout=timeout,
         cwd=str(cwd),
+        env=env,
     )
 
 

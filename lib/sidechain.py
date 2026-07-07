@@ -62,6 +62,10 @@ def subagent_files_for_session(jsonl_path: Path) -> list[tuple[str, Path]]:
     (``agent-<agent_id>.jsonl``), which matches the parent record's
     ``toolUseResult.agentId``. Empty list if the sidechain dir is missing or
     no agent files exist. Order is sorted by filename for testability.
+
+    Also includes ``Workflow``-tool subagents nested one level deeper at
+    ``subagents/workflows/wf_*/agent-*.jsonl`` — those are sorted after the
+    flat entries, grouped by ``wf_*`` dir (filename order within each).
     """
 
     sub_dir = _subagent_dir_for(Path(jsonl_path))
@@ -75,6 +79,15 @@ def subagent_files_for_session(jsonl_path: Path) -> list[tuple[str, Path]]:
         if not m:
             continue
         out.append((m.group(1), p))
+
+    workflows_dir = sub_dir / "workflows"
+    if workflows_dir.is_dir():
+        for p in sorted(workflows_dir.glob("wf_*/agent-*.jsonl")):
+            m = _AGENT_FILE_RE.match(p.name)
+            if not m:
+                continue
+            out.append((m.group(1), p))
+
     return out
 
 

@@ -1170,9 +1170,23 @@ def ingest_file(
 def _discover_jsonl_files(projects_root: Path, cwd_filter: str | None) -> list[Path]:
     """Walk projects_root and return the top-level .jsonl files to ingest.
 
-    Subagent transcripts at ``<slug>/<uuid>/subagents/*.jsonl`` are excluded
-    by design (glob is non-recursive). Output is sorted (by slug then file)
-    so worker scheduling is deterministic.
+    Plain subagent transcripts at ``<slug>/<uuid>/subagents/*.jsonl`` are
+    excluded by design (glob is non-recursive) — the parent session's
+    ``user`` record already carries the agent's summarized tool_result.
+
+    ``Workflow``-tool subagent transcripts at
+    ``<slug>/<uuid>/subagents/workflows/wf_*/agent-*.jsonl`` ARE included:
+    unlike a plain subagent, a workflow agent's full reasoning is not
+    otherwise summarized anywhere in the parent transcript, so it would be
+    permanently unsearchable if skipped. Their records carry their own
+    ``sessionId``/``cwd`` (same as the parent session), so they join the
+    existing session rather than creating a new one. The sibling
+    ``journal.jsonl`` per ``wf_*`` dir is still excluded — it carries no
+    ``sessionId``/``cwd`` and its ``result`` text duplicates the closing
+    assistant turn already present in ``agent-*.jsonl``.
+
+    Output is sorted (by slug then file) so worker scheduling is
+    deterministic.
     """
     files: list[Path] = []
     if not projects_root.exists():
@@ -1186,6 +1200,10 @@ def _discover_jsonl_files(projects_root: Path, cwd_filter: str | None) -> list[P
                 continue
         for path in sorted(slug_dir.glob("*.jsonl")):
             files.append(path)
+            workflows_dir = path.with_suffix("") / "subagents" / "workflows"
+            if not workflows_dir.is_dir():
+                continue
+            files.extend(sorted(workflows_dir.glob("wf_*/agent-*.jsonl")))
     return files
 
 
