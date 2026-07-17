@@ -101,10 +101,15 @@ def _collect_active_goal(conn: sqlite3.Connection, cwd: str | None) -> dict[str,
         out: dict[str, Any] = {}
         if text:
             out["goal"] = text
-        for src, dst in (("status", "status"), ("scope", "scope"),
-                         ("project", "scope"), ("cwd", "cwd"),
-                         ("summary", "summary"),
-                         ("last_progress_ts", "ts"), ("ts", "ts")):
+        for src, dst in (
+            ("status", "status"),
+            ("scope", "scope"),
+            ("project", "scope"),
+            ("cwd", "cwd"),
+            ("summary", "summary"),
+            ("last_progress_ts", "ts"),
+            ("ts", "ts"),
+        ):
             val = goal.get(src)
             if val is not None and dst not in out:
                 out[dst] = val
@@ -194,17 +199,14 @@ def _collect_recent_corrections(conn: sqlite3.Connection, cwd: str | None) -> li
     from index.query import search_extractions  # type: ignore
 
     try:
-        hits = search_extractions(
-            conn, query="", cwd=cwd, kind="model_correction", limit=2
-        )
+        hits = search_extractions(conn, query="", cwd=cwd, kind="model_correction", limit=2)
     except TypeError:
         # Older signature w/o ``kind``: fetch and filter.
         hits = search_extractions(conn, query="", cwd=cwd, limit=8)
         hits = [
             h
             for h in hits
-            if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None))
-            == "model_correction"
+            if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None)) == "model_correction"
         ][:2]
     out: list[dict[str, Any]] = []
     for h in hits or []:

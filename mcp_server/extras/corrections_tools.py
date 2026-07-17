@@ -62,7 +62,9 @@ def _ts_to_iso(value: Any) -> str | None:
 
 
 def _row_to_correction(row: Any) -> dict:
-    """Coerce a sqlite row / mapping into the documented correction shape."""
+    """
+    Coerce a sqlite row / mapping into the documented correction shape.
+    """
     if hasattr(row, "keys") or isinstance(row, dict):
         d = dict(row)
     else:
@@ -112,13 +114,13 @@ def recall_corrections_about(
     scope: Literal["this_cwd", "all_projects"] = "all_projects",
     limit: int = 10,
 ) -> list[dict]:
-    (
-        "Return past operator corrections matching a topic. Includes the rejected approach "
-        "(what the model previously did that the operator pushed back on) so the current turn "
-        "can avoid repeating it. Use before suggesting any default provider, library, pattern, "
-        "or approach the user might have previously rejected. Returns ranked corrections with "
-        "rejected approach, context, severity, and ts."
-    )
+    """
+    Return past operator corrections matching a topic. Includes the rejected approach (what
+    the model previously did that the operator pushed back on) so the current turn can avoid
+    repeating it. Use before suggesting any default provider, library, pattern, or approach
+    the user might have previously rejected. Returns ranked corrections with rejected
+    approach, context, severity, and ts.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -177,14 +179,14 @@ def get_recent_corrections(
     since_days: int = 30,
     limit: int = 5,
 ) -> list[dict]:
-    (
-        "Return recent operator corrections. Use at session start to know what the model has "
-        "been doing wrong lately. Pulls from the corrections index (kind='model_correction'). "
-        "Params: cwd scopes to a project (None = all projects); since_days bounds how far back to "
-        "look (default 30); limit caps how many are returned (default 5, most recent first). "
-        "Returns a list of dicts each describing one correction (the corrected behavior, context, "
-        "and timestamp); returns an error envelope if the index is missing."
-    )
+    """
+    Return recent operator corrections. Use at session start to know what the model has been
+    doing wrong lately. Pulls from the corrections index (kind='model_correction'). Params:
+    cwd scopes to a project (None = all projects); since_days bounds how far back to look
+    (default 30); limit caps how many are returned (default 5, most recent first). Returns a
+    list of dicts each describing one correction (the corrected behavior, context, and
+    timestamp); returns an error envelope if the index is missing.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()

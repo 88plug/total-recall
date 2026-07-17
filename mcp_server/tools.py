@@ -47,12 +47,11 @@ except Exception:  # pragma: no cover
 
 
 def _traced(event_name: str):
-    """Wrap a tool with timing + best-effort event emission.
-
-    Privacy: only numeric/categorical attrs (topic_len, hits, error class)
-    are forwarded — never raw user text. _emit is itself best-effort, but
-    we add a second try/except so a broken event sink can never break the
-    tool.
+    """
+    Wrap a tool with timing + best-effort event emission.      Privacy: only
+    numeric/categorical attrs (topic_len, hits, error class)     are forwarded — never raw
+    user text. _emit is itself best-effort, but     we add a second try/except so a broken
+    event sink can never break the     tool.
     """
 
     def decorator(fn):
@@ -92,7 +91,9 @@ def _traced(event_name: str):
 
 
 def _load_query_module():
-    """Return the WT-4 query module or None with a logged warning."""
+    """
+    Return the WT-4 query module or None with a logged warning.
+    """
     try:
         from index import query  # type: ignore
     except Exception as e:  # ImportError or any submodule blow-up
@@ -102,7 +103,9 @@ def _load_query_module():
 
 
 def _load_vec_module():
-    """Return the WT-5 vec.rrf module + an Embedder, or (None, None)."""
+    """
+    Return the WT-5 vec.rrf module + an Embedder, or (None, None).
+    """
     try:
         import vec  # type: ignore
         from vec import rrf  # type: ignore
@@ -123,7 +126,9 @@ def _load_vec_module():
 
 
 def _ts_to_iso(value: Any) -> str | None:
-    """Best-effort timestamp coercion to ISO-8601 string."""
+    """
+    Best-effort timestamp coercion to ISO-8601 string.
+    """
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -137,7 +142,9 @@ def _ts_to_iso(value: Any) -> str | None:
 
 
 def _row_to_hit(row: Any) -> dict:
-    """Coerce a sqlite3.Row / mapping / object into the documented hit dict."""
+    """
+    Coerce a sqlite3.Row / mapping / object into the documented hit dict.
+    """
     if hasattr(row, "keys") or isinstance(row, dict):
         d = dict(row)
     else:
@@ -158,11 +165,10 @@ def _row_to_hit(row: Any) -> dict:
 
 
 def _current_cwd() -> str:
-    """Best-effort: the cwd Claude Code launched in.
-
-    Claude Code injects no dedicated env var for this, but the child process
-    inherits the parent cwd. ``$PWD`` is set by most shells; we fall back to
-    :func:`os.getcwd` which reflects the inherited cwd.
+    """
+    Best-effort: the cwd Claude Code launched in.      Claude Code injects no dedicated env
+    var for this, but the child process     inherits the parent cwd. ``$PWD`` is set by most
+    shells; we fall back to     :func:`os.getcwd` which reflects the inherited cwd.
     """
     return os.environ.get("PWD") or os.getcwd()
 
@@ -177,13 +183,12 @@ def _index_missing_error() -> list[dict]:
 
 
 def _scope_meta(scope_used: str, fell_back: bool, requested: str) -> dict:
-    """Return a leading ``_meta`` row callers prepend to a hit list.
-
-    The MCP child often starts in a cwd that's not in the index — e.g. the
-    user runs `claude` from ``~`` or a sibling project. Rather than return
-    silently-empty results, the recall tools retry with
-    ``scope="all_projects"`` and prepend a ``_meta`` entry so the model
-    knows the broader scope was used.
+    """
+    Return a leading ``_meta`` row callers prepend to a hit list.      The MCP child often
+    starts in a cwd that's not in the index — e.g. the     user runs `claude` from ``~`` or
+    a sibling project. Rather than return     silently-empty results, the recall tools retry
+    with     ``scope="all_projects"`` and prepend a ``_meta`` entry so the model     knows
+    the broader scope was used.
     """
     msg = f"scope_used={scope_used}"
     if fell_back:
@@ -195,11 +200,10 @@ def _run_with_scope_fallback(
     requested_scope: str,
     runner,  # callable: (cwd_filter: str | None) -> list
 ):
-    """Execute ``runner`` honoring smart scope fallback.
-
-    ``runner`` is called once with the cwd filter implied by
-    ``requested_scope``. If the result is empty and the caller asked for
-    ``this_cwd``, ``runner`` is invoked again with ``None`` (all projects).
+    """
+    Execute ``runner`` honoring smart scope fallback.      ``runner`` is called once with
+    the cwd filter implied by     ``requested_scope``. If the result is empty and the caller
+    asked for     ``this_cwd``, ``runner`` is invoked again with ``None`` (all projects).
     Returns ``(rows, scope_used, fell_back)``.
     """
     cwd_filter = _current_cwd() if requested_scope == "this_cwd" else None
@@ -231,15 +235,14 @@ def recall(
     scope: Literal["this_cwd", "all_projects"] = "this_cwd",
     limit: int = 5,
 ) -> list[dict]:
-    (
-        "Recall prior session memories about a topic across past Claude Code sessions: "
-        "decisions, user corrections, failed approaches, progress, domain facts. Use when the "
-        "user references prior work, asks what they did, or you need to avoid a past mistake. "
-        "Returns ranked hits {content, session_id, cwd, ts, kind, score}. If `scope=\"this_cwd\"` "
-        "yields 0 hits the tool automatically retries with `scope=\"all_projects\"` and prepends "
-        "a `_meta` row indicating the broader scope was used — callers should not re-issue the "
-        "call."
-    )
+    """
+    Recall prior session memories about a topic across past Claude Code sessions: decisions,
+    user corrections, failed approaches, progress, domain facts. Use when the user
+    references prior work, asks what they did, or you need to avoid a past mistake. Returns
+    ranked hits {content, session_id, cwd, ts, kind, score}. If `scope="this_cwd"` yields 0
+    hits the tool automatically retries with `scope="all_projects"` and prepends a `_meta`
+    row indicating the broader scope was used — callers should not re-issue the call.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -289,12 +292,12 @@ def recall(
 @mcp.tool(title="Prior Sessions for CWD", annotations=ToolAnnotations(readOnlyHint=True))
 @_traced("mcp.prior_sessions_for_cwd")
 def prior_sessions_for_cwd(cwd: str | None = None, limit: int = 10) -> list[dict]:
-    (
-        "List previous Claude Code sessions for this working directory. Returns ai_title, "
-        "last_prompt, started_at, message_count. Use when the user asks 'what have we been "
-        "working on', wants orientation at session start. cwd defaults to current Claude Code "
-        "cwd."
-    )
+    """
+    List previous Claude Code sessions for this working directory. Returns ai_title,
+    last_prompt, started_at, message_count. Use when the user asks 'what have we been
+    working on', wants orientation at session start. cwd defaults to current Claude Code
+    cwd.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -331,13 +334,13 @@ def prior_sessions_for_cwd(cwd: str | None = None, limit: int = 10) -> list[dict
 @mcp.tool(title="Find Failed Attempts", annotations=ToolAnnotations(readOnlyHint=True))
 @_traced("mcp.find_failed_attempts")
 def find_failed_attempts(pattern: str, cwd: str | None = None, limit: int = 5) -> list[dict]:
-    (
-        "Find prior attempts the user rejected — corrections paired with the rejected approach. "
-        "Use before suggesting something to check if already tried and shot down. Returns "
-        "{rejected_approach, correction, session_id, ts}. When `cwd` is omitted the tool "
-        "searches the current cwd first; if that yields 0 hits it automatically retries across "
-        "all projects and prepends a `_meta` row."
-    )
+    """
+    Find prior attempts the user rejected — corrections paired with the rejected approach.
+    Use before suggesting something to check if already tried and shot down. Returns
+    {rejected_approach, correction, session_id, ts}. When `cwd` is omitted the tool searches
+    the current cwd first; if that yields 0 hits it automatically retries across all
+    projects and prepends a `_meta` row.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -411,15 +414,14 @@ def find_user_preferences(
     scope: Literal["this_cwd", "all_projects"] = "all_projects",
     limit: int = 10,
 ) -> list[dict]:
-    (
-        "Find recurring user preferences and standing rules extracted across past sessions. "
-        "Examples: provider preferences, formatting preferences, banned tools, repeated "
-        "corrections. Use when picking defaults that might conflict with user habits. "
-        "Returns ranked preference hits {content, session_id, cwd, ts, kind, score}. If "
-        "`scope=\"this_cwd\"` yields 0 hits the tool automatically retries with "
-        "`scope=\"all_projects\"` and prepends a `_meta` row indicating the broader scope was "
-        "used."
-    )
+    """
+    Find recurring user preferences and standing rules extracted across past sessions.
+    Examples: provider preferences, formatting preferences, banned tools, repeated
+    corrections. Use when picking defaults that might conflict with user habits. Returns
+    ranked preference hits {content, session_id, cwd, ts, kind, score}. If
+    `scope="this_cwd"` yields 0 hits the tool automatically retries with
+    `scope="all_projects"` and prepends a `_meta` row indicating the broader scope was used.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -464,10 +466,10 @@ def find_user_preferences(
 @mcp.tool(title="Get Session Digest", annotations=ToolAnnotations(readOnlyHint=True))
 @_traced("mcp.get_session_digest")
 def get_session_digest(session_id: str) -> dict:
-    (
-        "Return a structured digest of one past session: ai_title, last_prompt, top decisions, "
-        "top corrections, progress markers. Use when user references a session by id."
-    )
+    """
+    Return a structured digest of one past session: ai_title, last_prompt, top decisions,
+    top corrections, progress markers. Use when user references a session by id.
+    """
     conn = get_conn()
     if conn is None:
         err = _index_missing_error()[0]
@@ -605,13 +607,13 @@ def search_messages(
     role: Literal["any", "user", "assistant"] = "any",
     limit: int = 10,
 ) -> list[dict]:
-    (
-        "Raw FTS5 search over past message text (not extracted memories). Use as fallback when "
-        "`recall` doesn't surface what you want. When `cwd` is omitted the tool searches the "
-        "current cwd first; if that yields 0 hits it automatically retries across all projects "
-        "and prepends a `_meta` row. Returns message hits with role, text snippet, session_id, "
-        "cwd, and ts."
-    )
+    """
+    Raw FTS5 search over past message text (not extracted memories). Use as fallback when
+    `recall` doesn't surface what you want. When `cwd` is omitted the tool searches the
+    current cwd first; if that yields 0 hits it automatically retries across all projects
+    and prepends a `_meta` row. Returns message hits with role, text snippet, session_id,
+    cwd, and ts.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()

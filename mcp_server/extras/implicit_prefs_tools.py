@@ -32,20 +32,13 @@ log = logging.getLogger(__name__)
 
 
 def _index_missing_error() -> list[dict]:
-    return [
-        {
-            "error": (
-                "index not initialized; run `total-recall index` to build it"
-            )
-        }
-    ]
+    return [{"error": ("index not initialized; run `total-recall index` to build it")}]
 
 
 def _table_exists(conn: sqlite3.Connection) -> bool:
     try:
         row = conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='table' AND name='implicit_preferences'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='implicit_preferences'"
         ).fetchone()
     except sqlite3.Error:
         return False
@@ -96,6 +89,7 @@ def list_implicit_preferences(
 
         try:
             from index.implicit_preferences import get_implicit_preferences
+
             rows = get_implicit_preferences(
                 conn,
                 min_confidence=min_confidence,

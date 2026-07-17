@@ -33,7 +33,9 @@ log = logging.getLogger(__name__)
 
 
 def _load_bans_index():
-    """Defensive import of :mod:`index.bans` (may not be merged on this branch)."""
+    """
+    Defensive import of :mod:`index.bans` (may not be merged on this branch).
+    """
     try:
         from index import bans as _bans  # type: ignore
 
@@ -52,13 +54,12 @@ def _index_missing_error() -> dict:
 
 @mcp.tool(title="Check Banned", annotations=ToolAnnotations(readOnlyHint=True))
 def check_banned(thing: str) -> dict:
-    (
-        "Check if a thing (provider, tool, library, framework, pattern) is banned by the "
-        "operator. Use BEFORE suggesting any default. Returns {\"banned\": bool, "
-        "\"strength\": ..., \"verbatim_quote\": ..., \"context\": ...}. "
-        "Examples: check_banned(\"some-provider\") → banned=absolute; "
-        "check_banned(\"another-provider\") → banned=context (only publicly)."
-    )
+    """
+    Check if a thing (provider, tool, library, framework, pattern) is banned by the
+    operator. Use BEFORE suggesting any default. Returns {"banned": bool, "strength": ...,
+    "verbatim_quote": ..., "context": ...}. Examples: check_banned("some-provider") →
+    banned=absolute; check_banned("another-provider") → banned=context (only publicly).
+    """
     if not isinstance(thing, str) or not thing.strip():
         return {"banned": False, "error": "thing must be a non-empty string"}
 
@@ -99,15 +100,15 @@ def check_banned(thing: str) -> dict:
 
 @mcp.tool(title="List Failed Attempts", annotations=ToolAnnotations(readOnlyHint=True))
 def list_failed_attempts(topic: str | None = None, limit: int = 10) -> list[dict]:
-    (
-        "Failed approaches the operator has documented, sourced from the bans index. Use before "
-        "suggesting something that 'sounds reasonable' — it might already be on the "
-        "failed-attempts log. Params: topic filters to a subject (None = all); limit caps "
-        "results (default 10). Returns a list of dicts each with attempt, replaced_by, reason, "
-        "cwd, attempted_ts, and abandoned_ts. Distinct from tools.py find_failed_attempts, "
-        "which is a semantic search over the corrections index; this is a structured listing "
-        "over the bans index."
-    )
+    """
+    Failed approaches the operator has documented, sourced from the bans index. Use before
+    suggesting something that 'sounds reasonable' — it might already be on the
+    failed-attempts log. Params: topic filters to a subject (None = all); limit caps results
+    (default 10). Returns a list of dicts each with attempt, replaced_by, reason, cwd,
+    attempted_ts, and abandoned_ts. Distinct from tools.py find_failed_attempts, which is a
+    semantic search over the corrections index; this is a structured listing over the bans
+    index.
+    """
     conn = get_conn()
     if conn is None:
         return [_index_missing_error()]

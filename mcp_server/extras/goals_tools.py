@@ -29,7 +29,9 @@ log = logging.getLogger(__name__)
 
 
 def _load_goals_module():
-    """Return ``index.goals`` or ``None`` with a logged warning."""
+    """
+    Return ``index.goals`` or ``None`` with a logged warning.
+    """
     try:
         from index import goals  # type: ignore
     except Exception as e:  # ImportError or downstream blow-up
@@ -39,12 +41,13 @@ def _load_goals_module():
 
 
 def _current_cwd() -> str:
-    """Best-effort: the cwd Claude Code launched in.
-
-    Mirrors :func:`mcp_server.tools._current_cwd` so we don't take a hard
-    dependency on that module's helpers (it might be partially loaded).
+    """
+    Best-effort: the cwd Claude Code launched in.      Mirrors
+    :func:`mcp_server.tools._current_cwd` so we don't take a hard     dependency on that
+    module's helpers (it might be partially loaded).
     """
     import os
+
     return os.environ.get("PWD") or os.getcwd()
 
 
@@ -66,13 +69,13 @@ def _goals_module_missing_error() -> list[dict]:
 
 @mcp.tool(title="Get Active Goal", annotations=ToolAnnotations(readOnlyHint=True))
 def get_active_goal(cwd: str | None = None) -> dict | None:
-    (
-        "Return the most-recently-progressed active goal for a project. Use at session start to "
-        "lead with 'Last in-flight: <goal>. Continue?' instead of asking the operator to "
-        "re-state context. Returns {project, goal_text, declared_ts, last_progress_ts, status, "
-        "source_session} or None if no active/blocked goal exists for the project. ``cwd`` "
-        "defaults to the current Claude Code cwd."
-    )
+    """
+    Return the most-recently-progressed active goal for a project. Use at session start to
+    lead with 'Last in-flight: <goal>. Continue?' instead of asking the operator to re-state
+    context. Returns {project, goal_text, declared_ts, last_progress_ts, status,
+    source_session} or None if no active/blocked goal exists for the project. ``cwd``
+    defaults to the current Claude Code cwd.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -107,14 +110,14 @@ def list_goals(
     status: str = "active",
     limit: int = 10,
 ) -> list[dict]:
-    (
-        "List goals by project + status. Use when the operator asks what they've been working "
-        "on or when surveying the goal stack. ``status`` is one of "
-        "active|paused|blocked|done|abandoned|any. ``cwd`` defaults to the current Claude Code "
-        "cwd; pass an empty string to list across ALL projects. Returns up to ``limit`` rows "
-        "{project, goal_text, declared_ts, last_progress_ts, status, ...} ordered by "
-        "most-recently-progressed first."
-    )
+    """
+    List goals by project + status. Use when the operator asks what they've been working on
+    or when surveying the goal stack. ``status`` is one of
+    active|paused|blocked|done|abandoned|any. ``cwd`` defaults to the current Claude Code
+    cwd; pass an empty string to list across ALL projects. Returns up to ``limit`` rows
+    {project, goal_text, declared_ts, last_progress_ts, status, ...} ordered by
+    most-recently-progressed first.
+    """
     conn = get_conn()
     if conn is None:
         return [_index_missing_error()]
@@ -132,9 +135,7 @@ def list_goals(
         project = cwd
 
     try:
-        rows = goals_mod.list_goals(
-            conn, project=project, status=status, limit=int(limit)
-        )
+        rows = goals_mod.list_goals(conn, project=project, status=status, limit=int(limit))
     except ValueError as e:
         return [{"error": str(e)}]
     except sqlite3.OperationalError as e:
