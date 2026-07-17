@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Current state: v0.10.1 shipping — zero-config local-LLM (auto-provisioned ollama, `qwen3.5:2b` default, 6-model bake-off validated) over the full on-disk corpus (claude_code + opencode cross-CLI).** The pipeline (walker → extractors → SQLite/FTS5/vec index → hooks/MCP/skills/commands delivery) is wired end-to-end and shipping as a Claude Code plugin (live at `88plug/total-recall`). Trajectory:
+**Current state: packaging 2.3.0 shipping** (rolling marketplace calver via hub; see `pyproject.toml` / `__version__`). Zero-config local-LLM (auto-provisioned ollama, `qwen3.5:2b` default) over the full on-disk corpus (claude_code + opencode cross-CLI). The pipeline (walker → extractors → SQLite/FTS5/vec index → hooks/MCP/skills/commands delivery) is wired end-to-end and shipping as a Claude Code plugin (live at `88plug/total-recall`). Trajectory:
 
 - **v0.1** — 14 worktrees built the core pipeline (walker → extractors → SQLite FTS5/vec index → hooks/MCP/skills/commands). Docker validation found and fixed 16 issues (HIGH/MEDIUM/LOW).
 - **v0.2** — metrics layer: `total-recall metrics summary|cost|sessions|topics|health` CLI, schema v2 tables (`turns`, `compactions`, `ingest_runs`, `schema_meta`), `events.jsonl` NDJSON stream, cost catalog.
