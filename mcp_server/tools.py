@@ -581,16 +581,21 @@ def get_session_digest(session_id: str) -> dict:
                     conn,
                     query="",
                     kind=kind,
-                    limit=5,
+                    limit=50,
                 )
-                # Prefer session-scoped rows when the hit exposes session_id.
-                rows = [
-                    r
-                    for r in rows
-                    if getattr(r, "session_id", None) == session_id
-                    or (isinstance(r, dict) and r.get("session_id") == session_id)
-                    or getattr(r, "session_id", None) is None
-                ]
+
+                # Session-scope filter. sqlite3.Row and dict both support
+                # key lookup but NOT getattr(row, "session_id") — that always
+                # returns None, which previously kept every row.
+                def _sid(r: Any) -> str | None:
+                    if isinstance(r, dict):
+                        return r.get("session_id")
+                    try:
+                        return r["session_id"]  # type: ignore[index]
+                    except (KeyError, TypeError, IndexError):
+                        return getattr(r, "session_id", None)
+
+                rows = [r for r in rows if _sid(r) == session_id][:5]
             except TypeError:
                 # Older signature without kind kwarg — fall through.
                 rows = []

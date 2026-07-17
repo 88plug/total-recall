@@ -1481,10 +1481,17 @@ def ingest_all(
         # this, tests passing a synthetic projects_root would silently scan
         # the real ~/.claude/projects/. Other adapters resolve their own paths
         # from env vars / well-known dirs, so they're unaffected.
-        if projects_root and str(projects_root) != str(_DEFAULT_PROJECTS_ROOT):
+        root_overridden = bool(projects_root) and str(projects_root) != str(_DEFAULT_PROJECTS_ROOT)
+        if root_overridden:
             for s in active:
                 if getattr(s, "name", None) == "claude_code":
                     s.projects_root = projects_root  # type: ignore[attr-defined]
+            # Hermetic override: do NOT also pull real OpenCode/Grok/Codex
+            # trees unless the caller named sources= explicitly. Otherwise
+            # empty synthetic roots (tests, CLI --projects-root) still fan
+            # out into live session data and hang on operator-profile work.
+            if sources is None:
+                active = [s for s in active if getattr(s, "name", None) == "claude_code"]
         non_cc_active = any(getattr(s, "name", None) != "claude_code" for s in active)
         explicit = sources is not None
         # When the caller passed an explicit ``sources=`` list, we are

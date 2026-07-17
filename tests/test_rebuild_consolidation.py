@@ -13,6 +13,7 @@ import json
 import uuid
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from extractors.operator_profile import (
@@ -93,7 +94,10 @@ def _build_corpus(tmp_path: Path) -> Path:
     return corpus
 
 
-def _run_rebuild(corpus: Path, db: Path) -> None:
+def _run_rebuild(corpus: Path, db: Path, monkeypatch) -> None:
+    # Consolidation asserts on FTS/profile only. Dense backfill loads
+    # fastembed/onnx and can hang unit CI for minutes — disable it here.
+    monkeypatch.setenv("TOTAL_RECALL_VEC", "0")
     runner = CliRunner()
     res = runner.invoke(
         cli,
@@ -102,10 +106,12 @@ def _run_rebuild(corpus: Path, db: Path) -> None:
     assert res.exit_code == 0, f"rebuild failed: {res.output}\n{res.exception!r}"
 
 
-def test_rebuild_consolidates_handle_to_global_winner(tmp_path: Path) -> None:
+def test_rebuild_consolidates_handle_to_global_winner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     corpus = _build_corpus(tmp_path)
     db = tmp_path / "index.db"
-    _run_rebuild(corpus, db)
+    _run_rebuild(corpus, db, monkeypatch)
 
     # The consolidation guarantee: persisted identity == global full-pass result.
     expected = extract_operator_profile(sorted(corpus.glob("*/*.jsonl")))
@@ -120,10 +126,10 @@ def test_rebuild_consolidates_handle_to_global_winner(tmp_path: Path) -> None:
     assert persisted.get("handle") != "widgetlib"
 
 
-def test_rebuild_timezone_never_garbage(tmp_path: Path) -> None:
+def test_rebuild_timezone_never_garbage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     corpus = _build_corpus(tmp_path)
     db = tmp_path / "index.db"
-    _run_rebuild(corpus, db)
+    _run_rebuild(corpus, db, monkeypatch)
 
     persisted = get_profile(connect(db, read_only=True))
     tz = persisted.get("timezone") or ""
@@ -148,10 +154,12 @@ def test_rebuild_timezone_never_garbage(tmp_path: Path) -> None:
         assert tz.split("/")[0] in valid_prefixes, f"non-IANA timezone persisted: {tz!r}"
 
 
-def test_rebuild_profile_has_no_credential_fields(tmp_path: Path) -> None:
+def test_rebuild_profile_has_no_credential_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     corpus = _build_corpus(tmp_path)
     db = tmp_path / "index.db"
-    _run_rebuild(corpus, db)
+    _run_rebuild(corpus, db, monkeypatch)
     persisted = get_profile(connect(db, read_only=True))
     for key in persisted:
         assert "password" not in key.lower()
