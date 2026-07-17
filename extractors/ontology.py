@@ -2050,13 +2050,12 @@ def compute_co_mention_graph(
     """
     # Build a map from slug → list of compiled patterns for each candidate name.
     # Skip projects whose every candidate name is too generic.
-    PatternEntry = tuple[str, re.Pattern]  # (candidate_name, pattern)
-    project_patterns: dict[str, list[PatternEntry]] = {}
+    project_patterns: dict[str, list[tuple[str, re.Pattern[str]]]] = {}
     for proj in projects:
         names = _candidate_names_for_project(proj)
         if not names:
             continue
-        patterns: list[PatternEntry] = []
+        patterns: list[tuple[str, re.Pattern[str]]] = []
         for name in names:
             try:
                 pat = re.compile(

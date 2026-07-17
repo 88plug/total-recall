@@ -289,7 +289,8 @@ def _translate_event_msg(
     normalized = dict(inner_body)
     if inner_kind == "token_count":
         # Locate token totals — historically nested under "info" or top-level.
-        usage = inner_body.get("info") if isinstance(inner_body.get("info"), dict) else inner_body
+        usage_raw = inner_body.get("info")
+        usage = usage_raw if isinstance(usage_raw, dict) else inner_body
         normalized["usage"] = _normalize_tokens(usage)
 
     base = state.base(obj, byte_offset)

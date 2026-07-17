@@ -141,10 +141,11 @@ def _ts_to_iso(value: Any) -> str | None:
     return str(value)
 
 
-def _row_to_hit(row: Any) -> dict:
+def _row_to_hit(row: Any) -> dict[str, Any]:
     """
     Coerce a sqlite3.Row / mapping / object into the documented hit dict.
     """
+    d: dict[str, Any]
     if hasattr(row, "keys") or isinstance(row, dict):
         d = dict(row)
     else:
@@ -579,12 +580,19 @@ def get_session_digest(session_id: str) -> dict:
                 rows = query_mod.search_extractions(
                     conn,
                     query="",
-                    session_id=session_id,
                     kind=kind,
                     limit=5,
                 )
+                # Prefer session-scoped rows when the hit exposes session_id.
+                rows = [
+                    r
+                    for r in rows
+                    if getattr(r, "session_id", None) == session_id
+                    or (isinstance(r, dict) and r.get("session_id") == session_id)
+                    or getattr(r, "session_id", None) is None
+                ]
             except TypeError:
-                # Older signature without session_id kwarg — fall through.
+                # Older signature without kind kwarg — fall through.
                 rows = []
             except Exception:
                 rows = []

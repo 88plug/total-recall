@@ -190,7 +190,7 @@ def _prompt_to_fts_query(prompt: str) -> str:
         if callable(quoter):
             # _fts_match_quote handles one term -> one quoted phrase fine.
             qt = quoter(t)
-            if qt:
+            if isinstance(qt, str) and qt:
                 quoted.append(qt)
         else:
             safe = t.replace('"', '""')
@@ -227,10 +227,10 @@ def cmd_signpost(args):
         topics = _safe_call(q, "top_topics_for_cwd", conn, args.cwd, 3) or []
         # Best-effort "standing rules": pull a couple of `preference`-kind
         # extractions if the search function supports it.
-        rules_hits = (
-            _safe_call(q, "search_extractions", conn, None, args.cwd, "preference", None, None, 2)
-            or []
+        rules_hits_raw = _safe_call(
+            q, "search_extractions", conn, None, args.cwd, "preference", None, None, 2
         )
+        rules_hits = rules_hits_raw if isinstance(rules_hits_raw, (list, tuple)) else []
         rules = []
         for h in rules_hits:
             txt = getattr(h, "content", None) or (h.get("content") if isinstance(h, dict) else None)
@@ -316,7 +316,7 @@ def cmd_prompt_relevant(args):
             or _safe_call(q, "search_messages", conn, fts_query, args.cwd, None, args.limit)
             or _safe_call(q, "search", conn, fts_query, args.limit)
         )
-    if not hits:
+    if not hits or not isinstance(hits, (list, tuple)):
         return 0
 
     lines = ["**[total-recall]** Possibly-relevant prior context:\n"]

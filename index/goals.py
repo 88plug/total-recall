@@ -460,7 +460,10 @@ def get_active_goal_for_cwd(
     """
     if cwd is None:
         return None
-    return get_active_goal(conn, project_key(cwd))
+    pkey = project_key(cwd)
+    if pkey is None:
+        return None
+    return get_active_goal(conn, pkey)
 
 
 def list_goals(

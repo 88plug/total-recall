@@ -49,6 +49,7 @@ import logging
 import re
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ _SENT_RE = re.compile(r"(?<=[.!?])\s+")
 # ---------------------------------------------------------------------------
 
 
-def _read_records(transcript_path: str, boundary_idx: int | None) -> list[dict]:
+def _read_records(transcript_path: str | Path, boundary_idx: int | None) -> list[dict]:
     """Return parsed JSONL records in ``[0, boundary_idx)`` (or whole file).
 
     Blank/garbage lines are skipped. ``boundary_idx`` counts *physical lines*
@@ -113,7 +114,7 @@ def _read_records(transcript_path: str, boundary_idx: int | None) -> list[dict]:
     return out
 
 
-def _boundary_ts(transcript_path: str, boundary_idx: int | None) -> int | None:
+def _boundary_ts(transcript_path: str | Path, boundary_idx: int | None) -> int | None:
     """Epoch-seconds of the boundary record's ``timestamp``, or None.
 
     Used to time-guard index queries so a replay never reads extractions that
@@ -342,11 +343,12 @@ def _last_actions(tail: list[dict]) -> list[dict]:
         # first across the flattened list.
         for tu in reversed(list(_iter_tool_uses(rec))):
             arg = _tool_arg(tu)
+            tid = tu.get("id")
             actions.append(
                 {
                     "tool": tu.get("name"),
                     "arg": arg,
-                    "ok": _result_ok(results.get(tu.get("id"))),
+                    "ok": _result_ok(results.get(tid) if isinstance(tid, str) else None),
                 }
             )
             if len(actions) >= 3:
@@ -427,7 +429,7 @@ def _active_goal(conn: sqlite3.Connection, cwd: str | None, boundary_ts: int | N
     try:
         from index.goals import get_active_goal  # type: ignore
 
-        goal = get_active_goal(conn, pkey)
+        goal = None if pkey is None else get_active_goal(conn, pkey)
         if goal is not None:
             text = getattr(goal, "goal_text", None)
             declared = getattr(goal, "declared_ts", None)
@@ -677,7 +679,7 @@ def render_continuation_packet(packet: dict, max_chars: int = 6000) -> str:
 
 
 def build_continuation_packet(
-    transcript_path: str,
+    transcript_path: str | Path,
     session_id: str | None,
     cwd: str | None,
     db_path: str | None = None,

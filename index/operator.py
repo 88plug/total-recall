@@ -98,13 +98,13 @@ def upsert_profile_field(
     )
 
 
-def _decode_row(row: sqlite3.Row | tuple) -> tuple[Any, float, list[str]]:
+def _decode_row(row: sqlite3.Row | tuple[Any, ...]) -> tuple[Any, float, list[str]]:
     """Decode a stored row back into (value, confidence, sources)."""
-    try:
+    if isinstance(row, sqlite3.Row):
         raw_value = row["value"]
         conf = row["confidence"]
         raw_sources = row["sources"]
-    except (IndexError, KeyError, TypeError):
+    else:
         raw_value = row[1]
         conf = row[2]
         raw_sources = row[3]

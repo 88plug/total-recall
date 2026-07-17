@@ -229,7 +229,7 @@ def _row_to_record(row: dict[str, Any], session: SessionFile) -> Record:
     content = _decode(row.get("content_json"))
     ts = _parse_unix_seconds(row.get("created_timestamp"))
 
-    base = dict(
+    base: dict[str, Any] = dict(
         type=role if isinstance(role, str) else "?",
         uuid=message_id,
         parent_uuid=None,

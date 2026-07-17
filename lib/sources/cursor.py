@@ -174,7 +174,7 @@ def _cursor_line_to_record(
     if uuid_ is not None and not isinstance(uuid_, str):
         uuid_ = str(uuid_)
 
-    base = dict(
+    base: dict[str, Any] = dict(
         type=role if isinstance(role, str) else "?",
         uuid=uuid_,
         parent_uuid=None,
@@ -445,7 +445,7 @@ def _bubble_to_record(
         if isinstance(mn, str) and mn.strip():
             model = mn
 
-    base = dict(
+    base: dict[str, Any] = dict(
         type=role,
         uuid=bubble_id,
         parent_uuid=None,

@@ -80,7 +80,12 @@ def compute_scope_delta(
             if cwd:
                 goal = get_active_goal(_open_conn(db_path), cwd)
                 if goal is not None:
-                    goal_dict = goal.to_dict() if hasattr(goal, "to_dict") else dict(goal)
+                    if hasattr(goal, "to_dict"):
+                        goal_dict = goal.to_dict()
+                    elif isinstance(goal, dict):
+                        goal_dict = goal
+                    else:
+                        goal_dict = {"goal": str(goal)}
                     sections.append(("active_goal", _format_goal(goal_dict)))
         except Exception:
             pass

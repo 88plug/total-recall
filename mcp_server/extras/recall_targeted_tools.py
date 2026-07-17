@@ -117,7 +117,7 @@ def _current_cwd() -> str:
     return os.environ.get("PWD") or os.getcwd()
 
 
-def _load(modname: str):
+def _load(modname: str) -> Any:
     """Defensive submodule import. Returns ``None`` if absent on this branch."""
     try:
         if modname == "bans":

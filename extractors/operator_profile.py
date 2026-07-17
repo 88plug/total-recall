@@ -822,13 +822,15 @@ def _extract_from_text_stream(
             timezones[tz] += 1
             _cite("timezone", source, line_no)
         for abbr in _TZ_ABBREV_RE.findall(text):
-            iana = _TZ_ABBREV.get(abbr, abbr)
-            timezones[iana] += 1
-            _cite("timezone", source, line_no)
+            iana = _TZ_ABBREV.get(abbr) or abbr
+            if iana:
+                timezones[str(iana)] += 1
+                _cite("timezone", source, line_no)
         for alias in _TZ_US_ALIAS_RE.findall(text):
-            iana = _US_ALIAS_MAP.get(alias, alias)
-            timezones[iana] += 1
-            _cite("timezone", source, line_no)
+            iana = _US_ALIAS_MAP.get(alias) or alias
+            if iana:
+                timezones[str(iana)] += 1
+                _cite("timezone", source, line_no)
 
         for b in _BILLING_RAIL_RE.findall(text):
             # Normalize multi-word names.

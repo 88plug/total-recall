@@ -45,7 +45,7 @@ def _vec_refine_enabled(env_value: str | None) -> bool:
     return env_value.strip().lower() not in ("0", "false", "no", "off")
 
 
-def _backfill_vectors(db_path: str, verbose: bool) -> None:
+def _backfill_vectors(db_path: str | Path, verbose: bool) -> None:
     """Dense-vector backfill (v2.0) — cold path only.
 
     Runs once at the end of a full rebuild, NOT on every Stop/PostCompact tick

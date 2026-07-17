@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 _INSTALL_HINT = (
     "fastembed is not installed. Install the optional 'vec' extra:\n"
@@ -99,7 +100,9 @@ def _install_tokenizer_clamp() -> None:
         return
     if getattr(_otm, "_tr_maxlen_clamp", False):
         return
-    _orig = _otm.load_tokenizer
+    _orig = getattr(_otm, "load_tokenizer", None)
+    if _orig is None:
+        return
 
     def _wrapped(*args, **kwargs):
         md = kwargs.get("model_dir")
@@ -109,8 +112,8 @@ def _install_tokenizer_clamp() -> None:
             _clamp_tokenizer_max_length(md)
         return _orig(*args, **kwargs)
 
-    _otm.load_tokenizer = _wrapped
-    _otm._tr_maxlen_clamp = True
+    _otm.load_tokenizer = _wrapped  # type: ignore[attr-defined]
+    _otm._tr_maxlen_clamp = True  # type: ignore[attr-defined]
 
 
 def _register_custom_model(model: str) -> None:
@@ -197,11 +200,16 @@ class Embedder:
         # fastembed yields numpy arrays; convert to plain python lists so the
         # caller doesn't need numpy on the import path.
         out: list[list[float]] = []
-        for vec in self._impl.embed(texts):  # type: ignore[attr-defined]
+        embedded: Any = self._impl.embed(texts)  # type: ignore[attr-defined]
+        for vec in embedded:
             # vec is a np.ndarray; .tolist() works for either ndarray or list.
             tolist = getattr(vec, "tolist", None)
-            row = tolist() if callable(tolist) else list(vec)
-            out.append([float(x) for x in row])
+            if callable(tolist):
+                row_any: Any = tolist()
+            else:
+                row_any = list(vec)
+            row = [float(x) for x in row_any]
+            out.append(row)
             if self._dim is None and row:
                 self._dim = len(row)
         return out

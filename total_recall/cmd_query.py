@@ -154,6 +154,6 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         return dict(row._asdict())
     import dataclasses
 
-    if dataclasses.is_dataclass(row):
+    if dataclasses.is_dataclass(row) and not isinstance(row, type):
         return dataclasses.asdict(row)
     return {"value": row}

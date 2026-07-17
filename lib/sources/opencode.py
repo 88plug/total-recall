@@ -39,12 +39,11 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 try:  # pragma: no cover - exercised when XW1 lands
-    from lib.sources.base import (  # type: ignore[import-not-found]
-        SOURCES,
-        SessionFile,
-        SessionSource,
-    )
+    from lib.sources import base as _base_mod
 
+    SOURCES = _base_mod.SOURCES  # type: ignore[misc]
+    SessionFile = _base_mod.SessionFile  # type: ignore[misc,assignment]
+    SessionSource = _base_mod.SessionSource  # type: ignore[misc,assignment]
     _HAVE_BASE = True
 except Exception:  # noqa: BLE001 - any import failure → use stubs
     _HAVE_BASE = False
@@ -238,7 +237,7 @@ def _opencode_to_record(
     elif time_field is not None:
         created = _ts_from_ms(time_field)
 
-    base = dict(
+    base: dict[str, Any] = dict(
         type=role,
         uuid=message_id,
         parent_uuid=None,
@@ -629,8 +628,10 @@ class OpenCodeSource(SessionSource):
             # ``{id, role, info, parts}``. Tolerate either flat or nested.
             mid = obj.get("id") or mfile.stem
             role = obj.get("role") or "user"
-            info_obj = obj.get("info") if isinstance(obj.get("info"), dict) else obj
-            parts = obj.get("parts") if isinstance(obj.get("parts"), list) else []
+            info_raw = obj.get("info")
+            info_obj: dict[str, Any] = info_raw if isinstance(info_raw, dict) else obj
+            parts_raw = obj.get("parts")
+            parts: list[dict[str, Any]] = parts_raw if isinstance(parts_raw, list) else []
             rec = _opencode_to_record(
                 info_obj,
                 parts,

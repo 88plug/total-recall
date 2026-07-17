@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Iterable, Iterator
+from typing import Any
 
 from extractors.base import (
     DagLike,
@@ -339,7 +340,7 @@ class StandingDecisions(Extractor):
             # sink can refine.
             rationale = snippet if len(snippet) <= 240 else snippet[:240]
 
-        ctx = {
+        ctx: dict[str, Any] = {
             "topic": topic,
             "chose": chose,
             "pattern": pattern,

@@ -281,7 +281,9 @@ def list_machines(
     """
     ensure_schema(conn)
     rows = conn.execute("SELECT * FROM machines ORDER BY hostname").fetchall()
-    out = [_row_to_machine(r) for r in rows if r is not None]
+    out: list[dict[str, Any]] = [
+        m for m in (_row_to_machine(r) for r in rows) if m is not None
+    ]
     if name_pattern:
         import re
 
@@ -289,8 +291,8 @@ def list_machines(
             pat = re.compile(name_pattern)
         except re.error:
             return out  # invalid regex — degrade to "no filter"
-        out = [m for m in out if m and pat.search(m.get("hostname", ""))]
-    return out  # type: ignore[return-value]
+        out = [m for m in out if pat.search(str(m.get("hostname", "")))]
+    return out
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:

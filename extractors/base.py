@@ -36,7 +36,7 @@ class RecordLike(Protocol):
     parent_uuid: str | None
     session_id: str
     cwd: str
-    timestamp: datetime
+    ts: datetime
     role: str | None
     content_kind: str | None
     content: Any

@@ -69,6 +69,29 @@ class QueryHit:
     # unaffected; new callers can threshold/display the composite directly.
     composite_score: float = 0.0
 
+    def __getitem__(self, key: str) -> Any:
+        """Dict-like access for call sites that also accept sqlite3.Row/dict."""
+        try:
+            return getattr(self, key)
+        except AttributeError as e:
+            raise KeyError(key) from e
+
+    def keys(self) -> tuple[str, ...]:
+        return (
+            "kind",
+            "content",
+            "session_id",
+            "cwd",
+            "ts",
+            "score",
+            "context",
+            "extraction_id",
+            "composite_score",
+        )
+
+    def __iter__(self):
+        return iter(self.keys())
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -282,7 +305,7 @@ def search_extractions(
     cwd: str | None = None,
     kind: str | None = None,
     scope: str | None = None,
-    since: datetime | None = None,
+    since: datetime | int | None = None,
     limit: int = 10,
     exact_cwd: bool = False,
 ) -> list[QueryHit]:

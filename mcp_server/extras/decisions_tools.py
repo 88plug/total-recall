@@ -64,6 +64,7 @@ def _ts_to_iso(value: Any) -> str | None:
 
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
+    d: dict[str, Any]
     if hasattr(row, "keys") or isinstance(row, dict):
         d = dict(row)
     else:
@@ -73,7 +74,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
             d = {"value": str(row)}
     for key in ("first_asserted_ts", "last_reasserted_ts", "reversed_at_ts"):
         if key in d:
-            d[key] = _ts_to_iso(d[key])
+            d[key] = _ts_to_iso(d.get(key))
     return d
 
 

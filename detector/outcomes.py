@@ -100,7 +100,7 @@ def record_injection(
         ),
     )
     conn.commit()
-    return int(cur.lastrowid)
+    return int(cur.lastrowid or 0)
 
 
 # --------------------------------------------------------------------------- #

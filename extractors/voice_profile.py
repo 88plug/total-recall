@@ -139,7 +139,7 @@ _WE_PRONOUNS = ("we", "us", "our")
 # ---------------------------------------------------------------------------
 
 
-def _percentile(values: list[int | float], p: float) -> float:
+def _percentile(values: list[int] | list[float] | list[int | float], p: float) -> float:
     """Return the ``p``-th percentile of ``values`` (0 <= p <= 100).
 
     Nearest-rank method: index = floor(len*p/100), clamped to [0, len-1].
@@ -156,7 +156,7 @@ def _percentile(values: list[int | float], p: float) -> float:
     return float(a[idx])
 
 
-def _mean(values: list[int | float]) -> float:
+def _mean(values: list[int] | list[float] | list[int | float]) -> float:
     if not values:
         return 0.0
     return float(sum(values)) / len(values)

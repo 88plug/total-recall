@@ -1,0 +1,53 @@
+{
+  "include": [
+    "mcp_server",
+    "total_recall",
+    "lib",
+    "extractors",
+    "index",
+    "vec",
+    "detector",
+    "hooks",
+    "tests"
+  ],
+  "exclude": [
+    "**/.venv",
+    "**/__pycache__",
+    ".ruff_cache",
+    ".mypy_cache",
+    "total_recall.egg-info",
+    "vendor",
+    "site"
+  ],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["."],
+  "reportMissingTypeStubs": false,
+  "executionEnvironments": [
+    {
+      "root": "tests",
+      "pythonVersion": "3.12",
+      "extraPaths": [".", "hooks/lib"],
+      "reportOptionalMemberAccess": "none",
+      "reportOptionalSubscript": "none",
+      "reportArgumentType": "none",
+      "reportAttributeAccessIssue": "none",
+      "reportMissingImports": "none",
+      "reportPrivateImportUsage": "none",
+      "reportInvalidTypeForm": "none",
+      "reportReturnType": "none",
+      "reportOperatorIssue": "none",
+      "reportCallIssue": "none",
+      "reportGeneralTypeIssues": "none",
+      "reportAssignmentType": "none",
+      "reportIndexIssue": "none"
+    },
+    {
+      "root": ".",
+      "pythonVersion": "3.12",
+      "extraPaths": ["."]
+    }
+  ]
+}

@@ -187,13 +187,14 @@ def linearize_main_branch(
     if not leaves:
         return []
 
+    def _leaf_ts(u: str) -> float:
+        ts = dag.nodes[u].ts
+        return ts.timestamp() if ts is not None else 0.0
+
     if policy == "latest_ts":
         chosen = max(
             leaves,
-            key=lambda u: (
-                dag.nodes[u].ts.timestamp() if dag.nodes[u].ts else 0.0,
-                dag.nodes[u].byte_offset,
-            ),
+            key=lambda u: (_leaf_ts(u), dag.nodes[u].byte_offset),
         )
     elif policy == "specified_leaf":
         # leaf_uuid was None — caller asked for explicit-leaf semantics but
@@ -205,7 +206,7 @@ def linearize_main_branch(
             leaves,
             key=lambda u: (
                 depths.get(u, 0),
-                dag.nodes[u].ts.timestamp() if dag.nodes[u].ts else 0.0,
+                _leaf_ts(u),
                 dag.nodes[u].byte_offset,
             ),
         )

@@ -94,22 +94,23 @@ def format_table(
     when not supplied) or a sequence of tuples (``headers`` required).
     Empty input → ``"(no rows)"``.
     """
-    rows = list(rows)
-    if not rows:
+    row_list = list(rows)
+    if not row_list:
         return "(no rows)"
 
     # Normalise to list[list[str]].
-    if isinstance(rows[0], Mapping):
+    first = row_list[0]
+    if isinstance(first, Mapping):
         if headers is None:
-            headers = list(rows[0].keys())  # type: ignore[arg-type]
+            headers = list(first.keys())
         body = [
             [_stringify(row.get(h, "")) for h in headers]  # type: ignore[union-attr]
-            for row in rows
+            for row in row_list
         ]
     else:
         if headers is None:
             raise ValueError("headers required when rows are tuples")
-        body = [[_stringify(v) for v in row] for row in rows]  # type: ignore[arg-type]
+        body = [[_stringify(v) for v in row] for row in row_list]  # type: ignore[arg-type]
 
     # Truncate over-wide cells.
     def _truncate(s: str) -> str:
@@ -184,14 +185,14 @@ def human_bytes(n: int | None) -> str:
     """Format ``n`` bytes as e.g. ``"4.2 MB"``."""
     if n is None:
         return "0 B"
-    n = float(n)
+    val = float(n)
     for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(n) < 1024.0:
+        if abs(val) < 1024.0:
             if unit == "B":
-                return f"{int(n)} {unit}"
-            return f"{n:.1f} {unit}"
-        n /= 1024.0
-    return f"{n:.1f} PB"
+                return f"{int(val)} {unit}"
+            return f"{val:.1f} {unit}"
+        val /= 1024.0
+    return f"{val:.1f} PB"
 
 
 def emit(

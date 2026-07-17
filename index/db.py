@@ -60,7 +60,7 @@ def _ensure_parent_dir(db_path: Path) -> None:
 
 
 def connect(
-    db_path: Path = DEFAULT_DB_PATH,
+    db_path: Path | str = DEFAULT_DB_PATH,
     read_only: bool = False,
 ) -> sqlite3.Connection:
     """Open a connection to the total-recall index.

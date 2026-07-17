@@ -87,7 +87,7 @@ def _collect_active_goal(conn: sqlite3.Connection, cwd: str | None) -> dict[str,
     """Return the active project goal for ``cwd`` (or global), or None."""
     from index.goals import get_active_goal_for_cwd  # type: ignore
 
-    goal = get_active_goal_for_cwd(conn, cwd=cwd) if cwd else get_active_goal_for_cwd(conn)
+    goal = get_active_goal_for_cwd(conn, cwd=cwd)
     if not goal:
         return None
     # The goals API returns a ``GoalRow`` dataclass (``.to_dict()`` →
