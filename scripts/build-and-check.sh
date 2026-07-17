@@ -14,7 +14,13 @@ twine check dist/*
 echo "==> Test-installing wheel into a throwaway venv..."
 tmpvenv=$(mktemp -d)/venv
 python -m venv "$tmpvenv"
-"$tmpvenv/bin/pip" install --quiet "dist/$(ls dist | grep '\.whl$' | head -1)"
+shopt -s nullglob
+wheels=(dist/*.whl)
+if [ ${#wheels[@]} -eq 0 ]; then
+  echo "ERROR: no wheel in dist/" >&2
+  exit 1
+fi
+"$tmpvenv/bin/pip" install --quiet "${wheels[0]}"
 
 echo "==> Verifying entry points..."
 "$tmpvenv/bin/total-recall" --version

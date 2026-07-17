@@ -920,8 +920,9 @@ recall::llm_model() {
 }
 
 # Standard banner-style envelope text for the "bootstrap in progress" case.
+# Optional $1 is the hook event name (SessionStart / UserPromptSubmit); the
+# banner text is hook-agnostic, so the arg is accepted for API compatibility.
 recall::bootstrap_banner() {
-  local hook_evt="${1:-SessionStart}"
   cat <<'EOF'
 **[total-recall]** First-run indexing of ~/.claude/projects/ is happening in the background.
 

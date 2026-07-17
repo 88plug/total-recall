@@ -67,8 +67,8 @@ else
       log "ERROR: official installer ran but ollama still not found on PATH"
       exit 1
     fi
-    # Warm the resolver cache so subsequent calls use the system binary.
-    RECALL_OLLAMA_CACHED="$OLLAMA_BIN"
+    # Prefer the just-installed binary for subsequent shared-lib lookups.
+    export RECALL_OLLAMA="$OLLAMA_BIN"
   else
     log "ERROR: could not resolve ollama and sudo unavailable. Install ollama manually:"
     log "  curl -fsSL https://ollama.com/install.sh | sh   (needs sudo)"

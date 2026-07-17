@@ -281,9 +281,7 @@ def list_machines(
     """
     ensure_schema(conn)
     rows = conn.execute("SELECT * FROM machines ORDER BY hostname").fetchall()
-    out: list[dict[str, Any]] = [
-        m for m in (_row_to_machine(r) for r in rows) if m is not None
-    ]
+    out: list[dict[str, Any]] = [m for m in (_row_to_machine(r) for r in rows) if m is not None]
     if name_pattern:
         import re
 

@@ -18,7 +18,22 @@ installed them, we raise a single clear `RuntimeError` with the install hint.
 
 from __future__ import annotations
 
-# Re-export the public surface lazily; keep top-level import featherweight.
+from typing import TYPE_CHECKING
+
+# TYPE_CHECKING imports make symbols present for pyright/__all__; runtime stays
+# lazy via __getattr__ so `import vec` does not pull fastembed/sqlite_vec.
+if TYPE_CHECKING:
+    from .embed import Embedder, chunk_for_embedding
+    from .rrf import hybrid_search, reciprocal_rank_fusion
+    from .store import (
+        BackfillReport,
+        VecHit,
+        apply_vec_schema,
+        backfill_all,
+        upsert_extraction_embedding,
+        vec_search,
+    )
+
 __all__ = [
     "Embedder",
     "chunk_for_embedding",

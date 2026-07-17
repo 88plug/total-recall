@@ -88,7 +88,7 @@ if command -v jq >/dev/null 2>&1; then
   fi
 
   for evt in UserPromptSubmit Stop PostCompact; do
-    a="$(jq -r ".hooks.$evt[0].hooks[0].async // false" "$HOOK_DIR/hooks.json")"
+    a="$(jq -r ".hooks.${evt}[0].hooks[0].async // false" "$HOOK_DIR/hooks.json")"
     if [ "$a" = "true" ]; then
       ok "static: $evt is async"
     else
