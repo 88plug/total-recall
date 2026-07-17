@@ -109,7 +109,7 @@ the walker or the index.
 
 - `index/` owns `index.db`: SQLite with FTS5 virtual tables for keyword recall plus relational
   tables for sessions, cwds, and extracted rows.
-- `vec/` owns `vec.db`: an optional `sqlite-vec` store of embeddings (`fastembed` in-process)
+- `vec/` owns dense vectors in the shared index: `sqlite-vec` + **ollama embeddings by default** (format v2); `fastembed` is an explicit escape hatch only
   enabled only when the `[vec]` extra is installed. Vector recall is a query-time augmentation,
   not a replacement, for FTS5.
 
@@ -161,7 +161,8 @@ Separating them from the index lets us add/remove surfaces without touching the 
 
 - **Read-only on transcripts.** Only layer (a) opens session JSONL files, always `O_RDONLY`.
 - **Streaming everywhere.** No layer ever materializes a full session in memory.
-- **Local-only.** No layer makes outbound network calls. Embeddings run in-process.
+- **Local-only.** No cloud APIs. LLM refinement and dense embeddings use the local
+  ollama daemon on `localhost` (or `TOTAL_RECALL_LLM_BASE_URL`).
 - **Convention-based discovery.** The plugin manifest declares no hook/skill/command/mcp keys;
   Claude Code discovers them from the sibling directories under the plugin root.
 

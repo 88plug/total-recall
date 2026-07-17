@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## 2026.7.17
 
+- **Dense embeddings default to ollama (format v2).** Hybrid recall embeds via
+  the local ollama daemon (`POST /api/embed`), not CPU-only fastembed.
+  - Default model: **`qwen3-embedding:0.6b`** (not chat `qwen3.5:2b`).
+  - Query path uses Qwen3 instruct prefix; documents raw. `vec_search` sets
+    `as_query=True`.
+  - `TOTAL_RECALL_EMBED_PROVIDER` default `ollama` (`auto` / `fastembed` escape).
+  - `vec_meta` stores `format=2`, `model`, `backend`, `dim` — old indexes force
+    rebuild. Reuses `TOTAL_RECALL_LLM_BASE_URL`.
+  - **Action:** `ollama pull qwen3-embedding:0.6b` then
+    `total-recall rebuild --yes` (or `python -m vec.cli rebuild` + `backfill`).
+  - Docs: `docs/embeddings.md`.
 - Index Workflow-tool subagent transcripts (`subagents/workflows/wf_*/agent-*.jsonl`)
   in session discovery + sidechain inspect; journal.jsonl still excluded.
 - Isolate integration golden-path hook runs to `tmp_path` so tests cannot leak

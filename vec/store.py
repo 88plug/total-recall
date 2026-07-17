@@ -18,8 +18,8 @@ Schema (added by `apply_vec_schema`):
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
   );
-  -- vec_meta stores ('model', <model id>) and ('dim', <int>) so we can detect
-  -- dimension mismatches at search time and tell the user to run `vec rebuild`.
+  -- format v2 (ollama-default): keys format, model, backend, dim.
+  -- Old indexes without format=2 must rebuild.
 
 All optional deps (`sqlite_vec`, the embedding model) are imported inside
 functions. The module imports cleanly without them.
@@ -41,9 +41,17 @@ if TYPE_CHECKING:  # pragma: no cover
 
 log = logging.getLogger(__name__)
 
+# Format v2: ollama-default dense index. Pre-v2 (fastembed-only, dim-only meta)
+# must rebuild — mixed embedding spaces are never silently reused.
+VEC_FORMAT = "2"
+_REBUILD_HINT = (
+    "Run `total-recall rebuild --yes` or `python -m vec.cli rebuild` then "
+    "`python -m vec.cli backfill` to recreate the dense index (format v2, ollama)."
+)
+
 _SQLITE_VEC_HINT = (
-    "sqlite-vec is not installed. Install the optional 'vec' extra:\n"
-    "    pip install 'total-recall[vec]'"
+    "sqlite-vec is not installed. Install total-recall with its core deps:\n"
+    "    pip install 'total-recall'"
 )
 
 
@@ -136,11 +144,17 @@ def _parse_ts(raw: object) -> datetime:
 # ----------------------------------------------------------------------------
 
 
-def apply_vec_schema(conn: sqlite3.Connection, *, dim: int = 384) -> None:
-    """Create the vec-side tables if they don't already exist.
+def apply_vec_schema(
+    conn: sqlite3.Connection,
+    *,
+    dim: int = 384,
+    model: str | None = None,
+    backend: str | None = None,
+) -> None:
+    """Create the vec-side tables if they don't already exist (format v2).
 
-    `dim` is the embedding dim of the *current* model — recorded in `vec_meta`
-    so query-time mismatches can be detected and reported clearly.
+    `dim` / `model` / `backend` are recorded in `vec_meta` so query-time
+    mismatches force a rebuild rather than silent wrong-space search.
     """
     _load_sqlite_vec(conn)
 
@@ -171,16 +185,28 @@ def apply_vec_schema(conn: sqlite3.Connection, *, dim: int = 384) -> None:
     exists = cur.fetchone() is not None
 
     if exists:
+        _assert_format_v2_or_raise(conn)
         stored = _read_meta(conn, "dim")
         if stored is not None and int(stored) != int(dim):
             raise RuntimeError(
                 f"vec_chunks was built with dim={stored}, but current embedder "
-                f"reports dim={dim}. Run `python -m vec.cli rebuild` "
-                f"(or drop vec_chunks + chunk_embeddings) to recreate the index."
+                f"reports dim={dim}. {_REBUILD_HINT}"
             )
+        if model is not None:
+            stored_model = _read_meta(conn, "model")
+            if stored_model is not None and stored_model != model:
+                raise RuntimeError(
+                    f"vec index model={stored_model!r} but current embedder is "
+                    f"{model!r}. {_REBUILD_HINT}"
+                )
     else:
         cur.execute(f"CREATE VIRTUAL TABLE vec_chunks USING vec0(embedding float[{int(dim)}])")
         _write_meta(conn, "dim", str(int(dim)))
+        _write_meta(conn, "format", VEC_FORMAT)
+        if model is not None:
+            _write_meta(conn, "model", model)
+        if backend is not None:
+            _write_meta(conn, "backend", backend)
 
     conn.commit()
 
@@ -199,19 +225,78 @@ def _write_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
+def _assert_format_v2_or_raise(conn: sqlite3.Connection) -> None:
+    """Old (pre-ollama-default) indexes must rebuild — no silent reuse."""
+    # Empty index (no chunks yet) can be upgraded in place.
+    try:
+        n = conn.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()
+        chunk_count = int(n[0]) if n else 0
+    except sqlite3.Error:
+        chunk_count = 0
+
+    fmt = _read_meta(conn, "format")
+    if fmt == VEC_FORMAT:
+        return
+    if chunk_count == 0 and _read_meta(conn, "dim") is None:
+        # Brand-new schema shell — stamp format on first write path.
+        return
+    if chunk_count == 0:
+        # Empty but has dim from incomplete prior run — allow re-stamp via ensure.
+        return
+    raise RuntimeError(
+        f"Dense vector index is format {fmt!r} (need format {VEC_FORMAT!r} — "
+        f"ollama-default embeddings). Old fastembed-only indexes are not reused. "
+        f"{_REBUILD_HINT}"
+    )
+
+
 def _ensure_dim_matches(conn: sqlite3.Connection, embedder: Embedder) -> int:
-    """Confirm the embedder's dim matches the on-disk index. Returns the dim."""
-    stored = _read_meta(conn, "dim")
+    """Confirm embedder identity (format + model + dim) matches the on-disk index."""
+    _assert_format_v2_or_raise(conn)
     dim = embedder.dim()
-    if stored is None:
-        # First write: record it.
+    identity = embedder.identity()  # backend:model
+    backend, _, model = identity.partition(":")
+
+    stored_dim = _read_meta(conn, "dim")
+    stored_model = _read_meta(conn, "model")
+    stored_backend = _read_meta(conn, "backend")
+    stored_fmt = _read_meta(conn, "format")
+
+    if stored_dim is None and stored_model is None:
+        # First write: stamp full v2 identity.
         _write_meta(conn, "dim", str(dim))
+        _write_meta(conn, "model", model or embedder.model)
+        _write_meta(conn, "backend", backend or (embedder.backend or "unknown"))
+        _write_meta(conn, "format", VEC_FORMAT)
         return dim
-    if int(stored) != int(dim):
+
+    if stored_fmt is not None and stored_fmt != VEC_FORMAT:
         raise RuntimeError(
-            f"Embedding dim mismatch: index built for dim={stored}, current model "
-            f"({embedder.model!r}) reports dim={dim}. Run `python -m vec.cli rebuild`."
+            f"vec format={stored_fmt!r} is obsolete. {_REBUILD_HINT}"
         )
+    if int(stored_dim or dim) != int(dim):
+        raise RuntimeError(
+            f"Embedding dim mismatch: index dim={stored_dim}, current "
+            f"{identity!r} reports dim={dim}. {_REBUILD_HINT}"
+        )
+    want_model = model or embedder.model
+    if stored_model is not None and stored_model != want_model:
+        raise RuntimeError(
+            f"Embedding model mismatch: index model={stored_model!r}, current "
+            f"{want_model!r}. {_REBUILD_HINT}"
+        )
+    if stored_backend is not None and backend and stored_backend != backend:
+        raise RuntimeError(
+            f"Embedding backend mismatch: index backend={stored_backend!r}, current "
+            f"{backend!r}. {_REBUILD_HINT}"
+        )
+    # Backfill missing v2 keys on partially-stamped indexes (empty upgrade).
+    if stored_fmt is None:
+        _write_meta(conn, "format", VEC_FORMAT)
+    if stored_model is None and want_model:
+        _write_meta(conn, "model", want_model)
+    if stored_backend is None and backend:
+        _write_meta(conn, "backend", backend)
     return dim
 
 
@@ -299,7 +384,7 @@ def backfill_all(
     Args:
         conn: Open sqlite3 connection to the shared `index.db`.
         embedder: Embedder to use. If None, a default `Embedder()` is built —
-            which lazily loads fastembed on first batch.
+            (ollama by default; see vec.embed).
         batch_size: How many extractions to fetch + embed per round-trip.
         only_kinds: If set, restrict to these `extractions.kind` values
             (e.g. ['correction', 'decision']).
@@ -405,7 +490,8 @@ def vec_search(
     _load_sqlite_vec(conn)
     _ensure_dim_matches(conn, embedder)
 
-    vecs = embedder.embed([query])
+    # Query-side instruction prefixes (bge / nomic / qwen3-embedding) when supported.
+    vecs = embedder.embed([query], as_query=True)
     if not vecs:
         return []
     qvec = _serialize_vector(vecs[0])

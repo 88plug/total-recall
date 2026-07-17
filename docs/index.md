@@ -221,7 +221,8 @@ SQLite index (`index.db` + FTS5), optional embeddings, `state.json`, rotating lo
 Transcripts are never rewritten or re-uploaded.
 
 !!! note
-    Read-only on session JSONL. Embeddings (if enabled) run in-process via `fastembed`.
+    Read-only on session JSONL. Dense embeddings default to local **ollama**
+    (same daemon as LLM refinement). Old fastembed-only indexes must rebuild.
 
 ## Optional local-LLM refinement
 

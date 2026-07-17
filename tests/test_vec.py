@@ -252,17 +252,18 @@ class TestLazyImports:
         # 384-dim is known a priori, so .dim() should not need to embed.
         assert emb.dim() == 384
 
-    def test_embedder_without_fastembed_raises_clearly(self) -> None:
+    def test_embedder_without_fastembed_raises_clearly(self, monkeypatch) -> None:
         if HAS_FASTEMBED:
             pytest.skip("fastembed is installed — error path not reachable here.")
         from vec.embed import Embedder
 
+        # Force fastembed path so the missing-dep error is about ONNX, not ollama.
+        monkeypatch.setenv("TOTAL_RECALL_EMBED_PROVIDER", "fastembed")
         emb = Embedder()
         with pytest.raises(RuntimeError) as excinfo:
             emb.embed(["hi"])
         msg = str(excinfo.value).lower()
         assert "fastembed" in msg
-        assert "vec" in msg  # mentions the extra
 
 
 # ----------------------------------------------------------------------------
@@ -437,9 +438,10 @@ class TestQueryPrefix:
         for name in (
             "Alibaba-NLP/gte-modernbert-base",
             "onnx-community/granite-embedding-small-english-r2",
-            "nomic-ai/nomic-embed-text-v1.5",
         ):
             assert Embedder(model=name)._query_prefix == ""
+        # nomic uses search_query: / search_document: prefixes (ollama + HF).
+        assert Embedder(model="nomic-ai/nomic-embed-text-v1.5")._query_prefix == "search_query: "
 
     def _stub(self, monkeypatch, model):
         from vec.embed import Embedder
@@ -490,12 +492,16 @@ class _FakeEmbedder:
     """Deterministic embedder: each text -> a small fixed-dim vector. No model."""
 
     model = "fake"
+    backend = "fake"
 
     def __init__(self, *a, **k) -> None:
         pass
 
     def dim(self) -> int:
         return 8
+
+    def identity(self) -> str:
+        return f"{self.backend}:{self.model}"
 
     def embed(self, texts, as_query: bool = False):
         # Vary the first component by text length so vectors aren't identical.
@@ -764,8 +770,14 @@ class TestIntegration:
             conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (?,?)", (r[0], r[1]))
         conn.commit()
 
+        # Integration uses fastembed for hermetic CI (no ollama daemon required).
+        import os
+
+        os.environ["TOTAL_RECALL_EMBED_PROVIDER"] = "fastembed"
         embedder = Embedder()
-        apply_vec_schema(conn, dim=embedder.dim())
+        apply_vec_schema(
+            conn, dim=embedder.dim(), model=embedder.model, backend=embedder.backend
+        )
         report = backfill_all(conn, embedder=embedder, batch_size=4)
         assert report.extractions_embedded == 3
         assert report.chunks_written >= 3
@@ -783,3 +795,122 @@ class TestIntegration:
         top = fused[0]
         top_id = getattr(top, "extraction_id", None) or top["extraction_id"]
         assert top_id == 1
+
+
+class TestOllamaProviderSelection:
+    """`Embedder()` (no explicit model) provider auto-resolution — mocked, no
+    real network/daemon needed so these run identically in CI and locally."""
+
+    _MODELS = [
+        {"name": "granite-embedding:30m", "size": 30_000_000, "capabilities": ["embedding"]},
+        {"name": "qwen3-embedding:0.6b", "size": 600_000_000, "capabilities": ["embedding"]},
+        {"name": "qwen3.5:2b", "size": 2_000_000_000, "capabilities": ["completion"]},
+    ]
+
+    def test_pick_prefers_qwen3_0_6b_over_smaller_granite(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        assert embed._pick_ollama_embed_model("http://x", None) == "qwen3-embedding:0.6b"
+
+    def test_pick_respects_explicit_want(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        assert (
+            embed._pick_ollama_embed_model("http://x", "granite-embedding:30m")
+            == "granite-embedding:30m"
+        )
+
+    def test_pick_want_tolerates_missing_latest_suffix(self, monkeypatch) -> None:
+        from vec import embed
+
+        models = [{"name": "nomic-embed-text:latest", "size": 1, "capabilities": ["embedding"]}]
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: models)
+        assert (
+            embed._pick_ollama_embed_model("http://x", "nomic-embed-text")
+            == "nomic-embed-text:latest"
+        )
+
+    def test_pick_ignores_non_embedding_models(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: [self._MODELS[2]])
+        assert embed._pick_ollama_embed_model("http://x", None) is None
+
+    def test_pick_returns_none_when_daemon_unreachable(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
+        assert embed._pick_ollama_embed_model("http://x", None) is None
+
+    def test_default_uses_ollama_qwen3_when_available(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.delenv("TOTAL_RECALL_EMBED_PROVIDER", raising=False)
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        monkeypatch.setattr(
+            embed,
+            "_ollama_embed",
+            lambda base_url, model, texts: [[0.1, 0.2] for _ in texts],
+        )
+        e = embed.Embedder()
+        vecs = e.embed(["hi"])
+        assert e._backend == "ollama"
+        assert e.model == "qwen3-embedding:0.6b"
+        assert vecs == [[0.1, 0.2]]
+        assert "Instruct:" in e._query_prefix
+
+    def test_default_provider_is_ollama_raises_when_unavailable(self, monkeypatch) -> None:
+        """Product default is ollama (not silent fastembed)."""
+        from vec import embed
+
+        monkeypatch.delenv("TOTAL_RECALL_EMBED_PROVIDER", raising=False)
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
+        e = embed.Embedder()
+        with pytest.raises(RuntimeError, match="TOTAL_RECALL_EMBED_PROVIDER=ollama"):
+            e.embed(["hi"])
+
+    def test_auto_falls_back_to_fastembed_when_no_ollama(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.setenv("TOTAL_RECALL_EMBED_PROVIDER", "auto")
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
+        e = embed.Embedder()
+        e.embed(["hi"])
+        assert e._backend == "fastembed"
+        assert e.model == embed.DEFAULT_FASTEMBED_MODEL
+
+    def test_explicit_provider_fastembed_skips_ollama_probe(self, monkeypatch) -> None:
+        from vec import embed
+
+        def _boom(base_url):
+            raise AssertionError("should not probe ollama when provider=fastembed")
+
+        monkeypatch.setattr(embed, "_ollama_list_models", _boom)
+        monkeypatch.setenv("TOTAL_RECALL_EMBED_PROVIDER", "fastembed")
+        e = embed.Embedder()
+        e.embed(["hi"])
+        assert e._backend == "fastembed"
+
+    def test_explicit_provider_ollama_raises_when_unavailable(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
+        monkeypatch.setenv("TOTAL_RECALL_EMBED_PROVIDER", "ollama")
+        e = embed.Embedder()
+        with pytest.raises(RuntimeError, match="TOTAL_RECALL_EMBED_PROVIDER=ollama"):
+            e.embed(["hi"])
+
+    def test_explicit_model_arg_always_forces_fastembed(self, monkeypatch) -> None:
+        """Backward compat: every existing test in this file passes `model=`
+        and must never be routed to ollama regardless of env/daemon state."""
+        from vec import embed
+
+        def _boom(base_url):
+            raise AssertionError("explicit model= must never probe ollama")
+
+        monkeypatch.setattr(embed, "_ollama_list_models", _boom)
+        e = embed.Embedder(model="BAAI/bge-small-en-v1.5")
+        e.embed(["hi"])
+        assert e._backend == "fastembed"

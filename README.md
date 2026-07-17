@@ -220,7 +220,7 @@ All subcommands support `--json`.
 Everything stays under `${CLAUDE_PLUGIN_DATA}/total-recall/` (env-resolved by Claude Code; do not hardcode the path). It holds the SQLite index (`index.db`, FTS5 for keyword recall), optional `vec.db` embeddings (only with the `[vec]` extra), `state.json` offsets, and rotating logs. The session JSONLs themselves are never written to.
 
 > [!NOTE]
-> Read-only on `~/.claude/projects/*.jsonl`, local-only, and no re-uploading. Transcripts contain secrets, internal URLs, and private code, so they never leave the machine. Embeddings, if enabled, run in-process via `fastembed`.
+> Read-only on `~/.claude/projects/*.jsonl`, local-only, and no re-uploading. Transcripts contain secrets, internal URLs, and private code, so they never leave the machine. Dense embeddings default to the **local ollama** daemon (same stack as LLM refinement); no cloud embed APIs.
 
 ## Optional local-LLM refinement
 

@@ -60,7 +60,12 @@ def _cmd_backfill(args: argparse.Namespace) -> int:
 
     conn = _open_db(args.db)
     embedder = Embedder()
-    apply_vec_schema(conn, dim=embedder.dim())
+    apply_vec_schema(
+        conn,
+        dim=embedder.dim(),
+        model=embedder.model,
+        backend=embedder.backend,
+    )
     report = backfill_all(
         conn,
         embedder=embedder,
@@ -117,14 +122,18 @@ def _cmd_search(args: argparse.Namespace) -> int:
 
 
 def _cmd_rebuild(args: argparse.Namespace) -> int:
-    """Drop and recreate the vec tables — used when the embedding dim changes."""
+    """Drop vec tables — required when moving to format v2 (ollama-default) or model/dim change."""
     conn = _open_db(args.db)
     cur = conn.cursor()
     cur.execute("DROP TABLE IF EXISTS vec_chunks")
     cur.execute("DROP TABLE IF EXISTS chunk_embeddings")
-    cur.execute("DELETE FROM vec_meta WHERE key='dim'")
+    cur.execute("DELETE FROM vec_meta")
     conn.commit()
-    print("vec tables dropped. Run `python -m vec.cli backfill` to repopulate.")
+    print(
+        "vec tables dropped (format v2 wipe). "
+        "Ensure ollama has an embed model (e.g. `ollama pull qwen3-embedding:0.6b`), "
+        "then run `python -m vec.cli backfill`."
+    )
     return 0
 
 

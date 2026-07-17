@@ -32,10 +32,9 @@ def _text_refine_enabled(env_value: str | None) -> bool:
 def _vec_refine_enabled(env_value: str | None) -> bool:
     """Whether to run the dense-vector backfill at the end of a rebuild.
 
-    Default-on (matching ``_text_refine_enabled``): the backfill is a no-op when
-    the optional [vec] extra is absent, so defaulting on is safe — installs with
-    sqlite-vec + fastembed get hybrid recall, everyone else stays FTS5-only.
-    Set ``TOTAL_RECALL_VEC=0`` to skip even when the extra is installed.
+    Default-on. Dense path uses **ollama embeddings** by default (format v2).
+    Set ``TOTAL_RECALL_VEC=0`` to skip. If ollama has no embed model, backfill
+    fails soft and recall stays FTS5-only until the user pulls a model.
 
     Unset / "1" / "true" / "yes" / "on" → enabled.
     "0" / "false" / "no" / "off" → disabled.
@@ -46,15 +45,13 @@ def _vec_refine_enabled(env_value: str | None) -> bool:
 
 
 def _backfill_vectors(db_path: str | Path, verbose: bool) -> None:
-    """Dense-vector backfill (v2.0) — cold path only.
+    """Dense-vector backfill (format v2 / ollama-default) — cold path only.
 
-    Runs once at the end of a full rebuild, NOT on every Stop/PostCompact tick
-    (that would add embedding latency to the operator's live session). Optional:
-    if the [vec] extra (sqlite-vec + fastembed) is absent, skip silently and
-    recall stays FTS5-only. Never fatal — a backfill failure must not fail the
-    rebuild, whose primary product (the FTS index) is already committed.
+    Runs once at the end of a full rebuild, NOT on every Stop/PostCompact tick.
+    Default embedder is ollama; set TOTAL_RECALL_EMBED_PROVIDER=fastembed only
+    as an escape hatch. Never fatal — a backfill failure must not fail rebuild.
 
-    Set ``TOTAL_RECALL_VEC=0`` to skip even when the extra is installed.
+    Set ``TOTAL_RECALL_VEC=0`` to skip.
     """
     if not _vec_refine_enabled(os.environ.get("TOTAL_RECALL_VEC")):
         return
@@ -66,20 +63,26 @@ def _backfill_vectors(db_path: str | Path, verbose: bool) -> None:
         embedder = Embedder()
         conn = connect(db_path)
         try:
-            apply_vec_schema(conn, dim=embedder.dim())
+            apply_vec_schema(
+                conn,
+                dim=embedder.dim(),
+                model=embedder.model,
+                backend=embedder.backend,
+            )
             report = backfill_all(conn, embedder=embedder)
             conn.commit()
         finally:
             conn.close()
         if verbose:
             click.echo(
-                f"[rebuild] vec backfill: embedded {report.extractions_embedded} extraction(s)",
+                f"[rebuild] vec backfill ({embedder.backend}:{embedder.model}): "
+                f"embedded {report.extractions_embedded} extraction(s)",
                 err=True,
             )
     except ImportError:
         if verbose:
             click.echo(
-                "[rebuild] vec extra not installed; skipping dense backfill "
+                "[rebuild] vec deps not installed; skipping dense backfill "
                 "(recall stays FTS5-only)",
                 err=True,
             )
