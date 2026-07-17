@@ -148,7 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pb = sub.add_parser("backfill", help="Embed all extractions that lack chunks.")
-    pb.add_argument("--batch", type=int, default=64)
+    pb.add_argument("--batch", type=int, default=128)
     pb.add_argument(
         "--kinds",
         type=str,

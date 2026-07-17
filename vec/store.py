@@ -376,7 +376,7 @@ def _delete_existing(conn: sqlite3.Connection, extraction_id: int) -> None:
 def backfill_all(
     conn: sqlite3.Connection,
     embedder: Embedder | None = None,
-    batch_size: int = 64,
+    batch_size: int = 128,
     only_kinds: list[str] | None = None,
 ) -> BackfillReport:
     """Embed every extraction in WT-4's `extractions` table that lacks chunks.

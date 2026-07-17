@@ -9,6 +9,9 @@ All notable changes to this project will be documented in this file.
   - Default embed model: **`qwen3-embedding:0.6b`** (not chat `qwen3.5:2b`).
   - Query path uses Qwen3 instruct prefix; documents raw (`as_query=True` on search).
   - `vec_meta`: `format=2` + `model` + `backend` + `dim` — identity mismatch forces rebuild.
+  - **GPU-hard:** embed/LLM requests send `num_gpu=999`, `keep_alive=-1`, embed
+    `num_ctx=8192` + `num_batch=512`; backfill batch default 128. Host profile:
+    `scripts/ollama-gpu-hard.conf` + `docs/ollama-gpu.md`.
   - **Action:** `ollama pull qwen3-embedding:0.6b` (+ `qwen3.5:2b` for refine), then
     `total-recall rebuild --yes`.
   - Docs: `docs/embeddings.md`.

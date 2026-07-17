@@ -53,7 +53,9 @@ total-recall rebuild --yes
 
 ## CPU / GPU
 
-Same tags. Ollama offloads when VRAM allows. CPU is correct, just slower.
+Same tags. Code sends **`num_gpu=999`** + **`keep_alive=-1`** so layers stay
+on GPU and the model does not unload mid-backfill. See [ollama-gpu.md](ollama-gpu.md)
+for daemon hard settings (`scripts/ollama-gpu-hard.conf`).
 
 ## Privacy
 

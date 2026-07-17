@@ -27,6 +27,7 @@ nav:
   - Architecture: architecture.md
   - Local-LLM refinement: llm-refinement.md
   - Dense embeddings: embeddings.md
+  - Ollama GPU: ollama-gpu.md
   - Marketplace: marketplace.md
   - CI/CD: ci.md
 

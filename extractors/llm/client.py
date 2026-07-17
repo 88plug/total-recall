@@ -285,8 +285,9 @@ class LLMClient:
         * ``num_predict=1024``: output ceiling. On a JSON parse failure (almost
           always truncation at this ceiling) the call retries once at 2× before
           giving up — see the retry loop below.
-        * ``keep_alive="15m"``: keep the model resident across the rebuild's
-          many sequential calls; auto-evict afterwards.
+        * ``keep_alive``: default ``-1`` (pin in VRAM across rebuild); override
+          with ``TOTAL_RECALL_LLM_KEEP_ALIVE``.
+        * ``num_gpu=999``: offload all layers to GPU when present.
 
         Parameters
         ----------
@@ -317,6 +318,12 @@ class LLMClient:
 
         opts, think = _resolve_sampling(self._model, temperature)
         opts["num_ctx"] = num_ctx
+        # Hammer GPU: offload all layers (ollama treats large values as "all").
+        opts["num_gpu"] = int(os.environ.get("TOTAL_RECALL_OLLAMA_NUM_GPU") or "999")
+        keep_alive_raw = (os.environ.get("TOTAL_RECALL_LLM_KEEP_ALIVE") or "-1").strip()
+        keep_alive: str | int = (
+            int(keep_alive_raw) if keep_alive_raw.lstrip("-").isdigit() else keep_alive_raw
+        )
 
         # Truncation-aware retry: a parse failure on the model's response is
         # almost always the output hitting the num_predict ceiling mid-JSON
@@ -336,7 +343,7 @@ class LLMClient:
                 "prompt": user,
                 "system": system,
                 "stream": False,
-                "keep_alive": "15m",
+                "keep_alive": keep_alive,
                 "options": attempt_opts,
             }
             # Thinking-capable models (qwen3/qwen3.5, deepseek-r1, …) emit

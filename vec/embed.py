@@ -33,6 +33,28 @@ _OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
 _OLLAMA_PROBE_TIMEOUT_S = 10.0
 _OLLAMA_EMBED_TIMEOUT_S = 120.0
 
+# GPU-hard defaults for embed requests (override via env).
+# num_gpu: layers to offload — 999 ≈ all layers (ollama treats large values as "all").
+# keep_alive -1: pin model in VRAM until explicit stop (no 5m pussy unload mid-backfill).
+# num_ctx: embed chunks are small; 8k is plenty and frees VRAM vs model-max 32k.
+def _embed_keep_alive() -> str | int:
+    raw = (os.environ.get("TOTAL_RECALL_EMBED_KEEP_ALIVE") or "-1").strip()
+    if raw.lstrip("-").isdigit():
+        return int(raw)
+    return raw
+
+
+def _embed_options() -> dict[str, Any]:
+    opts: dict[str, Any] = {
+        "num_gpu": int(os.environ.get("TOTAL_RECALL_OLLAMA_NUM_GPU") or "999"),
+        "num_ctx": int(os.environ.get("TOTAL_RECALL_EMBED_NUM_CTX") or "8192"),
+        "num_batch": int(os.environ.get("TOTAL_RECALL_EMBED_NUM_BATCH") or "512"),
+    }
+    thr = (os.environ.get("TOTAL_RECALL_EMBED_NUM_THREAD") or "").strip()
+    if thr.isdigit() and int(thr) > 0:
+        opts["num_thread"] = int(thr)
+    return opts
+
 # Known dims (live-verified where noted). Others discover on first embed.
 _KNOWN_DIMS: dict[str, int] = {
     "qwen3-embedding:0.6b": 1024,
@@ -168,7 +190,15 @@ def _pick_ollama_embed_model(base_url: str, want: str | None) -> str | None:
 
 
 def _ollama_embed(base_url: str, model: str, texts: list[str]) -> list[list[float]]:
-    payload = {"model": model, "input": texts, "truncate": False}
+    opts = {k: v for k, v in _embed_options().items() if v is not None}
+    payload: dict[str, Any] = {
+        "model": model,
+        "input": texts,
+        "truncate": False,
+        # Pin resident for bulk backfill / hybrid search (override with env).
+        "keep_alive": _embed_keep_alive(),
+        "options": opts,
+    }
     req = urllib.request.Request(
         f"{base_url}/api/embed",
         data=json.dumps(payload).encode(),
