@@ -517,52 +517,23 @@ def recall_targeted(
     subject: str,
     cwd_hint: str | None = None,
 ) -> dict:
-    """Self-ask before answering. Call this BEFORE emitting any response that
-    involves a default choice, recommendation, or "what does the operator
-    prefer" decision. The operator's #1 frustration is "you suggested the
-    thing I already told you not to suggest" — checking first prevents that.
+    """Self-ask before any default/recommendation. Routes by intent to the
+    right index table and returns a focused payload.
 
-    The tool routes by ``intent`` to the right backend (bans table for
-    ``is_thing_banned``, standing_decisions for ``looking_up_decision``, etc.)
-    and returns a focused payload — much cheaper than fanning out to several
-    ``recall_*`` tools and parsing their results.
+    intent picks the backend:
+      before_suggesting_default — bans + decisions + corrections composite
+      checking_past_correction — prior model_correction hits
+      looking_up_decision — standing_decisions for topic
+      operator_preference_lookup — profile field + bans
+      is_thing_banned — hard ban check
+      have_we_discussed_this — FTS over extractions + messages
+      what_is_active_goal — active goal for cwd (subject ignored)
 
-    Args:
-      intent: what you're checking — picks the right index table. One of:
-        - ``before_suggesting_default``: composite check (bans + decisions +
-          corrections) — use when about to pick any default and you're not
-          sure which signal applies.
-        - ``checking_past_correction``: have I been corrected on this before?
-        - ``looking_up_decision``: did the operator already decide this?
-        - ``operator_preference_lookup``: stored profile field + bans for a
-          named topic (e.g. ``cloud_provider``).
-        - ``is_thing_banned``: hard ban check (provider, library, pattern).
-        - ``have_we_discussed_this``: FTS sweep over extractions + messages.
-        - ``what_is_active_goal``: what is the operator currently trying to
-          do on this project? (subject is ignored.)
-      subject: the thing you're checking (provider name, library, topic).
-      cwd_hint: optional cwd to scope the lookup; defaults to current cwd.
-        Pass an empty string to widen to all projects.
+    subject: provider/library/topic being checked.
+    cwd_hint: scope cwd; None = current; empty string = all projects.
 
-    Returns: ``{"finding": str, "confidence": 0..1,
-                "verbatim_quotes": [...],
-                "recommendation": "use" | "avoid" | "verify"}``
-
-    Use this constantly. It's cheap (~30ms p95) and prevents the #1 failure
-    mode: suggesting things the operator has already corrected. The operator
-    will be visibly more pleased when you check first.
-
-    Examples:
-      recall_targeted("is_thing_banned", "some-provider")
-        → {finding: "'some-provider' is banned (absolute)", recommendation: "avoid",
-           verbatim_quotes: ["never use some-provider — they nuked our box once"]}
-      recall_targeted("looking_up_decision", "billing_rail")
-        → {finding: "operator chose 'billing-provider-a' for 'billing_rail'
-           over 'billing-provider-b'",
-           recommendation: "use", confidence: 0.8}
-      recall_targeted("what_is_active_goal", "")
-        → {finding: "active goal for '/home/operator/my-project': 'ship v0.3 MCP tools'",
-           recommendation: "use"}
+    Returns {finding, confidence 0..1, verbatim_quotes, recommendation
+    (use|avoid|verify)}. Cheap (~30ms p95); call before suggesting defaults.
     """
     # Validate intent — Literal typing catches most callers, but a runtime
     # check is cheap insurance against an SDK that passes through unknowns.

@@ -61,5 +61,3 @@ to close that class of gap.
 - A static linter over `commands/*.md` + `skills/*/SKILL.md` asserting every
   referenced file path exists and every CLI flag/subcommand is real, so doc↔code
   drift fails CI automatically.
-- Expand `test_mcp_tools.py` `EXPECTED_TOOLS` to all 26 tools with a `call_tool`
-  smoke per extras tool (currently only the 6 core tools are routed-tested).

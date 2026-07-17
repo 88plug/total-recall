@@ -39,13 +39,24 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+def _clear_mcp_modules() -> None:
+    """Drop cached mcp_server packages so DB_PATH / tools re-bind on reimport.
+
+    Extras modules bind ``get_conn`` / ``DB_PATH`` at import time, so they
+    must be cleared alongside the core server modules.
+    """
+    for name in list(sys.modules):
+        if name == "mcp_server" or name.startswith("mcp_server."):
+            sys.modules.pop(name, None)
+
+
 @pytest.fixture
 def tmp_db_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point the server at a temp DB dir before it's imported."""
     monkeypatch.setenv("TOTAL_RECALL_DB_DIR", str(tmp_path))
-    # Clear any cached server module so DB_PATH is re-resolved.
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    # Keep unit tests off the onnx / fastembed path even if [vec] is installed.
+    monkeypatch.setenv("TOTAL_RECALL_VEC", "0")
+    _clear_mcp_modules()
     return tmp_path
 
 
@@ -256,20 +267,102 @@ def _seed_corpus(db_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+# Core tools (mcp_server/tools.py) + operator-aware extras (mcp_server/extras/*).
+# Keep this set equal to every name registered at server import — see CLAUDE.md.
 EXPECTED_TOOLS = {
+    # core
     "recall",
     "prior_sessions_for_cwd",
     "find_failed_attempts",
     "find_user_preferences",
     "get_session_digest",
     "search_messages",
+    # v0.3 operator-aware
+    "get_operator_context",
+    "get_operator_profile",
+    "get_voice_profile",
+    "get_recent_corrections",
+    "recall_corrections_about",
+    "get_past_truth_assertions",
+    "list_standing_decisions",
+    "get_decision_for_topic",
+    "list_goals",
+    "get_active_goal",
+    "check_banned",
+    "list_failed_attempts",
+    "define_term",
+    "get_project_graph",
+    "get_machine_inventory",
+    "assess_escalation_risk",
+    "recall_targeted",
+    # v0.8 behavioral profiles
+    "get_workflow_profile",
+    "get_satisfaction_profile",
+    "list_implicit_preferences",
 }
+
+# Minimal valid args for call_tool smoke. Prefer defaults; only fill required.
+# Missing-index path: no heavy deps, no onnx, no real corpus.
+MINIMAL_TOOL_ARGS: dict[str, dict] = {
+    "assess_escalation_risk": {"last_user": "ok"},
+    "check_banned": {"thing": "x"},
+    "define_term": {"term": "x"},
+    "find_failed_attempts": {"pattern": "x"},
+    "find_user_preferences": {},
+    "get_active_goal": {},
+    "get_decision_for_topic": {"topic": "x"},
+    "get_machine_inventory": {},
+    "get_operator_context": {},
+    "get_operator_profile": {},
+    "get_past_truth_assertions": {},
+    "get_project_graph": {},
+    "get_recent_corrections": {},
+    "get_satisfaction_profile": {},
+    "get_session_digest": {"session_id": "x"},
+    "get_voice_profile": {},
+    "get_workflow_profile": {},
+    "list_failed_attempts": {},
+    "list_goals": {},
+    "list_implicit_preferences": {},
+    "list_standing_decisions": {},
+    "prior_sessions_for_cwd": {},
+    "recall": {"topic": "x"},
+    "recall_corrections_about": {"topic": "x"},
+    "recall_targeted": {"intent": "is_thing_banned", "subject": "x"},
+    "search_messages": {"query": "x"},
+}
+
+
+def _unwrap_call_tool_result(result: object) -> object:
+    """Normalize FastMCP call_tool return shapes into a plain Python value.
+
+    Structured tools return ``(content, {\"result\": ...})``; tools without a
+    structured-output schema return a list of content blocks (often with a
+    JSON ``.text`` payload). None of these paths should raise.
+    """
+    if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], dict):
+        structured = result[1]
+        if "result" in structured:
+            return structured["result"]
+        return structured
+    if isinstance(result, (list, tuple)) and result:
+        first = result[0]
+        if hasattr(first, "text"):
+            text = first.text
+            try:
+                return json.loads(text)
+            except (TypeError, json.JSONDecodeError):
+                return text
+        return first
+    return result
 
 
 def test_all_expected_tools_registered(server_module):
     tools = asyncio.run(server_module.mcp.list_tools())
     names = {t.name for t in tools}
     assert names >= EXPECTED_TOOLS, f"missing tools: {EXPECTED_TOOLS - names}"
+    # Catch accidental extra registrations that aren't in the documented set.
+    assert names == EXPECTED_TOOLS, f"unexpected tools: {names - EXPECTED_TOOLS}"
 
 
 def test_every_tool_has_description_and_schema(server_module):
@@ -340,6 +433,40 @@ def test_get_session_digest_returns_error_when_db_missing(server_module):
     assert "error" in out
 
 
+def test_all_tools_call_tool_smoke_missing_db(server_module):
+    """Every registered tool answers call_tool without raising when the index
+    is absent. Error envelopes are fine; crashes / hangs are not.
+
+    Runs against an empty TOTAL_RECALL_DB_DIR (no index.db). TOTAL_RECALL_VEC=0
+    keeps the optional embedder off the import path.
+    """
+    assert not server_module.DB_PATH.exists()
+    tools = asyncio.run(server_module.mcp.list_tools())
+    names = {t.name for t in tools}
+    assert names == EXPECTED_TOOLS
+    assert set(MINIMAL_TOOL_ARGS) == EXPECTED_TOOLS
+
+    failures: list[str] = []
+    for name in sorted(EXPECTED_TOOLS):
+        args = MINIMAL_TOOL_ARGS[name]
+        try:
+            raw = asyncio.run(server_module.mcp.call_tool(name, args))
+        except Exception as exc:  # noqa: BLE001 — surface tool name on failure
+            failures.append(f"{name}: raised {type(exc).__name__}: {exc}")
+            continue
+        out = _unwrap_call_tool_result(raw)
+        # Must produce some structured payload (list/dict/str/None), not a bare
+        # transport error. assess_escalation_risk is DB-free and returns a
+        # normal risk dict; everything else should degrade to error/empty.
+        if out is None:
+            continue  # e.g. get_active_goal / define_term may return None
+        if isinstance(out, (dict, list, str, int, float, bool)):
+            continue
+        failures.append(f"{name}: unexpected result type {type(out).__name__}: {out!r:.200}")
+
+    assert not failures, "call_tool smoke failures:\n" + "\n".join(failures)
+
+
 # ---------------------------------------------------------------------------
 # 3. End-to-end recall over a synthetic corpus
 # ---------------------------------------------------------------------------
@@ -348,8 +475,7 @@ def test_get_session_digest_returns_error_when_db_missing(server_module):
 def test_recall_ranks_synthetic_corpus(tmp_db_dir, fake_index_query):
     _seed_corpus(tmp_db_dir / "index.db")
     # (Re)import server now that the DB exists and the fake module is in place.
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
 
     _, structured = asyncio.run(
@@ -375,8 +501,7 @@ def test_recall_ranks_synthetic_corpus(tmp_db_dir, fake_index_query):
 
 def test_recall_filters_by_kind(tmp_db_dir, fake_index_query):
     _seed_corpus(tmp_db_dir / "index.db")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
         server.mcp.call_tool(
@@ -392,8 +517,7 @@ def test_recall_filters_by_kind(tmp_db_dir, fake_index_query):
 def test_recall_scopes_to_cwd(tmp_db_dir, fake_index_query, monkeypatch):
     _seed_corpus(tmp_db_dir / "index.db")
     monkeypatch.setenv("PWD", "/home/operator/proj-a")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
         server.mcp.call_tool("recall", {"topic": "provider-x", "scope": "this_cwd"})
@@ -407,8 +531,7 @@ def test_recall_scopes_to_cwd(tmp_db_dir, fake_index_query, monkeypatch):
 def test_find_failed_attempts_returns_paired_rejection(tmp_db_dir, fake_index_query, monkeypatch):
     _seed_corpus(tmp_db_dir / "index.db")
     monkeypatch.setenv("PWD", "/home/operator/proj-a")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
         server.mcp.call_tool("find_failed_attempts", {"pattern": "provider-x"})
@@ -423,8 +546,7 @@ def test_find_failed_attempts_returns_paired_rejection(tmp_db_dir, fake_index_qu
 
 def test_prior_sessions_for_cwd_lists_sessions(tmp_db_dir, fake_index_query):
     _seed_corpus(tmp_db_dir / "index.db")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
         server.mcp.call_tool("prior_sessions_for_cwd", {"cwd": "/home/operator/proj-a"})
@@ -443,8 +565,7 @@ def test_prior_sessions_for_cwd_falls_back_when_cwd_unknown(
     """No explicit cwd + unknown current cwd -> retry all_projects + _meta."""
     _seed_corpus(tmp_db_dir / "index.db")
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(server.mcp.call_tool("prior_sessions_for_cwd", {}))
     rows = structured["result"]
@@ -457,8 +578,7 @@ def test_prior_sessions_for_cwd_falls_back_when_cwd_unknown(
 def test_prior_sessions_for_cwd_explicit_cwd_no_fallback(tmp_db_dir, fake_index_query, monkeypatch):
     """An explicit unknown cwd returns empty — no all_projects fallback."""
     _seed_corpus(tmp_db_dir / "index.db")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
         server.mcp.call_tool("prior_sessions_for_cwd", {"cwd": "/home/operator/proj-not-in-index"})
@@ -470,8 +590,7 @@ def test_prior_sessions_for_cwd_explicit_cwd_no_fallback(tmp_db_dir, fake_index_
 
 def test_search_messages_falls_through_to_fts(tmp_db_dir, fake_index_query):
     _seed_corpus(tmp_db_dir / "index.db")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
         server.mcp.call_tool(
@@ -486,8 +605,7 @@ def test_search_messages_falls_through_to_fts(tmp_db_dir, fake_index_query):
 
 def test_get_session_digest_assembles_digest(tmp_db_dir, fake_index_query):
     _seed_corpus(tmp_db_dir / "index.db")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     result = asyncio.run(server.mcp.call_tool("get_session_digest", {"session_id": "s1"}))
     content = result[0] if isinstance(result, (list, tuple)) else result
@@ -515,8 +633,7 @@ def test_recall_falls_back_to_all_projects_when_this_cwd_empty(
     _seed_corpus(tmp_db_dir / "index.db")
     # Point the MCP child at a cwd that has zero indexed extractions.
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
 
     _, structured = asyncio.run(
@@ -541,8 +658,7 @@ def test_recall_no_fallback_meta_when_this_cwd_has_hits(tmp_db_dir, fake_index_q
     — the model treats `_meta` as a 'fell back' signal."""
     _seed_corpus(tmp_db_dir / "index.db")
     monkeypatch.setenv("PWD", "/home/operator/proj-a")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
         server.mcp.call_tool("recall", {"topic": "provider-x", "scope": "this_cwd", "limit": 10})
@@ -556,8 +672,7 @@ def test_recall_no_fallback_meta_when_this_cwd_has_hits(tmp_db_dir, fake_index_q
 def test_search_messages_falls_back_to_all_projects(tmp_db_dir, fake_index_query, monkeypatch):
     _seed_corpus(tmp_db_dir / "index.db")
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(server.mcp.call_tool("search_messages", {"query": "provider-x"}))
     rows = structured["result"]
@@ -570,8 +685,7 @@ def test_search_messages_falls_back_to_all_projects(tmp_db_dir, fake_index_query
 def test_find_failed_attempts_falls_back_when_cwd_empty(tmp_db_dir, fake_index_query, monkeypatch):
     _seed_corpus(tmp_db_dir / "index.db")
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
         server.mcp.call_tool("find_failed_attempts", {"pattern": "provider-x"})
@@ -588,8 +702,7 @@ def test_find_user_preferences_falls_back_when_this_cwd_empty(
 ):
     _seed_corpus(tmp_db_dir / "index.db")
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
         server.mcp.call_tool("find_user_preferences", {"scope": "this_cwd", "domain": "provider-x"})
@@ -624,8 +737,7 @@ def test_session_digest_returns_populated_meta(tmp_db_dir, fake_index_query, mon
 
     fake_index_query.get_session_meta = fake_get_session_meta  # type: ignore[attr-defined]
 
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
 
     result = asyncio.run(server.mcp.call_tool("get_session_digest", {"session_id": "s1"}))
@@ -647,8 +759,7 @@ def test_session_digest_returns_populated_meta(tmp_db_dir, fake_index_query, mon
 def test_session_digest_returns_error_when_session_unknown(tmp_db_dir, fake_index_query):
     """No `sessions` row and no messages for the id → clear error payload."""
     _seed_corpus(tmp_db_dir / "index.db")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
     result = asyncio.run(
         server.mcp.call_tool("get_session_digest", {"session_id": "no-such-session-id"})
@@ -669,8 +780,7 @@ def test_mcp_tool_emits_event_on_success(tmp_db_dir, fake_index_query, monkeypat
     """Each MCP tool invocation must emit one NDJSON event with elapsed_ms,
     topic_len (when a topic kwarg is present), and hits (when list-shaped)."""
     _seed_corpus(tmp_db_dir / "index.db")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     tools = importlib.import_module("mcp_server.tools")
 
     captured: list[tuple[str, dict]] = []
@@ -702,8 +812,7 @@ def test_mcp_tool_emits_event_on_error(tmp_db_dir, fake_index_query, monkeypatch
     """When the wrapped tool raises, the event must still be emitted with
     `error=<ExcClassName>` and a populated elapsed_ms."""
     _seed_corpus(tmp_db_dir / "index.db")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     tools = importlib.import_module("mcp_server.tools")
 
     captured: list[tuple[str, dict]] = []
@@ -738,8 +847,7 @@ def test_emit_never_breaks_tool(tmp_db_dir, fake_index_query, monkeypatch):
     _traced wrapper traps emit exceptions so observability can never break
     the host."""
     _seed_corpus(tmp_db_dir / "index.db")
-    for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
-        sys.modules.pop(mod, None)
+    _clear_mcp_modules()
     tools = importlib.import_module("mcp_server.tools")
 
     def angry_emit(event, **kwargs):
