@@ -33,6 +33,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+from weakref import WeakKeyDictionary
 
 from index.paths import project_key
 
@@ -81,13 +82,11 @@ class BackfillReport:
 # ----------------------------------------------------------------------------
 
 
-# Track connections that already have sqlite-vec loaded, so `_load_sqlite_vec`
-# is safe (and cheap) to call at the top of every public entry point. Keyed by
-# `id(conn)` — entries are dropped automatically when the underlying connection
-# object is GC'd (we use a WeakSet of wrappers? no — id() is stable for the
-# lifetime of the conn and we accept some staleness if a conn is closed and a
-# new one happens to get the same id; load is idempotent anyway).
-_loaded: set[int] = set()
+# Track connections that already have sqlite-vec loaded. WeakKeyDictionary
+# keys on the connection object itself so GC + id-reuse cannot leave a
+# stale "already loaded" entry that skips load on a fresh connection
+# (that bug produced `no such module: vec0` on GitHub ubuntu-latest/py3.10).
+_loaded: WeakKeyDictionary = WeakKeyDictionary()
 
 
 def _load_sqlite_vec(conn: sqlite3.Connection) -> None:
@@ -101,7 +100,7 @@ def _load_sqlite_vec(conn: sqlite3.Connection) -> None:
     a `RuntimeError` if the sqlite build can't load extensions (e.g. some
     distro builds disable `enable_load_extension`).
     """
-    if id(conn) in _loaded:
+    if conn in _loaded:
         return
 
     try:
@@ -123,7 +122,7 @@ def _load_sqlite_vec(conn: sqlite3.Connection) -> None:
         with contextlib.suppress(Exception):  # pragma: no cover - best-effort
             conn.enable_load_extension(False)
 
-    _loaded.add(id(conn))
+    _loaded[conn] = True
 
 
 def _parse_ts(raw: object) -> datetime:
