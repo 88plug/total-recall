@@ -283,22 +283,14 @@ def sources_list(ctx: click.Context) -> None:
             "name": r["name"],
             "enabled": "yes" if r["enabled"] else "no",
             "registered": "yes" if r["registered"] else "no",
-            "available": (
-                "yes" if r["is_available"] else ("no" if r["available_known"] else "?")
-            ),
+            "available": ("yes" if r["is_available"] else ("no" if r["available_known"] else "?")),
         }
         for r in rows
     ]
-    click.echo(
-        format_table(
-            table_rows, headers=["name", "enabled", "registered", "available"]
-        )
-    )
+    click.echo(format_table(table_rows, headers=["name", "enabled", "registered", "available"]))
 
 
-@sources_cmd.command(
-    "detect", help="Scan and report only sources that have detectable data."
-)
+@sources_cmd.command("detect", help="Scan and report only sources that have detectable data.")
 @click.pass_context
 def sources_detect(ctx: click.Context) -> None:
     cfg = _load_config()
@@ -345,9 +337,7 @@ def sources_disable(ctx: click.Context, name: str) -> None:
 
 def _toggle(ctx: click.Context, name: str, *, enable: bool) -> None:
     if name not in KNOWN_SOURCES:
-        msg = (
-            f"Unknown source {name!r}. Known: {', '.join(KNOWN_SOURCES)}."
-        )
+        msg = f"Unknown source {name!r}. Known: {', '.join(KNOWN_SOURCES)}."
         if bool(ctx.obj and ctx.obj.get("json")):
             click.echo(format_json({"ok": False, "error": msg}))
         else:
@@ -402,8 +392,8 @@ def sources_test(ctx: click.Context, name: str, max_count: int) -> None:
     registry = _load_sources()
     src = registry.get(name)
     available = _is_available(src)
-    count = _count_sessions(src, limit=max_count) if available else (
-        0 if available is False else None
+    count = (
+        _count_sessions(src, limit=max_count) if available else (0 if available is False else None)
     )
 
     payload = {
@@ -483,9 +473,7 @@ def sources_verify(ctx: click.Context, max_count: int) -> None:
             "name": r["name"],
             "enabled": "yes" if r["enabled"] else "no",
             "registered": "yes" if r["registered"] else "no",
-            "available": (
-                "yes" if r["is_available"] else ("no" if r["available_known"] else "?")
-            ),
+            "available": ("yes" if r["is_available"] else ("no" if r["available_known"] else "?")),
             "sessions": ("?" if r["session_count"] is None else str(r["session_count"])),
         }
         for r in rows

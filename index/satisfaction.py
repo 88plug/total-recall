@@ -52,19 +52,23 @@ CREATE TABLE IF NOT EXISTS satisfaction_meta (
 );
 """
 
-_PRAISE_REACTIONS = frozenset({
-    "praise_quality",
-    "praise_launch",
-    "silent_accept",
-})
+_PRAISE_REACTIONS = frozenset(
+    {
+        "praise_quality",
+        "praise_launch",
+        "silent_accept",
+    }
+)
 
-_FRUSTRATION_REACTIONS = frozenset({
-    "frustration_drift",
-    "frustration_broke",
-    "frustration_wtf",
-    "frustration_scope",
-    "frustration_verbosity",
-})
+_FRUSTRATION_REACTIONS = frozenset(
+    {
+        "frustration_drift",
+        "frustration_broke",
+        "frustration_wtf",
+        "frustration_scope",
+        "frustration_verbosity",
+    }
+)
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
@@ -162,9 +166,7 @@ def get_satisfaction_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     """
     ensure_schema(conn)
 
-    rows = conn.execute(
-        "SELECT reaction, ai_behavior, count FROM satisfaction_profile"
-    ).fetchall()
+    rows = conn.execute("SELECT reaction, ai_behavior, count FROM satisfaction_profile").fetchall()
 
     matrix: dict[str, dict[str, int]] = {}
     praise_totals: dict[str, int] = {}
@@ -187,9 +189,7 @@ def get_satisfaction_summary(conn: sqlite3.Connection) -> dict[str, Any]:
 
     top_praise = max(praise_totals, key=lambda k: praise_totals[k]) if praise_totals else None
     top_frustration = (
-        max(frustration_totals, key=lambda k: frustration_totals[k])
-        if frustration_totals
-        else None
+        max(frustration_totals, key=lambda k: frustration_totals[k]) if frustration_totals else None
     )
 
     meta_row = conn.execute(

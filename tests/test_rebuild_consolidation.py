@@ -6,6 +6,7 @@ scalars (e.g. a handle decided by one noisy file). `rebuild` runs a final
 single-pass consolidation over the whole corpus so the persisted profile
 matches the global full-pass extraction. These tests pin that guarantee.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,7 +26,9 @@ from total_recall.__main__ import cli
 
 def _user(text: str, cwd: str, sid: str) -> dict:
     return {
-        "type": "user", "sessionId": sid, "cwd": cwd,
+        "type": "user",
+        "sessionId": sid,
+        "cwd": cwd,
         "timestamp": "2026-05-01T10:00:00Z",
         "message": {"role": "user", "content": text},
     }
@@ -33,10 +36,14 @@ def _user(text: str, cwd: str, sid: str) -> dict:
 
 def _assistant(text: str, cwd: str, sid: str) -> dict:
     return {
-        "type": "assistant", "sessionId": sid, "cwd": cwd,
+        "type": "assistant",
+        "sessionId": sid,
+        "cwd": cwd,
         "timestamp": "2026-05-01T10:00:01Z",
         "message": {
-            "id": "m", "model": "claude-opus-4-7", "role": "assistant",
+            "id": "m",
+            "model": "claude-opus-4-7",
+            "role": "assistant",
             "content": [{"type": "text", "text": text}],
         },
     }
@@ -67,8 +74,7 @@ def _build_corpus(tmp_path: Path) -> Path:
     cwd_b = "/home/dana/proj-b"
 
     noisy = (
-        "look at github.com/widgetlib — github.com/widgetlib is great, "
-        "github.com/widgetlib again"
+        "look at github.com/widgetlib — github.com/widgetlib is great, github.com/widgetlib again"
     )
     recs_a = [_user(noisy, cwd_a, sid_a), _assistant(noisy, cwd_a, sid_a)] * 3
 
@@ -76,7 +82,8 @@ def _build_corpus(tmp_path: Path) -> Path:
         _user(
             "im dana, email dana@novabox.io. see github.com/dana. "
             "timezone Europe/Berlin. note that Jc/Jmin/Jmax is a code path, not a zone.",
-            cwd_b, sid_b,
+            cwd_b,
+            sid_b,
         ),
         _assistant("confirmed dana@novabox.io, github.com/dana", cwd_b, sid_b),
     ]
@@ -123,8 +130,19 @@ def test_rebuild_timezone_never_garbage(tmp_path: Path) -> None:
     # Never the code-fragment garbage; must be empty or a real IANA zone/abbrev.
     assert "Jc" not in tz and "Jmin" not in tz and "Jmax" not in tz
     valid_prefixes = {
-        "Africa", "America", "Antarctica", "Arctic", "Asia", "Atlantic",
-        "Australia", "Europe", "Indian", "Pacific", "US", "Etc", "GMT",
+        "Africa",
+        "America",
+        "Antarctica",
+        "Arctic",
+        "Asia",
+        "Atlantic",
+        "Australia",
+        "Europe",
+        "Indian",
+        "Pacific",
+        "US",
+        "Etc",
+        "GMT",
     }
     if tz and "/" in tz:
         assert tz.split("/")[0] in valid_prefixes, f"non-IANA timezone persisted: {tz!r}"
@@ -196,9 +214,7 @@ def test_from_records_multi_source_opencode_signal_surfaces() -> None:
             "github.com/petranx is my profile. "
             "We run on Asia/Kolkata time. Never use heroku."
         ),
-        _opencode_asst(
-            "Got it — petra@tessaract.dev, github.com/petranx, Asia/Kolkata."
-        ),
+        _opencode_asst("Got it — petra@tessaract.dev, github.com/petranx, Asia/Kolkata."),
         _opencode_dict("Confirmed: petra@tessaract.dev is correct."),
         _opencode_asst("Your primary handle is github.com/petranx."),
     ]
@@ -212,9 +228,7 @@ def test_from_records_multi_source_opencode_signal_surfaces() -> None:
     assert profile.email_primary == "petra@tessaract.dev", (
         f"Expected 'petra@tessaract.dev', got {profile.email_primary!r}"
     )
-    assert profile.timezone == "Asia/Kolkata", (
-        f"Expected 'Asia/Kolkata', got {profile.timezone!r}"
-    )
+    assert profile.timezone == "Asia/Kolkata", f"Expected 'Asia/Kolkata', got {profile.timezone!r}"
     assert "heroku" in profile.banned_providers, (
         "banned_providers must include 'heroku' from opencode records"
     )
@@ -246,8 +260,7 @@ def test_from_records_mixed_sources_consolidates_to_global_winner() -> None:
 
     signal_oc = [
         _opencode_dict(
-            "im petra, email petra@tessaract.dev. see github.com/petranx. "
-            "timezone Asia/Kolkata."
+            "im petra, email petra@tessaract.dev. see github.com/petranx. timezone Asia/Kolkata."
         ),
         _opencode_asst("confirmed petra@tessaract.dev, github.com/petranx"),
     ]
@@ -260,6 +273,4 @@ def test_from_records_mixed_sources_consolidates_to_global_winner() -> None:
         f"Consolidation let noisylib win — email-corroboration logic broken for "
         f"multi-source input (got handle={handle!r})"
     )
-    assert handle in ("petranx", "tessaract"), (
-        f"Expected corroborated handle, got {handle!r}"
-    )
+    assert handle in ("petranx", "tessaract"), f"Expected corroborated handle, got {handle!r}"

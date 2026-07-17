@@ -376,9 +376,7 @@ class OpenCodeSource(SessionSource):
             # `project`); older builds used the camelCase `*Table` form.
             # Try the modern shape first; fall back to legacy.
             try:
-                cur = conn.execute(
-                    "SELECT session_id, MIN(id) FROM message GROUP BY session_id"
-                )
+                cur = conn.execute("SELECT session_id, MIN(id) FROM message GROUP BY session_id")
             except sqlite3.Error:
                 try:
                     cur = conn.execute(
@@ -436,17 +434,11 @@ class OpenCodeSource(SessionSource):
                         info_obj = None
                     if isinstance(info_obj, dict):
                         cwd = (
-                            info_obj.get("directory")
-                            or info_obj.get("path")
-                            or info_obj.get("cwd")
+                            info_obj.get("directory") or info_obj.get("path") or info_obj.get("cwd")
                         )
                         proj = info_obj.get("project")
                         if not cwd and isinstance(proj, dict):
-                            cwd = (
-                                proj.get("directory")
-                                or proj.get("path")
-                                or proj.get("worktree")
-                            )
+                            cwd = proj.get("directory") or proj.get("path") or proj.get("worktree")
                 out[str(sid)] = cwd
             if out:
                 return out
@@ -486,18 +478,10 @@ class OpenCodeSource(SessionSource):
                     with session_file.open() as f:
                         data = json.load(f)
                     if isinstance(data, dict):
-                        cwd = (
-                            data.get("directory")
-                            or data.get("path")
-                            or data.get("cwd")
-                        )
+                        cwd = data.get("directory") or data.get("path") or data.get("cwd")
                         proj = data.get("project")
                         if not cwd and isinstance(proj, dict):
-                            cwd = (
-                                proj.get("directory")
-                                or proj.get("path")
-                                or proj.get("worktree")
-                            )
+                            cwd = proj.get("directory") or proj.get("path") or proj.get("worktree")
                 except (OSError, json.JSONDecodeError):
                     pass
                 try:
@@ -555,8 +539,7 @@ class OpenCodeSource(SessionSource):
             except sqlite3.Error:
                 try:
                     msg_cur = conn.execute(
-                        "SELECT id, role, info FROM MessageTable "
-                        "WHERE sessionID = ? ORDER BY id",
+                        "SELECT id, role, info FROM MessageTable WHERE sessionID = ? ORDER BY id",
                         (session.session_id,),
                     )
                     msg_rows = msg_cur.fetchall()
@@ -574,8 +557,7 @@ class OpenCodeSource(SessionSource):
             except sqlite3.Error:
                 try:
                     part_cur = conn.execute(
-                        "SELECT messageID, info FROM PartTable "
-                        "WHERE sessionID = ? ORDER BY id",
+                        "SELECT messageID, info FROM PartTable WHERE sessionID = ? ORDER BY id",
                         (session.session_id,),
                     )
                     part_rows = part_cur.fetchall()
@@ -599,17 +581,15 @@ class OpenCodeSource(SessionSource):
                     continue
                 try:
                     info_obj = (
-                        json.loads(info_blob)
-                        if isinstance(info_blob, str)
-                        else (info_blob or {})
+                        json.loads(info_blob) if isinstance(info_blob, str) else (info_blob or {})
                     )
                 except json.JSONDecodeError:
                     info_obj = {}
                 # 2026 schema embeds role inside data JSON; legacy had it
                 # as a top-level column. Prefer the data-embedded one.
                 resolved_role = (
-                    info_obj.get("role") if isinstance(info_obj, dict) else None
-                ) or role or "user"
+                    (info_obj.get("role") if isinstance(info_obj, dict) else None) or role or "user"
+                )
                 parts = parts_by_msg.get(str(mid), [])
                 rec = _opencode_to_record(
                     info_obj,

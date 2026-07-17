@@ -44,8 +44,7 @@ class ClaudeCodeSource(SessionSource):
 
     def __init__(self, projects_root: Path | None = None) -> None:
         self.projects_root = (
-            projects_root if projects_root is not None
-            else Path.home() / ".claude" / "projects"
+            projects_root if projects_root is not None else Path.home() / ".claude" / "projects"
         )
 
     def is_available(self) -> bool:

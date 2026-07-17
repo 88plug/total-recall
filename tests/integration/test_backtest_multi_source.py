@@ -120,29 +120,38 @@ def test_synthetic_per_source_tagging() -> None:
     conn = _open_fresh_db()
 
     sources_and_records = [
-        ("claude_code", [
-            _make_user_record("user asked something", session_id="sess-cc"),
-            _make_assistant_record("assistant replied", session_id="sess-cc"),
-        ]),
-        ("opencode", [
-            _make_user_record(
-                "opencode user turn",
-                session_id="sess-oc",
-                cwd="/home/dana/oc-proj",
-            ),
-            _make_assistant_record(
-                "opencode assistant turn",
-                session_id="sess-oc",
-                cwd="/home/dana/oc-proj",
-            ),
-        ]),
-        ("codex", [
-            _make_user_record(
-                "codex user message",
-                session_id="sess-cx",
-                cwd="/home/dana/cx-proj",
-            ),
-        ]),
+        (
+            "claude_code",
+            [
+                _make_user_record("user asked something", session_id="sess-cc"),
+                _make_assistant_record("assistant replied", session_id="sess-cc"),
+            ],
+        ),
+        (
+            "opencode",
+            [
+                _make_user_record(
+                    "opencode user turn",
+                    session_id="sess-oc",
+                    cwd="/home/dana/oc-proj",
+                ),
+                _make_assistant_record(
+                    "opencode assistant turn",
+                    session_id="sess-oc",
+                    cwd="/home/dana/oc-proj",
+                ),
+            ],
+        ),
+        (
+            "codex",
+            [
+                _make_user_record(
+                    "codex user message",
+                    session_id="sess-cx",
+                    cwd="/home/dana/cx-proj",
+                ),
+            ],
+        ),
     ]
 
     for source, records in sources_and_records:
@@ -161,8 +170,7 @@ def test_synthetic_per_source_tagging() -> None:
 
     # All three sources must appear.
     sources_in_db = {
-        row[0]
-        for row in conn.execute("SELECT DISTINCT source FROM messages").fetchall()
+        row[0] for row in conn.execute("SELECT DISTINCT source FROM messages").fetchall()
     }
     assert sources_in_db == {"claude_code", "opencode", "codex"}, (
         f"Expected all three sources; got {sources_in_db}"
@@ -170,9 +178,7 @@ def test_synthetic_per_source_tagging() -> None:
 
     # Non-CC row counts must each be > 0.
     for src in ("opencode", "codex"):
-        count = conn.execute(
-            "SELECT COUNT(*) FROM messages WHERE source = ?", (src,)
-        ).fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) FROM messages WHERE source = ?", (src,)).fetchone()[0]
         assert count > 0, f"Expected >0 rows for source={src!r}, got {count}"
 
 
@@ -253,9 +259,7 @@ def test_synthetic_cross_source_dedup() -> None:
     assert suppressed_opencode == 1, (
         f"Expected opencode row to be suppressed (codex wins); got suppressed={suppressed_opencode}"
     )
-    assert len(kept_opencode) == 0, (
-        "Suppressed row should not appear in kept list"
-    )
+    assert len(kept_opencode) == 0, "Suppressed row should not appear in kept list"
     # The seen dict should still record codex as the winner.
     assert all(v == "codex" for v in seen.values()), (
         "codex should remain the owner of the dedup key after opencode pass"
@@ -320,16 +324,13 @@ def test_synthetic_profile_sees_non_cc_source() -> None:
 
     # The profile must have captured "Dana Vo" from the opencode session.
     assert profile.name and "Dana" in profile.name and "Vo" in profile.name, (
-        f"Expected profile.name to contain 'Dana Vo' (from opencode session); "
-        f"got {profile.name!r}"
+        f"Expected profile.name to contain 'Dana Vo' (from opencode session); got {profile.name!r}"
     )
 
     # The profile must have captured "oc-box" as a machine.
     # machines is a dict keyed by hostname.
     machine_keys = set(profile.machines.keys())
-    assert "oc-box" in machine_keys, (
-        f"Expected 'oc-box' in profile.machines; got {machine_keys!r}"
-    )
+    assert "oc-box" in machine_keys, f"Expected 'oc-box' in profile.machines; got {machine_keys!r}"
 
 
 # ---------------------------------------------------------------------------

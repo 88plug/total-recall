@@ -9,6 +9,7 @@ plugin.json is deliberately version-less (rolling regime — the marketplace
 auto-stamps a YEAR.MONTH.BUILD version from the commit count), so it is excluded
 from the agreement check; a separate test guards that it stays version-less.
 """
+
 from __future__ import annotations
 
 import json

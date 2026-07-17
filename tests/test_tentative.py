@@ -50,9 +50,16 @@ def test_ensure_schema_is_idempotent(db):
     ensure_schema(db)
     cols = {r["name"] for r in db.execute("PRAGMA table_info(tentative_facts)")}
     assert {
-        "id", "key", "value", "source_kind", "source_uuid",
-        "evidence_count", "first_seen_ts", "last_seen_ts",
-        "promoted_at", "dropped_at",
+        "id",
+        "key",
+        "value",
+        "source_kind",
+        "source_uuid",
+        "evidence_count",
+        "first_seen_ts",
+        "last_seen_ts",
+        "promoted_at",
+        "dropped_at",
     }.issubset(cols)
 
 
@@ -85,8 +92,8 @@ def test_add_tentative_bumps_count_on_repeat(db):
     add_tentative(db, "email_primary", "x@y", "explicit_user_assertion", "u3", ts=3000)
     row = db.execute("SELECT * FROM tentative_facts WHERE key='email_primary'").fetchone()
     assert row["evidence_count"] == 3
-    assert row["first_seen_ts"] == 1000   # first_seen is frozen
-    assert row["last_seen_ts"] == 3000    # last_seen tracks the newest
+    assert row["first_seen_ts"] == 1000  # first_seen is frozen
+    assert row["last_seen_ts"] == 3000  # last_seen tracks the newest
     # Most-recent citation wins so a downstream promotion has the freshest source.
     assert row["source_kind"] == "explicit_user_assertion"
     assert row["source_uuid"] == "u3"
@@ -115,9 +122,7 @@ def test_promote_eligible_requires_time_spread(db):
     # Two mentions within seconds → not enough spread → still tentative.
     add_tentative(db, "k", "v", "inferred_from_mention", "u1", ts=1_000_000)
     add_tentative(db, "k", "v", "inferred_from_mention", "u2", ts=1_000_005)
-    promoted = promote_eligible(
-        db, threshold=2, ttl_days=30, min_spread_s=HOUR, now_ts=1_000_010
-    )
+    promoted = promote_eligible(db, threshold=2, ttl_days=30, min_spread_s=HOUR, now_ts=1_000_010)
     assert promoted == []
 
 
@@ -173,13 +178,13 @@ def test_promote_eligible_ignores_already_promoted_rows(db):
 
 def test_drop_expired_only_touches_old_rows(db):
     # Two rows, one old, one fresh.
-    add_tentative(db, "old",   "v", "inferred_from_mention", "u1", ts=1_000_000)
+    add_tentative(db, "old", "v", "inferred_from_mention", "u1", ts=1_000_000)
     add_tentative(db, "fresh", "v", "inferred_from_mention", "u2", ts=2_000_000)
     n_dropped = drop_expired(db, ttl_days=10, now_ts=2_000_000)
     assert n_dropped == 1
-    rows = {r["key"]: r["dropped_at"] for r in db.execute(
-        "SELECT key, dropped_at FROM tentative_facts"
-    )}
+    rows = {
+        r["key"]: r["dropped_at"] for r in db.execute("SELECT key, dropped_at FROM tentative_facts")
+    }
     assert rows["old"] == 2_000_000
     assert rows["fresh"] is None
 
@@ -212,9 +217,7 @@ def test_add_supersession_columns_adds_to_existing_tables(db):
         );
         """
     )
-    result = add_supersession_columns(
-        db, tables=("operator_profile", "bans", "nonexistent_table")
-    )
+    result = add_supersession_columns(db, tables=("operator_profile", "bans", "nonexistent_table"))
 
     op_cols = {r["name"] for r in db.execute("PRAGMA table_info(operator_profile)")}
     ban_cols = {r["name"] for r in db.execute("PRAGMA table_info(bans)")}
@@ -224,11 +227,11 @@ def test_add_supersession_columns_adds_to_existing_tables(db):
 
     # Migration reports which columns it actually added.
     assert set(result["operator_profile"]) == {
-        "superseded_at", "superseded_by_id", "evidence_count"
+        "superseded_at",
+        "superseded_by_id",
+        "evidence_count",
     }
-    assert set(result["bans"]) == {
-        "superseded_at", "superseded_by_id", "evidence_count"
-    }
+    assert set(result["bans"]) == {"superseded_at", "superseded_by_id", "evidence_count"}
     # And it silently skips tables that don't exist.
     assert "nonexistent_table" not in result
 

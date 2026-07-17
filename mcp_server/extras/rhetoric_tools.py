@@ -101,9 +101,7 @@ def _row_to_assertion(row: Any) -> dict:
         "category": context.get("category"),
         "assertion": d.get("content"),
         "preceding_assistant_uuid": context.get("preceding_assistant_uuid"),
-        "preceding_assistant_text_excerpt": context.get(
-            "preceding_assistant_text_excerpt"
-        ),
+        "preceding_assistant_text_excerpt": context.get("preceding_assistant_text_excerpt"),
         "severity": severity,
         "session_id": d.get("session_id"),
         "cwd": d.get("cwd"),
@@ -123,19 +121,14 @@ def get_past_truth_assertions(
     category: str | None = None,
     limit: int = 5,
 ) -> list[dict]:
-    (
-        "Return past moments where the operator pushed back hard. Categories: restatement, "
-        "quote_back, standing_rule, past_logs_appeal, drift_callout, capability_insult, "
-        "verify_yourself_push. Use this to recognize when the model is about to repeat a "
-        "pattern that already triggered a hard correction."
-    )
+    """
+    Return past moments where the operator pushed back hard. Categories: restatement,
+    quote_back, standing_rule, past_logs_appeal, drift_callout, capability_insult,
+    verify_yourself_push. Use this to recognize when the model is about to repeat a pattern
+    that already triggered a hard correction.
+    """
     if category is not None and category not in _VALID_CATEGORIES:
-        return [
-            {
-                "error": f"unknown category {category!r}; "
-                f"valid: {sorted(_VALID_CATEGORIES)}"
-            }
-        ]
+        return [{"error": f"unknown category {category!r}; valid: {sorted(_VALID_CATEGORIES)}"}]
 
     conn = get_conn()
     if conn is None:
@@ -168,9 +161,7 @@ def get_past_truth_assertions(
             hits = [
                 h
                 for h in hits
-                if (
-                    h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None)
-                )
+                if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None))
                 == "truth_assertion"
             ]
     except Exception as e:

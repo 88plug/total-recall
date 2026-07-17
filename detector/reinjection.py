@@ -36,18 +36,18 @@ from dataclasses import dataclass, field
 class SessionState:
     cwd: str
     prev_cwd: str | None
-    last_inject_ts: float                   # unix seconds of last memory push (0 if never)
+    last_inject_ts: float  # unix seconds of last memory push (0 if never)
     turns_since_inject: int
-    post_compact: bool                      # PostCompact hook fired this session, not yet consumed
-    project_known: bool                     # cwd present in total-recall index
-    last_assistant_was_tool_heavy: bool     # >50% of last response was tool_use blocks
-    silence_seconds: float                  # gap between last assistant turn and this user turn
-    same_topic_streak: int                  # consecutive turns on same goal/scope
-    escalation_risk: int                    # from detector.escalation (0-10)
+    post_compact: bool  # PostCompact hook fired this session, not yet consumed
+    project_known: bool  # cwd present in total-recall index
+    last_assistant_was_tool_heavy: bool  # >50% of last response was tool_use blocks
+    silence_seconds: float  # gap between last assistant turn and this user turn
+    same_topic_streak: int  # consecutive turns on same goal/scope
+    escalation_risk: int  # from detector.escalation (0-10)
     escalation_triggers: list[str] = field(default_factory=list)
 
 
-CACHE_FRESH_SECONDS = 300       # 5-min Anthropic TTL
+CACHE_FRESH_SECONDS = 300  # 5-min Anthropic TTL
 HARD_RISK = 5
 SOFT_RISK = 3
 MAX_INJECTIONS_PER_SESSION = 6  # R4 hard cap

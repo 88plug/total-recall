@@ -349,15 +349,18 @@ def test_iter_records_malformed_file_yields_nothing(tmp_path):
 
 def test_adapter_in_registry_after_import():
     import lib.sources.cline  # noqa: F401
+
     assert ClineSource in SOURCES
 
 
 def test_source_by_name_returns_cline():
     import lib.sources.cline  # noqa: F401
+
     src = source_by_name("cline")
     assert isinstance(src, ClineSource)
 
 
 def test_all_sources_includes_cline():
     import lib.sources.cline  # noqa: F401
+
     assert any(isinstance(s, ClineSource) for s in all_sources())

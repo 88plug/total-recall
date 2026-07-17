@@ -8,6 +8,7 @@ flaking when other WTs land.
 
 Tests are read-only on the corpus. Never write into ~/.claude/projects.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -21,9 +22,7 @@ import sys
 import pytest
 
 CORPUS = pathlib.Path("~/.claude/projects").expanduser()
-pytestmark = pytest.mark.skipif(
-    not CORPUS.exists(), reason="no corpus on this machine"
-)
+pytestmark = pytest.mark.skipif(not CORPUS.exists(), reason="no corpus on this machine")
 
 
 def _try_import(modpath: str):
@@ -209,15 +208,11 @@ def test_index_full_ingest_smoke(
 
     conn = sqlite3.connect(str(db_path))
     try:
-        rows = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         names = {r[0] for r in rows}
         # Some table for content should exist
         assert names, "ingested DB has no tables"
-        msg_table = next(
-            (t for t in ("messages", "records", "turns") if t in names), None
-        )
+        msg_table = next((t for t in ("messages", "records", "turns") if t in names), None)
         if msg_table is None:
             pytest.skip(f"DB schema unknown — tables: {names}")
         n = conn.execute(f"SELECT COUNT(*) FROM {msg_table}").fetchone()[0]
@@ -397,9 +392,7 @@ def test_cli_index_full_on_tiny_fixture_exits_zero(
         str(fixture_root),
     ]
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60, env=env
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
     except subprocess.TimeoutExpired:
         pytest.fail("total-recall index timed out on tiny fixture")
     except FileNotFoundError:
@@ -437,9 +430,7 @@ def test_vec_cli_search_clean_error_without_extras(tmp_path: pathlib.Path):
         "3",
     ]
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60, env=env
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
     except subprocess.TimeoutExpired:
         pytest.fail("vec.cli search timed out")
     except FileNotFoundError:
@@ -464,6 +455,5 @@ def test_vec_cli_search_clean_error_without_extras(tmp_path: pathlib.Path):
         )
         # No raw Python tracebacks should leak — that's the F3 fix.
         assert "Traceback (most recent call last)" not in result.stderr, (
-            f"vec.cli leaked a traceback instead of a clean error:\n"
-            f"{result.stderr[:500]}"
+            f"vec.cli leaked a traceback instead of a clean error:\n{result.stderr[:500]}"
         )

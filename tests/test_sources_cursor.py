@@ -75,9 +75,7 @@ def cursor_home(tmp_path: Path) -> Path:
                 "timestamp": "2026-05-24T10:00:01Z",
                 "role": "assistant",
                 "model": "claude-opus-4-7",
-                "content": [
-                    {"type": "text", "text": "running wg show"}
-                ],
+                "content": [{"type": "text", "text": "running wg show"}],
                 "usage": {"input_tokens": 10, "output_tokens": 5},
             },
             {
@@ -375,9 +373,7 @@ def _fake_session(cwd: str | None = None) -> SessionFile:
 def test_translate_assistant_string_content():
     """Cursor sometimes emits assistant content as a bare string."""
     sess = _fake_session()
-    rec = _cursor_line_to_record(
-        {"id": "x", "role": "assistant", "content": "hello"}, sess
-    )
+    rec = _cursor_line_to_record({"id": "x", "role": "assistant", "content": "hello"}, sess)
     assert isinstance(rec, AssistantRecord)
     assert len(rec.content) == 1
     assert rec.content[0].type == "text"
@@ -435,18 +431,14 @@ def test_translate_epoch_and_iso_timestamps():
 def test_translate_propagates_session_cwd(cursor_home: Path):
     """If the operator did manage to set cwd on the SessionFile, use it."""
     sess = _fake_session(cwd="/home/operator/myproj")
-    rec = _cursor_line_to_record(
-        {"id": "1", "role": "user", "content": "x"}, sess
-    )
+    rec = _cursor_line_to_record({"id": "1", "role": "user", "content": "x"}, sess)
     assert rec.cwd == "/home/operator/myproj"
     assert rec.session_id == "sess-1"
 
 
 def test_translate_non_string_id_coerced():
     sess = _fake_session()
-    rec = _cursor_line_to_record(
-        {"id": 42, "role": "user", "content": "x"}, sess
-    )
+    rec = _cursor_line_to_record({"id": 42, "role": "user", "content": "x"}, sess)
     assert rec.uuid == "42"
 
 
@@ -484,24 +476,24 @@ def _make_vscdb(
 
     if item_table_only:
         # Legacy workspace DB — only ItemTable
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT)"
-        )
+        conn.execute("CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT)")
         conn.execute(
             "INSERT INTO ItemTable VALUES (?, ?)",
             (
                 "workbench.panel.aichat.view.aichat.chatdata",
-                json.dumps({
-                    "tabs": [
-                        {
-                            "id": "tab-1",
-                            "bubbles": [
-                                {"type": 1, "text": "hello from legacy", "bubbleId": "lb-1"},
-                                {"type": 2, "text": "hi back", "bubbleId": "lb-2"},
-                            ],
-                        }
-                    ]
-                }),
+                json.dumps(
+                    {
+                        "tabs": [
+                            {
+                                "id": "tab-1",
+                                "bubbles": [
+                                    {"type": 1, "text": "hello from legacy", "bubbleId": "lb-1"},
+                                    {"type": 2, "text": "hi back", "bubbleId": "lb-2"},
+                                ],
+                            }
+                        ]
+                    }
+                ),
             ),
         )
         conn.commit()
@@ -509,9 +501,7 @@ def _make_vscdb(
         return vscdb
 
     # Modern DB — cursorDiskKV
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS cursorDiskKV (key TEXT PRIMARY KEY, value TEXT)"
-    )
+    conn.execute("CREATE TABLE IF NOT EXISTS cursorDiskKV (key TEXT PRIMARY KEY, value TEXT)")
 
     meta = composer_meta or {
         "name": "Test Session",
@@ -539,7 +529,7 @@ def _make_vscdb(
             "tokenCount": {"inputTokens": 10, "outputTokens": 5},
         },
     ]
-    for b in (bubbles or default_bubbles):
+    for b in bubbles or default_bubbles:
         bid = b.get("bubbleId", "unknown")
         conn.execute(
             "INSERT INTO cursorDiskKV VALUES (?, ?)",

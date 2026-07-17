@@ -140,28 +140,32 @@ def promote_eligible(
     for row in rows:
         try:
             rid = row["id"]
-            promoted.append({
-                "id": row["id"],
-                "key": row["key"],
-                "value": row["value"],
-                "source_kind": row["source_kind"],
-                "source_uuid": row["source_uuid"],
-                "evidence_count": row["evidence_count"],
-                "first_seen_ts": row["first_seen_ts"],
-                "last_seen_ts": row["last_seen_ts"],
-            })
+            promoted.append(
+                {
+                    "id": row["id"],
+                    "key": row["key"],
+                    "value": row["value"],
+                    "source_kind": row["source_kind"],
+                    "source_uuid": row["source_uuid"],
+                    "evidence_count": row["evidence_count"],
+                    "first_seen_ts": row["first_seen_ts"],
+                    "last_seen_ts": row["last_seen_ts"],
+                }
+            )
         except (IndexError, KeyError, TypeError):
             rid = row[0]
-            promoted.append({
-                "id": row[0],
-                "key": row[1],
-                "value": row[2],
-                "source_kind": row[3],
-                "source_uuid": row[4],
-                "evidence_count": row[5],
-                "first_seen_ts": row[6],
-                "last_seen_ts": row[7],
-            })
+            promoted.append(
+                {
+                    "id": row[0],
+                    "key": row[1],
+                    "value": row[2],
+                    "source_kind": row[3],
+                    "source_uuid": row[4],
+                    "evidence_count": row[5],
+                    "first_seen_ts": row[6],
+                    "last_seen_ts": row[7],
+                }
+            )
         conn.execute(
             "UPDATE tentative_facts SET promoted_at = ? WHERE id = ?",
             (now, rid),
@@ -209,9 +213,9 @@ def drop_expired(
 _SUPERSEDE_TABLES = ("operator_profile", "standing_decisions", "bans")
 
 _SUPERSEDE_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("superseded_at",    "INTEGER"),
+    ("superseded_at", "INTEGER"),
     ("superseded_by_id", "INTEGER"),
-    ("evidence_count",   "INTEGER DEFAULT 1"),
+    ("evidence_count", "INTEGER DEFAULT 1"),
 )
 
 

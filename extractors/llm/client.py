@@ -49,8 +49,9 @@ def autoselect_model() -> str:
     """
     return DEFAULT_MODEL
 
+
 _PROBE_TIMEOUT_S = 10.0  # generous: probe competes with CPU-heavy ingest on rebuild
-_PROBE_RETRIES = 3       # transient post-ingest load can lose the race; retry before False
+_PROBE_RETRIES = 3  # transient post-ingest load can lose the race; retry before False
 _PROBE_BACKOFF_S = 1.5
 
 
@@ -70,24 +71,41 @@ _PROBE_BACKOFF_S = 1.5
 # text-task recommendations); ollama api.md (think param, >= 0.9).
 _SAMPLING_PROFILES: dict[str, dict[str, Any]] = {
     "gemma": {
-        "temperature": 0.0, "top_k": 1, "top_p": 1.0,
-        "repeat_penalty": 1.0, "seed": 42, "think": None,
+        "temperature": 0.0,
+        "top_k": 1,
+        "top_p": 1.0,
+        "repeat_penalty": 1.0,
+        "seed": 42,
+        "think": None,
     },
     "qwen": {
-        "temperature": 0.7, "top_k": 20, "top_p": 0.8, "min_p": 0.0,
-        "presence_penalty": 1.5, "repeat_penalty": 1.0, "seed": 42,
+        "temperature": 0.7,
+        "top_k": 20,
+        "top_p": 0.8,
+        "min_p": 0.0,
+        "presence_penalty": 1.5,
+        "repeat_penalty": 1.0,
+        "seed": 42,
         "think": False,
     },
     # nvidia nemotron nano: reasoning model. Card recommends temp 0.6 / top_p
     # 0.95; ollama `think:false` cleanly disables the reasoning trace (verified
     # — no <think> leak into the JSON, unlike qwen3.5:9b).
     "nemotron": {
-        "temperature": 0.6, "top_p": 0.95, "top_k": 20,
-        "repeat_penalty": 1.0, "seed": 42, "think": False,
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "top_k": 20,
+        "repeat_penalty": 1.0,
+        "seed": 42,
+        "think": False,
     },
     "default": {
-        "temperature": 0.0, "top_k": 1, "top_p": 1.0,
-        "repeat_penalty": 1.0, "seed": 42, "think": None,
+        "temperature": 0.0,
+        "top_k": 1,
+        "top_p": 1.0,
+        "repeat_penalty": 1.0,
+        "seed": 42,
+        "think": None,
     },
 }
 
@@ -201,8 +219,12 @@ class LLMClient:
                 if _attempt + 1 < _PROBE_RETRIES:
                     time.sleep(_PROBE_BACKOFF_S)
         if data is None:
-            log.debug("LLMClient: probe failed after %d tries at %s — %s",
-                      _PROBE_RETRIES, tags_url, last_exc)
+            log.debug(
+                "LLMClient: probe failed after %d tries at %s — %s",
+                _PROBE_RETRIES,
+                tags_url,
+                last_exc,
+            )
             return False
 
         # ollama /api/tags returns {"models": [{"name": "...", ...}, ...]}
@@ -377,7 +399,8 @@ class LLMClient:
                     log.info(
                         "LLMClient: response not valid JSON (likely truncated at "
                         "num_predict=%d) — retrying with %d",
-                        np, attempts[attempt_idx + 1],
+                        np,
+                        attempts[attempt_idx + 1],
                     )
                     continue
                 log.warning("LLMClient: model response not valid JSON — %s", exc)
@@ -431,8 +454,12 @@ def get_default_client() -> LLMClient:
         cache_path = Path(plugin_data) / "total-recall" / "llm_cache.db"
     else:
         cache_path = (
-            Path.home() / ".local" / "share" / "total-recall-88plug"
-            / "total-recall" / "llm_cache.db"
+            Path.home()
+            / ".local"
+            / "share"
+            / "total-recall-88plug"
+            / "total-recall"
+            / "llm_cache.db"
         )
     try:
         cache_path.parent.mkdir(parents=True, exist_ok=True)

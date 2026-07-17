@@ -95,9 +95,7 @@ def load_subagent_meta(agent_jsonl: Path) -> dict:
     return _read_meta(Path(agent_jsonl))
 
 
-def _parent_tool_use_id_for_agent(
-    parent_records: list[Record], agent_id: str
-) -> str | None:
+def _parent_tool_use_id_for_agent(parent_records: list[Record], agent_id: str) -> str | None:
     """Find the parent ``user`` tool_result whose ``toolUseResult.agentId``
     matches, and return its inner ``tool_use_id`` so callers can map back to
     the originating assistant ``tool_use`` block.

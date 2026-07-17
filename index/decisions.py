@@ -174,8 +174,7 @@ def upsert_decision(
         # On UPDATE, lastrowid may still point at the existing row on most
         # SQLite versions, but be defensive and look it up by UNIQUE key.
         existing = conn.execute(
-            "SELECT id FROM standing_decisions "
-            "WHERE topic=? AND chose=? AND scope=?",
+            "SELECT id FROM standing_decisions WHERE topic=? AND chose=? AND scope=?",
             (topic, chose, scope),
         ).fetchone()
         if existing is not None:

@@ -92,10 +92,7 @@ def compute_scope_delta(
         decisions = list_decisions(_open_conn(db_path), scope=to_scope, limit=5)
         if from_scope:
             existing = {
-                d["topic"]
-                for d in list_decisions(
-                    _open_conn(db_path), scope=from_scope, limit=10
-                )
+                d["topic"] for d in list_decisions(_open_conn(db_path), scope=from_scope, limit=10)
             }
             decisions = [d for d in decisions if d.get("topic") not in existing]
         if decisions:

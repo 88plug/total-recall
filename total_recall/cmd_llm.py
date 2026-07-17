@@ -27,5 +27,6 @@ def llm_model_cmd() -> None:
     tag = os.environ.get("TOTAL_RECALL_LLM_MODEL")
     if not tag:
         from extractors.llm.client import autoselect_model
+
         tag = autoselect_model()
     click.echo(tag)

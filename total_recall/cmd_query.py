@@ -134,8 +134,7 @@ def query_cmd(
         d = _row_to_dict(row)
         ts_iso = iso_or_none(d.get("ts"))
         head = (
-            f"#{i}  kind={d.get('kind')}  cwd={d.get('cwd')}  "
-            f"score={d.get('score')}  ts={ts_iso}"
+            f"#{i}  kind={d.get('kind')}  cwd={d.get('cwd')}  score={d.get('score')}  ts={ts_iso}"
         )
         click.echo(head)
         click.echo(f"     {shorten(d.get('content'), limit=320)}")
@@ -154,6 +153,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
     if hasattr(row, "_asdict"):
         return dict(row._asdict())
     import dataclasses
+
     if dataclasses.is_dataclass(row):
         return dataclasses.asdict(row)
     return {"value": row}

@@ -4,6 +4,7 @@ Semantics: default-on / opt-out.
   Unset / "1" / "true" / "yes" / "on"  → enabled
   "0" / "false" / "no" / "off"          → disabled
 """
+
 from __future__ import annotations
 
 import pytest

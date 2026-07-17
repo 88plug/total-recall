@@ -125,7 +125,8 @@ class TestNormalizeVocabRaw:
         result = _normalize_vocab_raw(raw)
         terms = {e["term"]: e["definition"] for e in result}
         assert terms == {
-            "sharechain": "A p2pool share chain.", "fan-out": "Parallel agent pattern."
+            "sharechain": "A p2pool share chain.",
+            "fan-out": "Parallel agent pattern.",
         }
 
     def test_single_object_shape(self):
@@ -324,9 +325,7 @@ class TestRefineNarrativesShapeVariants:
             "narratives": [
                 {
                     "cwd": "go-service",
-                    "summary": (
-                        "A lightweight HTTP router that proxies requests to backend pods."
-                    ),
+                    "summary": ("A lightweight HTTP router that proxies requests to backend pods."),
                 }
             ]
         }
@@ -373,9 +372,7 @@ class TestRefineVocabularyDefinitions:
     def test_none_client_falls_back_to_get_default_unavailable(self):
         """When client=None and get_default_client() is unavailable, input unchanged."""
         terms = _sample_terms(2)
-        with patch(
-            "extractors.llm.refine_ontology._get_client", return_value=None
-        ):
+        with patch("extractors.llm.refine_ontology._get_client", return_value=None):
             result = refine_vocabulary_definitions(terms, client=None)
         assert result == [dict(t) for t in terms]
 
@@ -400,8 +397,12 @@ class TestRefineVocabularyDefinitions:
     def test_unknown_term_from_llm_dropped(self):
         """LLM returns a term not in the input -- anti-hallucination guard."""
         terms = [
-            {"term": "alpha", "frequency": 5, "category": "concept",
-             "context_snippet": "Alpha is X."}
+            {
+                "term": "alpha",
+                "frequency": 5,
+                "category": "concept",
+                "context_snippet": "Alpha is X.",
+            }
         ]
         payload = {
             "definitions": [
@@ -419,8 +420,7 @@ class TestRefineVocabularyDefinitions:
     def test_overlong_definition_rejected(self):
         """Definitions longer than 300 chars are rejected (set to None)."""
         terms = [
-            {"term": "verbose", "frequency": 2, "category": "concept",
-             "context_snippet": "context"}
+            {"term": "verbose", "frequency": 2, "category": "concept", "context_snippet": "context"}
         ]
         long_def = "A" * 301
         payload = {"definitions": [{"term": "verbose", "definition": long_def}]}
@@ -475,19 +475,15 @@ class TestRefineVocabularyDefinitions:
     def test_batching_large_input(self):
         """Input > 25 items triggers multiple generate_json calls."""
         terms = _sample_terms(30)
+
         # All definitions returned as "def X"
         def side_effect(system, user, schema=None):
             batch_terms = [
                 line.split('"')[1]
                 for line in user.splitlines()
-                if line.strip().startswith('- term:')
+                if line.strip().startswith("- term:")
             ]
-            return {
-                "definitions": [
-                    {"term": t, "definition": f"def for {t}"}
-                    for t in batch_terms
-                ]
-            }
+            return {"definitions": [{"term": t, "definition": f"def for {t}"} for t in batch_terms]}
 
         client = MagicMock()
         client.available = True
@@ -501,8 +497,12 @@ class TestRefineVocabularyDefinitions:
     def test_case_insensitive_term_matching(self):
         """LLM may return the term in a different case -- should still match."""
         terms = [
-            {"term": "FooBar", "frequency": 3, "category": "concept",
-             "context_snippet": "FooBar does X."}
+            {
+                "term": "FooBar",
+                "frequency": 3,
+                "category": "concept",
+                "context_snippet": "FooBar does X.",
+            }
         ]
         payload = {"definitions": [{"term": "foobar", "definition": "Lowercase match."}]}
         client = _client_returning(payload)
@@ -521,8 +521,7 @@ class TestRefineVocabularyDefinitions:
     def test_input_dicts_not_mutated(self):
         """Input dicts must not be modified in-place."""
         terms = [
-            {"term": "immutable", "frequency": 1, "category": "concept",
-             "context_snippet": "ctx"}
+            {"term": "immutable", "frequency": 1, "category": "concept", "context_snippet": "ctx"}
         ]
         original_copy = dict(terms[0])
         payload = {"definitions": [{"term": "immutable", "definition": "A def."}]}
@@ -549,9 +548,7 @@ class TestRefineProjectNarratives:
 
     def test_none_client_falls_back_to_unavailable(self):
         projects = _sample_projects(2)
-        with patch(
-            "extractors.llm.refine_ontology._get_client", return_value=None
-        ):
+        with patch("extractors.llm.refine_ontology._get_client", return_value=None):
             result = refine_project_narratives(projects, client=None)
         assert result == [dict(p) for p in projects]
 
@@ -741,9 +738,7 @@ class TestAntiEchoVocabulary:
         result = refine_vocabulary_definitions(terms, client=client)
 
         assert len(result) == 1
-        assert result[0]["definition"] is None, (
-            "Echo definition should be suppressed to None"
-        )
+        assert result[0]["definition"] is None, "Echo definition should be suppressed to None"
 
     def test_synthesised_definition_kept(self):
         """Model returns a genuinely different sentence -- must be kept."""
@@ -765,9 +760,7 @@ class TestAntiEchoVocabulary:
         result = refine_vocabulary_definitions(terms, client=client)
 
         assert len(result) == 1
-        assert result[0]["definition"] == synthesised, (
-            "Synthesised definition should be kept"
-        )
+        assert result[0]["definition"] == synthesised, "Synthesised definition should be kept"
 
 
 # ---------------------------------------------------------------------------
@@ -799,9 +792,7 @@ class TestAntiEchoNarratives:
         result = refine_project_narratives(projects, client=client)
 
         assert len(result) == 1
-        assert result[0]["narrative"] is None, (
-            "Echo narrative should be suppressed to None"
-        )
+        assert result[0]["narrative"] is None, "Echo narrative should be suppressed to None"
 
     def test_synthesised_narrative_kept(self):
         """Model returns a genuine 1-2 sentence summary -- must be kept."""
@@ -825,6 +816,4 @@ class TestAntiEchoNarratives:
         result = refine_project_narratives(projects, client=client)
 
         assert len(result) == 1
-        assert result[0]["narrative"] == synthesised, (
-            "Synthesised narrative should be kept"
-        )
+        assert result[0]["narrative"] == synthesised, "Synthesised narrative should be kept"

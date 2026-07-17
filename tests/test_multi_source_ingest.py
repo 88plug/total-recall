@@ -189,14 +189,20 @@ def test_filter_dedup_rows_basic_suppression():
     rows_cc = [("/proj", 1000, "shared message")]
     rows_co = [("/proj", 1005, "shared message")]  # same minute bucket
     kept_cc, seen, supp_cc = filter_dedup_rows(
-        rows_cc, source="claude_code",
-        cwd_idx=0, ts_idx=1, text_idx=2,
+        rows_cc,
+        source="claude_code",
+        cwd_idx=0,
+        ts_idx=1,
+        text_idx=2,
     )
     assert kept_cc == rows_cc and supp_cc == 0
 
     kept_co, _, supp_co = filter_dedup_rows(
-        rows_co, source="continue",
-        cwd_idx=0, ts_idx=1, text_idx=2,
+        rows_co,
+        source="continue",
+        cwd_idx=0,
+        ts_idx=1,
+        text_idx=2,
         seen=seen,
     )
     # continue is lower priority than claude_code → the codex/continue row
@@ -208,8 +214,11 @@ def test_filter_dedup_rows_better_source_replaces_owner():
     # Initial low-priority source claims the key.
     rows_low = [("/proj", 1000, "shared")]
     kept_low, seen, _ = filter_dedup_rows(
-        rows_low, source="continue",
-        cwd_idx=0, ts_idx=1, text_idx=2,
+        rows_low,
+        source="continue",
+        cwd_idx=0,
+        ts_idx=1,
+        text_idx=2,
     )
     assert kept_low == rows_low
     assert seen[dedup_key("/proj", 1000, "shared")] == "continue"
@@ -217,8 +226,11 @@ def test_filter_dedup_rows_better_source_replaces_owner():
     # High-priority source comes along: row is kept AND seen is updated.
     rows_high = [("/proj", 1000, "shared")]
     kept_high, seen2, supp = filter_dedup_rows(
-        rows_high, source="claude_code",
-        cwd_idx=0, ts_idx=1, text_idx=2,
+        rows_high,
+        source="claude_code",
+        cwd_idx=0,
+        ts_idx=1,
+        text_idx=2,
         seen=seen,
     )
     assert kept_high == rows_high and supp == 0
@@ -229,8 +241,11 @@ def test_filter_dedup_rows_unbuildable_key_keeps_row():
     # Missing cwd → no dedup possible → row is kept.
     rows = [(None, 1000, "hi"), ("/proj", None, "hi"), ("/proj", 1000, "")]
     kept, _, supp = filter_dedup_rows(
-        rows, source="continue",
-        cwd_idx=0, ts_idx=1, text_idx=2,
+        rows,
+        source="continue",
+        cwd_idx=0,
+        ts_idx=1,
+        text_idx=2,
     )
     assert kept == rows and supp == 0
 
@@ -282,16 +297,12 @@ def test_schema_v3_to_v4_migration(tmp_path: Path) -> None:
         row = c.execute("SELECT source FROM messages WHERE text = 'legacy row'").fetchone()
         assert row["source"] == "claude_code"
         # Version is now v4.
-        ver = c.execute(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-        ).fetchone()
+        ver = c.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()
         assert ver["value"] == "5"
 
         # Re-applying must be a no-op.
         apply_schema(c)
-        ver2 = c.execute(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-        ).fetchone()
+        ver2 = c.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()
         assert ver2["value"] == "5"
         # Row count unchanged.
         assert c.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1
@@ -315,14 +326,10 @@ def _mk_rec(uuid: str, session_id: str, cwd: str, ts_epoch: int, text: str) -> _
     )
 
 
-def test_ingest_all_explicit_test_source_tags_rows(
-    conn: sqlite3.Connection, clean_sources
-) -> None:
+def test_ingest_all_explicit_test_source_tags_rows(conn: sqlite3.Connection, clean_sources) -> None:
     """sources=['test_source'] only ingests the named adapter and tags rows."""
     rec = _mk_rec("u1", "synth-session-1", "/proj/a", 1000, "from synthetic source")
-    Synth = _make_synth_source(
-        "test_source", [("synth-session-1", "/proj/a", [rec])]
-    )
+    Synth = _make_synth_source("test_source", [("synth-session-1", "/proj/a", [rec])])
     SOURCES.append(Synth)
 
     reports = ingest_all(conn=conn, sources=["test_source"])
@@ -344,22 +351,15 @@ def test_ingest_all_multiple_sources_writes_both_tags(
     rec_cc = _mk_rec("u-cc-1", "cc-1", "/proj/p", 2000, "claude row")
     rec_ts = _mk_rec("u-ts-1", "ts-1", "/proj/p", 2500, "synth row")
 
-    SynthCC = _make_synth_source(
-        "claude_code", [("cc-1", "/proj/p", [rec_cc])]
-    )
-    SynthTS = _make_synth_source(
-        "test_source", [("ts-1", "/proj/p", [rec_ts])]
-    )
+    SynthCC = _make_synth_source("claude_code", [("cc-1", "/proj/p", [rec_cc])])
+    SynthTS = _make_synth_source("test_source", [("ts-1", "/proj/p", [rec_ts])])
     # Replace registry so the real ClaudeCodeSource doesn't fight ours.
     SOURCES.clear()
     SOURCES.extend([SynthCC, SynthTS])
 
     ingest_all(conn=conn, sources=["claude_code", "test_source"])
 
-    sources_seen = {
-        r["source"]
-        for r in conn.execute("SELECT DISTINCT source FROM messages")
-    }
+    sources_seen = {r["source"] for r in conn.execute("SELECT DISTINCT source FROM messages")}
     assert "claude_code" in sources_seen
     assert "test_source" in sources_seen
 
@@ -372,12 +372,8 @@ def test_ingest_all_cross_source_dedup_prefers_higher_priority(
     rec_cc = _mk_rec("u-cc-x", "s-cc", "/proj/dup", 5000, "shared dup body")
     rec_ct = _mk_rec("u-ct-x", "s-ct", "/proj/dup", 5005, "shared dup body")
 
-    SynthCC = _make_synth_source(
-        "claude_code", [("s-cc", "/proj/dup", [rec_cc])]
-    )
-    SynthCT = _make_synth_source(
-        "continue", [("s-ct", "/proj/dup", [rec_ct])]
-    )
+    SynthCC = _make_synth_source("claude_code", [("s-cc", "/proj/dup", [rec_cc])])
+    SynthCT = _make_synth_source("continue", [("s-ct", "/proj/dup", [rec_ct])])
     SOURCES.clear()
     SOURCES.extend([SynthCC, SynthCT])  # priority order: CC first
 
@@ -392,9 +388,7 @@ def test_ingest_all_cross_source_dedup_prefers_higher_priority(
     assert rows[0]["source"] == "claude_code"
 
 
-def test_ingest_all_no_dedup_when_content_differs(
-    conn: sqlite3.Connection, clean_sources
-) -> None:
+def test_ingest_all_no_dedup_when_content_differs(conn: sqlite3.Connection, clean_sources) -> None:
     """Different content under the same cwd/minute → BOTH rows persist."""
     rec_cc = _mk_rec("u-cc-y", "s-cc-y", "/proj/diff", 6000, "claude says A")
     rec_ct = _mk_rec("u-ct-y", "s-ct-y", "/proj/diff", 6005, "continue says B")
@@ -419,7 +413,8 @@ def test_ingest_all_skips_source_whose_is_available_raises(
     rec = _mk_rec("u-ok", "s-ok", "/proj/ok", 7000, "good source row")
     Good = _make_synth_source("test_source", [("s-ok", "/proj/ok", [rec])])
     Bad = _make_synth_source(
-        "bad_source", [("s-bad", "/proj/bad", [])],
+        "bad_source",
+        [("s-bad", "/proj/bad", [])],
         raise_on_is_available=True,
     )
     SOURCES.clear()
@@ -484,21 +479,30 @@ def test_hook_style_invocation_still_works(
 
 def test_source_file_key_disambiguates_sqlite_sessions():
     sf_a = SessionFile(
-        source="opencode", path=Path("/data/opencode.db"),
-        cwd="/proj/a", session_id="ses-A",
-        started_at=None, last_modified=0.0,
+        source="opencode",
+        path=Path("/data/opencode.db"),
+        cwd="/proj/a",
+        session_id="ses-A",
+        started_at=None,
+        last_modified=0.0,
         extra={"storage": "sqlite"},
     )
     sf_b = SessionFile(
-        source="opencode", path=Path("/data/opencode.db"),
-        cwd="/proj/b", session_id="ses-B",
-        started_at=None, last_modified=0.0,
+        source="opencode",
+        path=Path("/data/opencode.db"),
+        cwd="/proj/b",
+        session_id="ses-B",
+        started_at=None,
+        last_modified=0.0,
         extra={"storage": "sqlite"},
     )
     sf_file = SessionFile(
-        source="claude_code", path=Path("/x/y.jsonl"),
-        cwd="/proj/c", session_id="ses-file",
-        started_at=None, last_modified=0.0,
+        source="claude_code",
+        path=Path("/x/y.jsonl"),
+        cwd="/proj/c",
+        session_id="ses-file",
+        started_at=None,
+        last_modified=0.0,
     )
     a = index_ingest._source_file_key_for_session(sf_a)
     b = index_ingest._source_file_key_for_session(sf_b)

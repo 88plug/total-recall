@@ -73,8 +73,7 @@ def _backfill_vectors(db_path: str, verbose: bool) -> None:
             conn.close()
         if verbose:
             click.echo(
-                f"[rebuild] vec backfill: embedded {report.extractions_embedded} "
-                "extraction(s)",
+                f"[rebuild] vec backfill: embedded {report.extractions_embedded} extraction(s)",
                 err=True,
             )
     except ImportError:
@@ -171,9 +170,7 @@ def rebuild_cmd(
     job_count = max(1, int(jobs_resolved))
 
     if verbose:
-        click.echo(
-            f"[rebuild] full ingest into {db_path} (jobs={job_count})", err=True
-        )
+        click.echo(f"[rebuild] full ingest into {db_path} (jobs={job_count})", err=True)
     started = time.monotonic()
     result = ingest_all(
         db_path=db_path,
@@ -229,6 +226,7 @@ def rebuild_cmd(
             from lib.sources.collect import (
                 materialize_all_source_records,  # type: ignore[import-not-found]
             )
+
             all_records = materialize_all_source_records()
             if all_records:
                 _using_records = True
@@ -236,9 +234,7 @@ def rebuild_cmd(
                     _src_counts: Counter = Counter()
                     for _r in all_records:
                         _src_counts[getattr(_r, "source", "unknown")] += 1
-                    _src_summary = ", ".join(
-                        f"{s}={n}" for s, n in sorted(_src_counts.items())
-                    )
+                    _src_summary = ", ".join(f"{s}={n}" for s, n in sorted(_src_counts.items()))
                     click.echo(
                         f"[rebuild] multi-source collector: {len(all_records)} records"
                         f" ({_src_summary})",
@@ -303,6 +299,7 @@ def rebuild_cmd(
                 extract_workflow_from_records,
             )
             from index.workflow import persist_workflow  # type: ignore[import-not-found]
+
             if _using_records and all_records:
                 wf = extract_workflow_from_records(all_records)
             else:
@@ -324,13 +321,12 @@ def rebuild_cmd(
             from index.implicit_preferences import (
                 persist_implicit_preferences,  # type: ignore[import-not-found]
             )
+
             if _using_records and all_records:
                 # extract_implicit_preferences accepts (session_id, cwd, records)
                 # triples OR path-likes. Build a single pseudo-triple so all
                 # records are fed through the per-session accumulator logic.
-                ip = extract_implicit_preferences(
-                    [("_rebuild", "_all_sources", iter(all_records))]
-                )
+                ip = extract_implicit_preferences([("_rebuild", "_all_sources", iter(all_records))])
             else:
                 ip = extract_implicit_preferences(all_jsonl)
             conn = connect(db_path)
@@ -352,6 +348,7 @@ def rebuild_cmd(
                 extract_satisfaction_from_records,
             )
             from index.satisfaction import persist_satisfaction  # type: ignore[import-not-found]
+
             if _using_records and all_records:
                 sat = extract_satisfaction_from_records(all_records, {})
             else:
@@ -410,6 +407,7 @@ def rebuild_cmd(
     # isn't pulled — heuristic results remain canonical.
     try:
         from extractors.llm.client import get_default_client  # type: ignore[import-not-found]
+
         _llm = get_default_client()
         if _llm.available:
             if verbose:
@@ -428,6 +426,7 @@ def rebuild_cmd(
                     get_profile,
                     upsert_profile_field,
                 )
+
                 conn = connect(db_path)
                 try:
                     prof = get_profile(conn)
@@ -498,9 +497,7 @@ def rebuild_cmd(
             # further.  To skip text-gen only (keeping machines refinement),
             # set TOTAL_RECALL_LLM_REFINE_TEXT=0.  To disable all LLM
             # refinement, set TOTAL_RECALL_LLM_PROVIDER=none.
-            _refine_text = _text_refine_enabled(
-                os.environ.get("TOTAL_RECALL_LLM_REFINE_TEXT")
-            )
+            _refine_text = _text_refine_enabled(os.environ.get("TOTAL_RECALL_LLM_REFINE_TEXT"))
 
             if not _refine_text:
                 if verbose:
@@ -512,8 +509,7 @@ def rebuild_cmd(
             else:
                 if verbose:
                     click.echo(
-                        f"[rebuild] LLM text refinement (vocab/narratives) on"
-                        f" (model={_llm.model})",
+                        f"[rebuild] LLM text refinement (vocab/narratives) on (model={_llm.model})",
                         err=True,
                     )
                 try:
@@ -527,6 +523,7 @@ def rebuild_cmd(
                         upsert_project,
                         upsert_vocabulary_term,
                     )
+
                     conn = connect(db_path)
                     try:
                         # Helpers: gather grounding snippets from messages FTS so the
@@ -563,8 +560,11 @@ def rebuild_cmd(
                                     "ORDER BY ts ASC LIMIT ?",
                                     (cwd, limit),
                                 ).fetchall()
-                                return [(t or "").strip().replace("\n", " ")[:300]
-                                        for (t,) in rows if t and t.strip()]
+                                return [
+                                    (t or "").strip().replace("\n", " ")[:300]
+                                    for (t,) in rows
+                                    if t and t.strip()
+                                ]
                             except Exception:  # noqa: BLE001
                                 return []
 
@@ -573,22 +573,28 @@ def rebuild_cmd(
                         if vocab_rows:
                             ranked = sorted(
                                 vocab_rows,
-                                key=lambda r: (r.get("frequency") or 0) if isinstance(r, dict)
-                                               else (getattr(r, "frequency", None) or 0),
+                                key=lambda r: (
+                                    (r.get("frequency") or 0)
+                                    if isinstance(r, dict)
+                                    else (getattr(r, "frequency", None) or 0)
+                                ),
                                 reverse=True,
                             )[:50]
                             enriched = []
                             for r in ranked:
-                                row = dict(r) if isinstance(r, dict) else {
-                                    "term": getattr(r, "term", ""),
-                                    "definition": getattr(r, "definition", "") or "",
-                                    "category": getattr(r, "category", "concept"),
-                                    "frequency": getattr(r, "frequency", 1),
-                                }
+                                row = (
+                                    dict(r)
+                                    if isinstance(r, dict)
+                                    else {
+                                        "term": getattr(r, "term", ""),
+                                        "definition": getattr(r, "definition", "") or "",
+                                        "category": getattr(r, "category", "concept"),
+                                        "frequency": getattr(r, "frequency", 1),
+                                    }
+                                )
                                 snips = _snippets_for_term(row["term"])
                                 row["context_snippet"] = (
-                                    " | ".join(snips) if snips
-                                    else (row.get("definition") or "")
+                                    " | ".join(snips) if snips else (row.get("definition") or "")
                                 )
                                 enriched.append(row)
                             refined_vocab = refine_vocabulary_definitions(enriched, client=_llm)
@@ -607,19 +613,28 @@ def rebuild_cmd(
                         if proj_rows:
                             ranked_p = sorted(
                                 proj_rows,
-                                key=lambda p: (p.get("message_count") or 0) if isinstance(p, dict)
-                                               else (getattr(p, "message_count", None) or 0),
+                                key=lambda p: (
+                                    (p.get("message_count") or 0)
+                                    if isinstance(p, dict)
+                                    else (getattr(p, "message_count", None) or 0)
+                                ),
                                 reverse=True,
                             )[:25]
                             enriched_p = []
                             for p in ranked_p:
-                                row = dict(p) if isinstance(p, dict) else {
-                                    "cwd": getattr(p, "cwd", ""),
-                                    "display_name": getattr(p, "display_name", ""),
-                                    "purpose": getattr(p, "purpose", "") or "",
-                                    "primary_language": getattr(p, "primary_language", "") or "",
-                                    "related_projects": getattr(p, "related_projects", []) or [],
-                                }
+                                row = (
+                                    dict(p)
+                                    if isinstance(p, dict)
+                                    else {
+                                        "cwd": getattr(p, "cwd", ""),
+                                        "display_name": getattr(p, "display_name", ""),
+                                        "purpose": getattr(p, "purpose", "") or "",
+                                        "primary_language": getattr(p, "primary_language", "")
+                                        or "",
+                                        "related_projects": getattr(p, "related_projects", [])
+                                        or [],
+                                    }
+                                )
                                 row["context_snippets"] = _snippets_for_cwd(row["cwd"])
                                 enriched_p.append(row)
                             refined_projs = refine_project_narratives(enriched_p, client=_llm)

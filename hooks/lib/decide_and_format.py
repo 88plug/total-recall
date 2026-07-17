@@ -80,9 +80,7 @@ def _build_session_state(state: dict, project_known: bool):
         turns_since_inject=int(state.get("turns_since_inject", 0)),
         post_compact=bool(state.get("post_compact", False)),
         project_known=project_known,
-        last_assistant_was_tool_heavy=bool(
-            state.get("last_assistant_was_tool_heavy", False)
-        ),
+        last_assistant_was_tool_heavy=bool(state.get("last_assistant_was_tool_heavy", False)),
         silence_seconds=silence,
         same_topic_streak=int(state.get("same_topic_streak", 0)),
         escalation_risk=0,
@@ -98,9 +96,7 @@ def _project_known(db_path: Path, cwd: str) -> bool:
         import sqlite3
 
         with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0) as c:
-            row = c.execute(
-                "SELECT 1 FROM sessions WHERE cwd = ? LIMIT 1", (cwd,)
-            ).fetchone()
+            row = c.execute("SELECT 1 FROM sessions WHERE cwd = ? LIMIT 1", (cwd,)).fetchone()
             return row is not None
     except Exception:
         return False
@@ -117,9 +113,7 @@ def _fallback_prompt_relevant(prompt: str, cwd: str) -> str:
 
         from hooks.lib import query as q  # type: ignore
 
-        ns = argparse.Namespace(
-            prompt=prompt, cwd=cwd, limit=3, max_tokens=400
-        )
+        ns = argparse.Namespace(prompt=prompt, cwd=cwd, limit=3, max_tokens=400)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             q.cmd_prompt_relevant(ns)
@@ -153,9 +147,7 @@ def _continuation_block(session_id: str, cwd: str) -> str:
         return ""
     if not body:
         return ""
-    return (
-        "[total-recall] POST-COMPACTION CONTINUATION — where we were:\n" + body
-    )
+    return "[total-recall] POST-COMPACTION CONTINUATION — where we were:\n" + body
 
 
 def main(argv=None) -> int:
@@ -212,11 +204,14 @@ def main(argv=None) -> int:
             try:
                 from hooks.lib.scope_delta import compute_scope_delta  # type: ignore
 
-                payload = compute_scope_delta(
-                    db_path=db_path,
-                    from_scope=shift.old,
-                    to_scope=shift.new,
-                ) or ""
+                payload = (
+                    compute_scope_delta(
+                        db_path=db_path,
+                        from_scope=shift.old,
+                        to_scope=shift.new,
+                    )
+                    or ""
+                )
                 if payload:
                     state["last_scope"] = shift.new
             except Exception:

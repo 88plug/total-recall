@@ -69,9 +69,7 @@ _CATEGORY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"(?i)\bno\s+i\s+(told|said|asked)\s+you\b"),
     ],
     "quote_back": [
-        re.compile(
-            r"(?i)\byou\s+(said|told\s+me)\s+(earlie?r|before|just\s+now|first)"
-        ),
+        re.compile(r"(?i)\byou\s+(said|told\s+me)\s+(earlie?r|before|just\s+now|first)"),
     ],
     "standing_rule": [
         re.compile(r"(?i)\bnever\s+(ever\s+)?(use|recommend|do|mention)"),

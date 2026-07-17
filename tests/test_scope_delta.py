@@ -140,9 +140,7 @@ SAMPLE_MACHINES = [
 # ---------------------------------------------------------------------------
 
 
-def test_happy_path_returns_all_sections(
-    fake_db: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_happy_path_returns_all_sections(fake_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _install_mock_index(
         monkeypatch,
         goal=SAMPLE_GOAL,
@@ -182,13 +180,11 @@ def test_from_scope_subtraction_drops_shared_decisions(
     _install_mock_index(
         monkeypatch,
         decisions_by_scope={
-            "recall": SAMPLE_DECISIONS_TO,    # vps_provider, data_store
+            "recall": SAMPLE_DECISIONS_TO,  # vps_provider, data_store
             "acme-net": SAMPLE_DECISIONS_FROM,  # vps_provider, vpn
         },
     )
-    out = scope_delta.compute_scope_delta(
-        fake_db, from_scope="acme-net", to_scope="recall"
-    )
+    out = scope_delta.compute_scope_delta(fake_db, from_scope="acme-net", to_scope="recall")
     assert "[scope-shift acme-net -> recall]" in out
     # data_store is fresh for the destination scope -> kept
     assert "data_store" in out
@@ -223,27 +219,19 @@ def test_priority_truncation_preserves_active_goal_over_machines(
     assert len(out) <= 180
 
 
-def test_min_injection_chars_gate(
-    fake_db: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_min_injection_chars_gate(fake_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """If only a sliver of content survives, return empty string."""
     # Tiny goal + tiny budget => the body would be ~1 line, below the gate.
     tiny_goal = {"goal_text": "x", "status": "active", "project": "/p"}
     _install_mock_index(monkeypatch, goal=tiny_goal)
-    out = scope_delta.compute_scope_delta(
-        fake_db, from_scope=None, to_scope="recall", max_chars=40
-    )
+    out = scope_delta.compute_scope_delta(fake_db, from_scope=None, to_scope="recall", max_chars=40)
     assert out == ""
 
 
-def test_empty_index_returns_empty_string(
-    fake_db: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_empty_index_returns_empty_string(fake_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """No goal, no decisions, no bans, no machines -> no payload."""
     _install_mock_index(monkeypatch)  # everything defaults to empty
-    out = scope_delta.compute_scope_delta(
-        fake_db, from_scope=None, to_scope="recall"
-    )
+    out = scope_delta.compute_scope_delta(fake_db, from_scope=None, to_scope="recall")
     assert out == ""
 
 
@@ -256,35 +244,25 @@ def test_defensive_imports_when_modules_missing(
         broken = types.ModuleType(name)
         # No attributes -> AttributeError on first access from compute_scope_delta.
         monkeypatch.setitem(sys.modules, name, broken)
-    out = scope_delta.compute_scope_delta(
-        fake_db, from_scope=None, to_scope="recall"
-    )
+    out = scope_delta.compute_scope_delta(fake_db, from_scope=None, to_scope="recall")
     assert out == ""
 
 
-def test_unknown_scope_does_not_crash(
-    fake_db: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_unknown_scope_does_not_crash(fake_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An unknown scope name has no canonical cwd; the function still returns."""
     _install_mock_index(
         monkeypatch,
         decisions_by_scope={"weirdscope": SAMPLE_DECISIONS_TO},
     )
-    out = scope_delta.compute_scope_delta(
-        fake_db, from_scope=None, to_scope="weirdscope"
-    )
+    out = scope_delta.compute_scope_delta(fake_db, from_scope=None, to_scope="weirdscope")
     # decisions still render — only the cwd-keyed goal lookup is skipped.
     assert "vps_provider" in out
     assert "## active_goal" not in out
 
 
-def test_max_chars_respected(
-    fake_db: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_max_chars_respected(fake_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Hard char cap is honored even with verbose data."""
-    long_decisions = [
-        {"topic": f"topic_{i}", "chose": "X" * 200} for i in range(20)
-    ]
+    long_decisions = [{"topic": f"topic_{i}", "chose": "X" * 200} for i in range(20)]
     _install_mock_index(
         monkeypatch,
         goal=SAMPLE_GOAL,
@@ -316,9 +294,7 @@ def test_scope_to_canonical_cwd_finds_match_in_db(tmp_path) -> None:
 
     db = tmp_path / "index.db"
     conn = _sqlite3.connect(str(db))
-    conn.execute(
-        "CREATE TABLE projects (cwd TEXT, display_name TEXT, last_active_ts INTEGER)"
-    )
+    conn.execute("CREATE TABLE projects (cwd TEXT, display_name TEXT, last_active_ts INTEGER)")
     conn.execute(
         "INSERT INTO projects VALUES (?, ?, ?)",
         ("/home/dana/nova-api", "nova-api", 1_700_000_000),

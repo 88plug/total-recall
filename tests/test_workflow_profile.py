@@ -55,9 +55,7 @@ def _assistant_task(session_id: str, tool_name: str = "TaskCreate") -> dict:
         "timestamp": "2025-05-01T20:01:00.000Z",
         "message": {
             "role": "assistant",
-            "content": [
-                {"type": "tool_use", "name": tool_name, "id": "tc1", "input": {}}
-            ],
+            "content": [{"type": "tool_use", "name": tool_name, "id": "tc1", "input": {}}],
         },
     }
 
@@ -232,8 +230,8 @@ class TestExtractWorkflowMalformedInput:
         f = tmp_path / "bad.jsonl"
         f.write_text(
             "not json at all\n"
-            "{\"type\": \"user\", \"sessionId\": \"x\", "
-            "\"message\": {\"role\": \"user\", \"content\": \"ok\"}}\n"
+            '{"type": "user", "sessionId": "x", '
+            '"message": {"role": "user", "content": "ok"}}\n'
             "bad again\n"
         )
         # Should not raise; should return a valid profile.
@@ -466,6 +464,7 @@ def test_imports():
     from extractors import workflow as w_extractor
     from index import workflow as w_index
     from mcp_server.extras import workflow_tools as w_tools
+
     assert hasattr(w_extractor, "extract_workflow")
     assert hasattr(w_extractor, "extract_workflow_from_records")
     assert hasattr(w_index, "persist_workflow")
@@ -483,12 +482,14 @@ class TestExtractWorkflowFromRecords:
 
     def test_empty_iterable_returns_defaults(self):
         from extractors.workflow import extract_workflow_from_records
+
         p = extract_workflow_from_records([])
         assert isinstance(p, WorkflowProfile)
         assert p.sample_size == 0
 
     def test_raw_dicts_produce_same_result_as_extract_workflow(self, tmp_path):
         from extractors.workflow import extract_workflow_from_records
+
         files = _action_bias_corpus(tmp_path)
         records = []
         for f in files:
@@ -512,12 +513,18 @@ class TestExtractWorkflowFromRecords:
             def __init__(self, raw):
                 self.raw = raw
 
-        raw1 = {"type": "user", "sessionId": "sR1",
-                "timestamp": "2025-05-01T22:00:00.000Z",
-                "message": {"role": "user", "content": "fan out these tasks"}}
-        raw2 = {"type": "user", "sessionId": "sR1",
-                "timestamp": "2025-05-01T22:01:00.000Z",
-                "message": {"role": "user", "content": "ok"}}
+        raw1 = {
+            "type": "user",
+            "sessionId": "sR1",
+            "timestamp": "2025-05-01T22:00:00.000Z",
+            "message": {"role": "user", "content": "fan out these tasks"},
+        }
+        raw2 = {
+            "type": "user",
+            "sessionId": "sR1",
+            "timestamp": "2025-05-01T22:01:00.000Z",
+            "message": {"role": "user", "content": "ok"},
+        }
 
         records = [FakeRecord(raw1), FakeRecord(raw2)]
         p = extract_workflow_from_records(records)
@@ -533,12 +540,20 @@ class TestExtractWorkflowFromRecords:
             def __init__(self, raw):
                 self.raw = raw
 
-        raw_dict = {"type": "user", "sessionId": "sm1",
-                    "timestamp": "2025-05-01T20:00:00.000Z",
-                    "message": {"role": "user", "content": "spin up workers"}}
-        raw_rec = FakeRec({"type": "user", "sessionId": "sm2",
-                           "timestamp": "2025-05-01T20:00:00.000Z",
-                           "message": {"role": "user", "content": "go"}})
+        raw_dict = {
+            "type": "user",
+            "sessionId": "sm1",
+            "timestamp": "2025-05-01T20:00:00.000Z",
+            "message": {"role": "user", "content": "spin up workers"},
+        }
+        raw_rec = FakeRec(
+            {
+                "type": "user",
+                "sessionId": "sm2",
+                "timestamp": "2025-05-01T20:00:00.000Z",
+                "message": {"role": "user", "content": "go"},
+            }
+        )
 
         p = extract_workflow_from_records([raw_dict, raw_rec])
         assert isinstance(p, WorkflowProfile)

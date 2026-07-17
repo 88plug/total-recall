@@ -58,9 +58,7 @@ def test_sources_is_in_top_level_help() -> None:
     assert "sources" in result.output
 
 
-@pytest.mark.parametrize(
-    "sub", ["list", "detect", "enable", "disable", "test", "verify"]
-)
+@pytest.mark.parametrize("sub", ["list", "detect", "enable", "disable", "test", "verify"])
 def test_sources_subcommand_help(sub: str) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["sources", sub, "--help"])
@@ -146,9 +144,7 @@ def test_sources_detect_finds_only_available(
     assert detected_names == {"claude_code", "opencode"}
 
 
-def test_sources_detect_none_human(
-    isolated_config: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sources_detect_none_human(isolated_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cmd_sources, "_load_sources", lambda: _stub_registry())
     runner = CliRunner()
     result = runner.invoke(cli, ["sources", "detect"])
@@ -246,9 +242,7 @@ def test_sources_enable_json_payload(isolated_config: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_sources_test_unavailable(
-    isolated_config: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sources_test_unavailable(isolated_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cmd_sources, "_load_sources", lambda: _stub_registry())
     runner = CliRunner()
     result = runner.invoke(cli, ["--json", "sources", "test", "opencode"])

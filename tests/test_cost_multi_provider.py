@@ -18,21 +18,25 @@ from total_recall import cost as C
 # detect_provider
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("model,expected", [
-    ("claude-sonnet-4-6", "anthropic"),
-    ("claude-opus-4-7", "anthropic"),
-    ("sonnet-3-5", "anthropic"),
-    ("gpt-5", "openai"),
-    ("gpt-5-mini", "openai"),
-    ("gpt-5-nano", "openai"),
-    ("o3", "openai"),
-    ("o4-mini", "openai"),
-    ("gemini-2.5-pro", "google"),
-    ("gemini-2.5-flash", "google"),
-    ("gemini-pro", "google"),
-    ("", "unknown"),
-    ("some-random-llm", "unknown"),
-])
+
+@pytest.mark.parametrize(
+    "model,expected",
+    [
+        ("claude-sonnet-4-6", "anthropic"),
+        ("claude-opus-4-7", "anthropic"),
+        ("sonnet-3-5", "anthropic"),
+        ("gpt-5", "openai"),
+        ("gpt-5-mini", "openai"),
+        ("gpt-5-nano", "openai"),
+        ("o3", "openai"),
+        ("o4-mini", "openai"),
+        ("gemini-2.5-pro", "google"),
+        ("gemini-2.5-flash", "google"),
+        ("gemini-pro", "google"),
+        ("", "unknown"),
+        ("some-random-llm", "unknown"),
+    ],
+)
 def test_detect_provider(model, expected):
     assert C.detect_provider(model) == expected
 
@@ -40,6 +44,7 @@ def test_detect_provider(model, expected):
 # ---------------------------------------------------------------------------
 # resolve_rate — OpenAI & Gemini
 # ---------------------------------------------------------------------------
+
 
 def test_resolve_rate_openai_gpt5():
     assert C.resolve_rate("gpt-5") == (1.25, 10.00)
@@ -100,6 +105,7 @@ def test_resolve_rate_unknown_gemini_id_uses_default():
 # ---------------------------------------------------------------------------
 # estimate_cost — provider-specific cache behaviour
 # ---------------------------------------------------------------------------
+
 
 def test_estimate_cost_openai_gpt5_cached_input_at_10pct():
     # GPT-5 cached_input bills at 10% of $1.25 = $0.125 / Mtok.
@@ -170,6 +176,7 @@ def test_estimate_cost_openai_input_only():
 # Anthropic invariants still hold (spec requirement: "Existing tests still pass")
 # ---------------------------------------------------------------------------
 
+
 def test_estimate_cost_anthropic_sonnet_cache_read_unchanged():
     # The Anthropic 10% rule is unchanged from the original module.
     got = C.estimate_cost(cache_read_tokens=1_000_000, model="claude-sonnet-4-6")
@@ -185,6 +192,7 @@ def test_estimate_cost_anthropic_sonnet_cache_create_unchanged():
 # ---------------------------------------------------------------------------
 # Provider tables
 # ---------------------------------------------------------------------------
+
 
 def test_provider_cache_multipliers_present_for_all_three():
     for p in ("anthropic", "openai", "google"):

@@ -114,9 +114,7 @@ def test_stats_no_db(tmp_path: Path) -> None:
 
 def test_stats_no_db_json(tmp_path: Path) -> None:
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--json", "--db", str(tmp_path / "missing.db"), "stats"]
-    )
+    result = runner.invoke(cli, ["--json", "--db", str(tmp_path / "missing.db"), "stats"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["exists"] is False
@@ -208,17 +206,13 @@ def test_index_json_output(tmp_path: Path, mock_ingest: dict[str, object]) -> No
     assert payload["dry_run"] is True
 
 
-def test_index_missing_module_aborts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_index_missing_module_aborts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """When `index` isn't importable, exit nonzero with a helpful message."""
     # Force ImportError by setting sentinel to None.
     monkeypatch.setitem(sys.modules, "index", None)
     monkeypatch.setitem(sys.modules, "index.ingest", None)
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--db", str(tmp_path / "i.db"), "index", "--dry-run"]
-    )
+    result = runner.invoke(cli, ["--db", str(tmp_path / "i.db"), "index", "--dry-run"])
     assert result.exit_code != 0
     assert "not yet available" in result.output
 

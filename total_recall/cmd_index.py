@@ -50,7 +50,8 @@ from .util import resolve_db_path
     help="Walk the files and report counts without writing to the index.",
 )
 @click.option(
-    "--jobs", "-j",
+    "--jobs",
+    "-j",
     type=int,
     default=None,
     help=(

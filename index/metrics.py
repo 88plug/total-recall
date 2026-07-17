@@ -112,8 +112,23 @@ _NEGATING_TRIGGER_RE = re.compile(
 )
 
 _FILLER_WORDS: frozenset[str] = frozenset(
-    {"a", "an", "the", "you", "we", "that", "this", "it",
-     "to", "do", "did", "doing", "just", "please", "here"}
+    {
+        "a",
+        "an",
+        "the",
+        "you",
+        "we",
+        "that",
+        "this",
+        "it",
+        "to",
+        "do",
+        "did",
+        "doing",
+        "just",
+        "please",
+        "here",
+    }
 )
 
 # Tiny alias table for inflections we see often in correction text.
@@ -168,6 +183,7 @@ def _normalize_correction(text: str) -> str:
     if len(key) < 3:
         return lowered[:60]
     return key
+
 
 _UNIT_SECONDS = {
     "s": 1,
@@ -245,9 +261,7 @@ def _safe_scalar(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> Any:
     return row[0]
 
 
-def _safe_rows(
-    conn: sqlite3.Connection, sql: str, params: tuple = ()
-) -> list[sqlite3.Row]:
+def _safe_rows(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
     try:
         return list(conn.execute(sql, params).fetchall())
     except sqlite3.OperationalError:
@@ -328,9 +342,7 @@ def summary(
 
         input_tokens = int(token_row["input_tokens"]) if token_row else 0
         cache_read_tokens = int(token_row["cache_read_tokens"]) if token_row else 0
-        cache_creation_tokens = (
-            int(token_row["cache_creation_tokens"]) if token_row else 0
-        )
+        cache_creation_tokens = int(token_row["cache_creation_tokens"]) if token_row else 0
         output_tokens = int(token_row["output_tokens"]) if token_row else 0
         active_ms = int(token_row["active_ms"]) if token_row else 0
 
@@ -423,8 +435,12 @@ def summary(
                     continue
                 b = corr_buckets.setdefault(
                     key,
-                    {"normalized": key, "count": 0,
-                     "example": content, "last_ts": int(r["ts"] or 0)},
+                    {
+                        "normalized": key,
+                        "count": 0,
+                        "example": content,
+                        "last_ts": int(r["ts"] or 0),
+                    },
                 )
                 b["count"] += 1
                 # Use the longest content in the group as the example
@@ -884,16 +900,10 @@ def health(db_path: Path) -> dict:
     """Index health snapshot for the CLI/MCP dashboard."""
     conn = _open(db_path)
     try:
-        total_messages = int(
-            _safe_scalar(conn, "SELECT COUNT(*) FROM messages") or 0
-        )
-        total_extractions = int(
-            _safe_scalar(conn, "SELECT COUNT(*) FROM extractions") or 0
-        )
+        total_messages = int(_safe_scalar(conn, "SELECT COUNT(*) FROM messages") or 0)
+        total_extractions = int(_safe_scalar(conn, "SELECT COUNT(*) FROM extractions") or 0)
         total_turns = int(_safe_scalar(conn, "SELECT COUNT(*) FROM turns") or 0)
-        total_compactions = int(
-            _safe_scalar(conn, "SELECT COUNT(*) FROM compactions") or 0
-        )
+        total_compactions = int(_safe_scalar(conn, "SELECT COUNT(*) FROM compactions") or 0)
 
         last_ingest_ts: int | None = None
         ingest_runs_7d = 0
@@ -902,9 +912,7 @@ def health(db_path: Path) -> dict:
         error_count_7d = 0
 
         if _table_exists(conn, "ingest_runs"):
-            row = conn.execute(
-                "SELECT MAX(ts) AS last_ts FROM ingest_runs"
-            ).fetchone()
+            row = conn.execute("SELECT MAX(ts) AS last_ts FROM ingest_runs").fetchone()
             last_ingest_ts = int(row["last_ts"]) if row and row["last_ts"] else None
 
             cutoff = int(datetime.now(tz=timezone.utc).timestamp()) - 7 * 86_400
@@ -922,8 +930,7 @@ def health(db_path: Path) -> dict:
             elapsed = [
                 int(r["elapsed_ms"] or 0)
                 for r in conn.execute(
-                    "SELECT elapsed_ms FROM ingest_runs WHERE ts >= ? "
-                    "ORDER BY elapsed_ms",
+                    "SELECT elapsed_ms FROM ingest_runs WHERE ts >= ? ORDER BY elapsed_ms",
                     (cutoff,),
                 ).fetchall()
             ]
@@ -941,9 +948,7 @@ def health(db_path: Path) -> dict:
                 p95_ingest_ms = _pick(0.95)
 
         now = int(datetime.now(tz=timezone.utc).timestamp())
-        last_age = (
-            (now - last_ingest_ts) if last_ingest_ts is not None else None
-        )
+        last_age = (now - last_ingest_ts) if last_ingest_ts is not None else None
 
         try:
             db_size = Path(db_path).stat().st_size
@@ -993,6 +998,7 @@ def _bootstrap_status(data_dir: Path) -> dict | None:
     if pid is not None:
         try:
             import os
+
             os.kill(pid, 0)
             in_progress = True
         except (OSError, ProcessLookupError):

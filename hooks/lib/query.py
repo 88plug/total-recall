@@ -28,6 +28,7 @@ from pathlib import Path
 # defensive bootstrap
 # --------------------------------------------------------------------------- #
 
+
 def _add_repo_root_to_syspath():
     """Walk up from this file until we find a dir with an ``index`` package.
 
@@ -46,8 +47,7 @@ def _add_repo_root_to_syspath():
             return
     # Last resort: also honor CLAUDE_PLUGIN_ROOT if set.
     root = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if root and (Path(root) / "index" / "__init__.py").exists() \
-            and root not in sys.path:
+    if root and (Path(root) / "index" / "__init__.py").exists() and root not in sys.path:
         sys.path.append(root)
 
 
@@ -62,6 +62,7 @@ def _try_import_query():
     """
     try:
         import index.query as q  # type: ignore[import-not-found]
+
         return q
     except Exception:
         return None
@@ -76,6 +77,7 @@ def _try_open_db():
     """
     try:
         from index.db import DEFAULT_DB_PATH, connect  # type: ignore[import-not-found]
+
         if not Path(DEFAULT_DB_PATH).exists():
             return None
         return connect(read_only=True)
@@ -86,6 +88,7 @@ def _try_open_db():
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
+
 
 def _truncate_tokens(text: str, max_tokens: int) -> str:
     """Soft-truncate at ~4 chars/token. Adds a trailing ellipsis when cut."""
@@ -112,14 +115,41 @@ def _safe_call(obj, name, *args, **kwargs):
 # prompts before forming an FTS5 MATCH expression — otherwise a sentence like
 # "what did we decide about provider-x" becomes an AND-of-every-word query and
 # returns 0 hits because no single extraction contains all six tokens.
-_STOPWORDS = frozenset({
-    "the", "a", "an", "is", "are", "was", "were", "do", "did",
-    "what", "why", "how", "when", "where",
-    "we", "i", "it", "this", "that",
-    "of", "to", "in", "on", "for", "with", "about",
-    "and", "or", "but",
-    "you", "me",
-})
+_STOPWORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "do",
+        "did",
+        "what",
+        "why",
+        "how",
+        "when",
+        "where",
+        "we",
+        "i",
+        "it",
+        "this",
+        "that",
+        "of",
+        "to",
+        "in",
+        "on",
+        "for",
+        "with",
+        "about",
+        "and",
+        "or",
+        "but",
+        "you",
+        "me",
+    }
+)
 
 
 def _prompt_to_fts_query(prompt: str) -> str:
@@ -174,6 +204,7 @@ def _prompt_to_fts_query(prompt: str) -> str:
 # subcommand: signpost
 # --------------------------------------------------------------------------- #
 
+
 def cmd_signpost(args):
     """Emit the SessionStart signpost markdown, or nothing if no memory."""
     q = _try_import_query()
@@ -196,9 +227,10 @@ def cmd_signpost(args):
         topics = _safe_call(q, "top_topics_for_cwd", conn, args.cwd, 3) or []
         # Best-effort "standing rules": pull a couple of `preference`-kind
         # extractions if the search function supports it.
-        rules_hits = _safe_call(
-            q, "search_extractions", conn, None, args.cwd, "preference", None, None, 2
-        ) or []
+        rules_hits = (
+            _safe_call(q, "search_extractions", conn, None, args.cwd, "preference", None, None, 2)
+            or []
+        )
         rules = []
         for h in rules_hits:
             txt = getattr(h, "content", None) or (h.get("content") if isinstance(h, dict) else None)
@@ -225,7 +257,7 @@ def cmd_signpost(args):
             "**[total-recall]** Memory from {n} prior session{s} "
             "in this cwd available.\n\n"
             "Recent topics here: {topics}.\n\n"
-            "Use `recall(topic=\"...\")` MCP tool to expand.\n"
+            'Use `recall(topic="...")` MCP tool to expand.\n'
             "Standing rules previously asserted: {rules}."
         ).format(
             n=n,
@@ -247,6 +279,7 @@ def cmd_signpost(args):
 # subcommand: prompt-relevant
 # --------------------------------------------------------------------------- #
 
+
 def cmd_prompt_relevant(args):
     """Emit per-prompt retrieval markdown, or nothing if no good hits."""
     q = _try_import_query()
@@ -263,16 +296,22 @@ def cmd_prompt_relevant(args):
 
     # Higher-level wrappers (if WT-4 ever ships one) take a natural-language
     # prompt; the lower-level FTS-backed primitives need the OR-joined form.
-    hits = (
-        _safe_call(q, "search_relevant", conn, args.prompt, args.cwd, args.limit)
-        or _safe_call(q, "prompt_relevant", conn, args.prompt, args.cwd, args.limit)
+    hits = _safe_call(q, "search_relevant", conn, args.prompt, args.cwd, args.limit) or _safe_call(
+        q, "prompt_relevant", conn, args.prompt, args.cwd, args.limit
     )
     if not hits and fts_query:
         # WT-4's real signature: search_extractions(conn, query, cwd, kind, scope, since, limit).
         hits = (
             _safe_call(
-                q, "search_extractions", conn, fts_query, args.cwd,
-                None, None, None, args.limit,
+                q,
+                "search_extractions",
+                conn,
+                fts_query,
+                args.cwd,
+                None,
+                None,
+                None,
+                args.limit,
             )
             or _safe_call(q, "search_messages", conn, fts_query, args.cwd, None, args.limit)
             or _safe_call(q, "search", conn, fts_query, args.limit)
@@ -290,8 +329,13 @@ def cmd_prompt_relevant(args):
         else:
             lines.append("- " + str(h))
             continue
-        title = d.get("title") or d.get("session_title") or d.get("topic") \
-            or d.get("kind") or "(untitled)"
+        title = (
+            d.get("title")
+            or d.get("session_title")
+            or d.get("topic")
+            or d.get("kind")
+            or "(untitled)"
+        )
         snippet = d.get("snippet") or d.get("text") or d.get("content") or ""
         score = d.get("score")
         score_str = ""
@@ -309,6 +353,7 @@ def cmd_prompt_relevant(args):
 # --------------------------------------------------------------------------- #
 # entry point
 # --------------------------------------------------------------------------- #
+
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog="total-recall-query")

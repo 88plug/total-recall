@@ -14,6 +14,7 @@ not publish the very names we are trying to keep private.
 Scanned directories (relative to repo root):
     extractors/, mcp_server/, index/, lib/, detector/, hooks/lib/
 """
+
 from __future__ import annotations
 
 import json

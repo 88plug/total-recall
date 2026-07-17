@@ -127,14 +127,11 @@ def _decode_row(row: sqlite3.Row | tuple) -> tuple[Any, float, list[str]]:
     return value, float(conf if conf is not None else 0.5), sources
 
 
-def get_profile_field(
-    conn: sqlite3.Connection, key: str
-) -> tuple[Any, float, list[str]] | None:
+def get_profile_field(conn: sqlite3.Connection, key: str) -> tuple[Any, float, list[str]] | None:
     """Return ``(value, confidence, sources)`` for ``key`` or ``None``."""
     ensure_schema(conn)
     row = conn.execute(
-        "SELECT key, value, confidence, sources, updated_ts "
-        "FROM operator_profile WHERE key = ?",
+        "SELECT key, value, confidence, sources, updated_ts FROM operator_profile WHERE key = ?",
         (key,),
     ).fetchone()
     if row is None:
@@ -154,8 +151,7 @@ def get_profile(conn: sqlite3.Connection) -> dict[str, Any]:
     """
     ensure_schema(conn)
     rows = conn.execute(
-        "SELECT key, value, confidence, sources, updated_ts "
-        "FROM operator_profile ORDER BY key"
+        "SELECT key, value, confidence, sources, updated_ts FROM operator_profile ORDER BY key"
     ).fetchall()
 
     values: dict[str, Any] = {}

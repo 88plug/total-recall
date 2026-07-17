@@ -29,6 +29,7 @@ def plugin_data(tmp_path, monkeypatch):
 def _run_recovery(cwd: str, session_id: str, env_extra: dict | None = None):
     script = REPO_ROOT / "hooks" / "post-compact-recovery.sh"
     import os
+
     env = os.environ.copy()
     if env_extra:
         env.update(env_extra)
@@ -55,18 +56,19 @@ def test_recovery_flag_reaches_session_state_reader(plugin_data, monkeypatch):
     import importlib
 
     import hooks.lib.session_state as ss
+
     importlib.reload(ss)
 
     sid = "bridge-sess-1"
-    proc = _run_recovery("/home/operator/proj", sid,
-                         env_extra={"CLAUDE_PLUGIN_DATA": str(plugin_data)})
+    proc = _run_recovery(
+        "/home/operator/proj", sid, env_extra={"CLAUDE_PLUGIN_DATA": str(plugin_data)}
+    )
     assert proc.returncode == 0, proc.stderr
 
     # The writer must have written to the reader's path: sessions/<sid>.json.
     expected = plugin_data / "total-recall" / "sessions" / f"{sid}.json"
     assert expected.exists(), (
-        "recovery.sh did not write to the path session_state reads; "
-        f"missing {expected}"
+        f"recovery.sh did not write to the path session_state reads; missing {expected}"
     )
 
     state = ss.load_state(sid)
@@ -80,12 +82,14 @@ def test_recovery_flag_drives_reinjection(plugin_data, monkeypatch):
     import importlib
 
     import hooks.lib.session_state as ss
+
     importlib.reload(ss)
     from detector.reinjection import SessionState, should_reinject
 
     sid = "bridge-sess-2"
-    proc = _run_recovery("/home/operator/proj", sid,
-                         env_extra={"CLAUDE_PLUGIN_DATA": str(plugin_data)})
+    proc = _run_recovery(
+        "/home/operator/proj", sid, env_extra={"CLAUDE_PLUGIN_DATA": str(plugin_data)}
+    )
     assert proc.returncode == 0, proc.stderr
 
     state = ss.load_state(sid)
@@ -119,6 +123,7 @@ def test_decide_and_format_surfaces_pending_continuation(plugin_data, monkeypatc
     import io
 
     import hooks.lib.session_state as ss
+
     importlib.reload(ss)
     from hooks.lib import decide_and_format as daf
 
@@ -148,9 +153,7 @@ def test_decide_and_format_surfaces_pending_continuation(plugin_data, monkeypatc
     db = plugin_data / "total-recall" / "index.db"  # absent → no fire/fallback
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rc = daf.main(
-            ["--session", sid, "--cwd", cwd, "--prompt", "continue", "--db", str(db)]
-        )
+        rc = daf.main(["--session", sid, "--cwd", cwd, "--prompt", "continue", "--db", str(db)])
     out = buf.getvalue()
 
     assert rc == 0
@@ -169,6 +172,7 @@ def test_decide_and_format_no_pending_no_continuation(plugin_data, monkeypatch):
     import io
 
     import hooks.lib.session_state as ss
+
     importlib.reload(ss)
     from hooks.lib import decide_and_format as daf
 
@@ -186,9 +190,7 @@ def test_decide_and_format_no_pending_no_continuation(plugin_data, monkeypatch):
     db = plugin_data / "total-recall" / "index.db"
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rc = daf.main(
-            ["--session", sid, "--cwd", cwd, "--prompt", "continue", "--db", str(db)]
-        )
+        rc = daf.main(["--session", sid, "--cwd", cwd, "--prompt", "continue", "--db", str(db)])
     out = buf.getvalue()
 
     assert rc == 0

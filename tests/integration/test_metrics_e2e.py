@@ -27,9 +27,7 @@ import sys
 import pytest
 
 CORPUS = pathlib.Path("~/.claude/projects").expanduser()
-pytestmark = pytest.mark.skipif(
-    not CORPUS.exists(), reason="no corpus on this machine"
-)
+pytestmark = pytest.mark.skipif(not CORPUS.exists(), reason="no corpus on this machine")
 
 
 # ---------------------------------------------------------------------------
@@ -147,9 +145,7 @@ def test_metrics_summary_against_real_corpus(tmp_path: pathlib.Path):
     metrics = _try_metrics()
     connect, ingest_all, ingest_file = _try_db_and_ingest()
 
-    db_path = _ingest_sessions_into_db(
-        connect, ingest_all, ingest_file, tmp_path, n=5
-    )
+    db_path = _ingest_sessions_into_db(connect, ingest_all, ingest_file, tmp_path, n=5)
 
     try:
         data = metrics.summary(db_path, since="all")
@@ -272,9 +268,7 @@ def test_metrics_sessions_top_by_tokens_returns_descending(tmp_path: pathlib.Pat
     metrics = _try_metrics()
     connect, ingest_all, ingest_file = _try_db_and_ingest()
 
-    db_path = _ingest_sessions_into_db(
-        connect, ingest_all, ingest_file, tmp_path, n=5
-    )
+    db_path = _ingest_sessions_into_db(connect, ingest_all, ingest_file, tmp_path, n=5)
 
     try:
         data = metrics.sessions(db_path, since="all", top=3, by="tokens")
@@ -286,8 +280,10 @@ def test_metrics_sessions_top_by_tokens_returns_descending(tmp_path: pathlib.Pat
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"metrics.sessions raised: {exc}")
 
-    rows = data if isinstance(data, list) else (
-        data.get("sessions") if isinstance(data, dict) else None
+    rows = (
+        data
+        if isinstance(data, list)
+        else (data.get("sessions") if isinstance(data, dict) else None)
     )
     if rows is None:
         pytest.skip(f"unexpected sessions() return shape: {type(data)}")
@@ -313,9 +309,7 @@ def test_metrics_topics_surfaces_corrections_from_corpus(tmp_path: pathlib.Path)
     metrics = _try_metrics()
     connect, ingest_all, ingest_file = _try_db_and_ingest()
 
-    db_path = _ingest_sessions_into_db(
-        connect, ingest_all, ingest_file, tmp_path, n=5
-    )
+    db_path = _ingest_sessions_into_db(connect, ingest_all, ingest_file, tmp_path, n=5)
 
     try:
         data = metrics.topics(db_path, since="all", limit=20)
@@ -327,8 +321,8 @@ def test_metrics_topics_surfaces_corrections_from_corpus(tmp_path: pathlib.Path)
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"metrics.topics raised: {exc}")
 
-    rows = data if isinstance(data, list) else (
-        data.get("topics") if isinstance(data, dict) else None
+    rows = (
+        data if isinstance(data, list) else (data.get("topics") if isinstance(data, dict) else None)
     )
     if rows is None:
         pytest.skip(f"unexpected topics() return shape: {type(data)}")
@@ -339,9 +333,7 @@ def test_metrics_topics_surfaces_corrections_from_corpus(tmp_path: pathlib.Path)
         )
 
     # At least one topic must be non-empty — the corpus has corrections.
-    blob = " ".join(
-        str(r.get("topic") or r.get("content") or "") for r in rows
-    ).lower()
+    blob = " ".join(str(r.get("topic") or r.get("content") or "") for r in rows).lower()
     assert blob.strip(), f"topics did not surface any corrections: {rows[:5]}"
 
 
@@ -352,9 +344,7 @@ def test_cli_metrics_summary_human_format(tmp_path: pathlib.Path):
     _try_metrics()  # gate on the data layer
     connect, ingest_all, ingest_file = _try_db_and_ingest()
 
-    db_path = _ingest_sessions_into_db(
-        connect, ingest_all, ingest_file, tmp_path, n=3
-    )
+    db_path = _ingest_sessions_into_db(connect, ingest_all, ingest_file, tmp_path, n=3)
 
     env = {
         **os.environ,
@@ -371,17 +361,13 @@ def test_cli_metrics_summary_human_format(tmp_path: pathlib.Path):
         "7d",
     ]
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60, env=env
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
     except subprocess.TimeoutExpired:
         pytest.fail("total-recall metrics summary timed out")
     except FileNotFoundError:
         pytest.skip("python interpreter or total_recall module unavailable")
 
-    if result.returncode != 0 and "not yet available" in (
-        result.stderr + result.stdout
-    ):
+    if result.returncode != 0 and "not yet available" in (result.stderr + result.stdout):
         pytest.skip(
             f"metrics layer reported not-yet-available: "
             f"{result.stderr.strip() or result.stdout.strip()}"
@@ -394,6 +380,4 @@ def test_cli_metrics_summary_human_format(tmp_path: pathlib.Path):
     assert "total-recall metrics" in out, (
         f"expected header 'total-recall metrics' in output; got: {out[:500]}"
     )
-    assert "tokens:" in out, (
-        f"expected 'tokens:' line in human-format output; got: {out[:500]}"
-    )
+    assert "tokens:" in out, f"expected 'tokens:' line in human-format output; got: {out[:500]}"

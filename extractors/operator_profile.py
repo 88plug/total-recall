@@ -127,12 +127,8 @@ class OperatorProfile:
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _FULL_NAME_RE = re.compile(r"\b[A-Z][a-z]+\s+[A-Z][a-z]+\b")
-_GIT_USER_NAME_RE = re.compile(
-    r"""git\s+config\s+user\.name\s+["']([^"']+)["']""", re.IGNORECASE
-)
-_AUTHOR_RE = re.compile(
-    r"""author\s*=\s*["']([^"']+)["']""", re.IGNORECASE
-)
+_GIT_USER_NAME_RE = re.compile(r"""git\s+config\s+user\.name\s+["']([^"']+)["']""", re.IGNORECASE)
+_AUTHOR_RE = re.compile(r"""author\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 # Hostname: tokens appearing in ssh/deploy/hostname invocation contexts.
 # Captures identifiers that look like machine names (contain a hyphen or
 # start with a known prefix like relay-, host-, node-) in positional
@@ -147,6 +143,7 @@ _HOSTNAME_CONTEXT_RE = re.compile(
 # (e.g. relay-sin-01, web-prod-3) — at least one hyphen, no dots.
 _HOSTNAME_TOKEN_RE = re.compile(r"\b([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})\b")
 
+
 def _looks_like_person_name(s: str) -> bool:
     """Reject free-text two-cap matches that are obviously product/service
     names, not people. ``Claude Code`` / ``Sidecar Network`` / ``Cloudflare
@@ -159,19 +156,86 @@ def _looks_like_person_name(s: str) -> bool:
     return parts[1] not in _PRODUCT_NOUN_SUFFIXES
 
 
-_PRODUCT_NOUN_SUFFIXES: frozenset[str] = frozenset({
-    "Code", "Tool", "Tools", "Service", "Services", "Cloud", "Network",
-    "Networks", "Action", "Actions", "Request", "Requests", "Tunnel",
-    "Worker", "Workers", "Engine", "Engines", "Studio", "Platform",
-    "Functions", "Pages", "Sites", "Bot", "Bots", "API", "APIs", "SDK",
-    "CLI", "App", "Apps", "Hub", "Router", "Routers", "Server", "Servers",
-    "Mono", "Sans", "Serif", "Card", "Cards", "Notification", "Notifications",
-    "Token", "Tokens", "Opus", "Sonnet", "Haiku", "Pro", "Plus", "Max",
-    "Mini", "Lite", "Connector", "Connectors", "Plugin", "Plugins",
-    "Module", "Modules", "Turnstile", "Manager", "Console", "Dashboard",
-    "Micro", "Macro", "Edge", "Core", "Stack", "Suite", "Lab",
-    "Labs", "Gateway", "Proxy", "Filter", "Queue", "Stream", "Event",
-})
+_PRODUCT_NOUN_SUFFIXES: frozenset[str] = frozenset(
+    {
+        "Code",
+        "Tool",
+        "Tools",
+        "Service",
+        "Services",
+        "Cloud",
+        "Network",
+        "Networks",
+        "Action",
+        "Actions",
+        "Request",
+        "Requests",
+        "Tunnel",
+        "Worker",
+        "Workers",
+        "Engine",
+        "Engines",
+        "Studio",
+        "Platform",
+        "Functions",
+        "Pages",
+        "Sites",
+        "Bot",
+        "Bots",
+        "API",
+        "APIs",
+        "SDK",
+        "CLI",
+        "App",
+        "Apps",
+        "Hub",
+        "Router",
+        "Routers",
+        "Server",
+        "Servers",
+        "Mono",
+        "Sans",
+        "Serif",
+        "Card",
+        "Cards",
+        "Notification",
+        "Notifications",
+        "Token",
+        "Tokens",
+        "Opus",
+        "Sonnet",
+        "Haiku",
+        "Pro",
+        "Plus",
+        "Max",
+        "Mini",
+        "Lite",
+        "Connector",
+        "Connectors",
+        "Plugin",
+        "Plugins",
+        "Module",
+        "Modules",
+        "Turnstile",
+        "Manager",
+        "Console",
+        "Dashboard",
+        "Micro",
+        "Macro",
+        "Edge",
+        "Core",
+        "Stack",
+        "Suite",
+        "Lab",
+        "Labs",
+        "Gateway",
+        "Proxy",
+        "Filter",
+        "Queue",
+        "Stream",
+        "Event",
+    }
+)
 
 
 def _looks_like_real_name(s: str) -> bool:
@@ -192,30 +256,129 @@ def _looks_like_real_name(s: str) -> bool:
     return any(c.isalpha() for c in s)
 
 
-_NAME_PLACEHOLDERS: frozenset[str] = frozenset({
-    "x", "y", "z", "foo", "bar", "baz", "qux", "name", "your name",
-    "yourname", "user", "username", "operator", "the operator",
-    "first last", "firstname lastname", "first.last", "test", "test user",
-    "example", "sample", "default", "todo", "tbd", "n/a", "none", "null",
-    "claude", "claude code", "anthropic", "ai assistant",
-})
+_NAME_PLACEHOLDERS: frozenset[str] = frozenset(
+    {
+        "x",
+        "y",
+        "z",
+        "foo",
+        "bar",
+        "baz",
+        "qux",
+        "name",
+        "your name",
+        "yourname",
+        "user",
+        "username",
+        "operator",
+        "the operator",
+        "first last",
+        "firstname lastname",
+        "first.last",
+        "test",
+        "test user",
+        "example",
+        "sample",
+        "default",
+        "todo",
+        "tbd",
+        "n/a",
+        "none",
+        "null",
+        "claude",
+        "claude code",
+        "anthropic",
+        "ai assistant",
+    }
+)
 
 
 # Common English words that may follow ``ssh``/``deploy``/``hostname`` in
 # prose and would otherwise be mis-matched as machine names. Not exhaustive
 # — just the high-frequency false-positives observed in real corpora.
-_HOSTNAME_COMMON_WORDS: frozenset[str] = frozenset({
-    "the", "this", "that", "your", "our", "their", "his", "her", "its",
-    "for", "from", "into", "onto", "with", "without", "after", "before",
-    "key", "keys", "file", "files", "path", "paths", "session", "sessions",
-    "shell", "user", "users", "remote", "local", "host", "server", "client",
-    "agent", "service", "config", "log", "logs", "data", "code", "script",
-    "command", "process", "thread", "port", "address", "domain", "name",
-    "void", "null", "any", "all", "some", "none", "off", "on", "up", "down",
-    "pubkey", "creds", "secret", "secrets", "password", "passwd", "token",
-    "what", "which", "where", "when", "why", "how", "who",
-    "exposures", "exposure", "again", "now", "later", "today", "tomorrow",
-})
+_HOSTNAME_COMMON_WORDS: frozenset[str] = frozenset(
+    {
+        "the",
+        "this",
+        "that",
+        "your",
+        "our",
+        "their",
+        "his",
+        "her",
+        "its",
+        "for",
+        "from",
+        "into",
+        "onto",
+        "with",
+        "without",
+        "after",
+        "before",
+        "key",
+        "keys",
+        "file",
+        "files",
+        "path",
+        "paths",
+        "session",
+        "sessions",
+        "shell",
+        "user",
+        "users",
+        "remote",
+        "local",
+        "host",
+        "server",
+        "client",
+        "agent",
+        "service",
+        "config",
+        "log",
+        "logs",
+        "data",
+        "code",
+        "script",
+        "command",
+        "process",
+        "thread",
+        "port",
+        "address",
+        "domain",
+        "name",
+        "void",
+        "null",
+        "any",
+        "all",
+        "some",
+        "none",
+        "off",
+        "on",
+        "up",
+        "down",
+        "pubkey",
+        "creds",
+        "secret",
+        "secrets",
+        "password",
+        "passwd",
+        "token",
+        "what",
+        "which",
+        "where",
+        "when",
+        "why",
+        "how",
+        "who",
+        "exposures",
+        "exposure",
+        "again",
+        "now",
+        "later",
+        "today",
+        "tomorrow",
+    }
+)
 _TAILSCALE_RE = re.compile(r"\b(100\.\d{1,3}\.\d{1,3}\.\d{1,3})\b")
 _LAN_RE = re.compile(
     r"\b((?:10\.\d{1,3}\.\d{1,3}\.\d{1,3})"
@@ -259,14 +422,25 @@ _IANA_REGION_PREFIX = (
     r"(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia"
     r"|Europe|Indian|Pacific|US|Etc|GMT)"
 )
-_TIMEZONE_IANA_RE = re.compile(
-    r"\b(" + _IANA_REGION_PREFIX + r"/[A-Za-z_]+(?:/[A-Za-z_]+)?)\b"
-)
+_TIMEZONE_IANA_RE = re.compile(r"\b(" + _IANA_REGION_PREFIX + r"/[A-Za-z_]+(?:/[A-Za-z_]+)?)\b")
 # Fast set of valid IANA region prefixes for the post-extraction filter.
-_IANA_VALID_REGIONS: frozenset[str] = frozenset({
-    "Africa", "America", "Antarctica", "Arctic", "Asia", "Atlantic",
-    "Australia", "Europe", "Indian", "Pacific", "US", "Etc", "GMT",
-})
+_IANA_VALID_REGIONS: frozenset[str] = frozenset(
+    {
+        "Africa",
+        "America",
+        "Antarctica",
+        "Arctic",
+        "Asia",
+        "Atlantic",
+        "Australia",
+        "Europe",
+        "Indian",
+        "Pacific",
+        "US",
+        "Etc",
+        "GMT",
+    }
+)
 # Common abbreviation → IANA mapping (generic, not Eastern-biased).
 _TZ_ABBREV: dict[str, str] = {
     "EST": "America/New_York",
@@ -293,9 +467,7 @@ _TZ_ABBREV: dict[str, str] = {
     "NZDT": "Pacific/Auckland",
     "UTC": "UTC",
 }
-_TZ_ABBREV_RE = re.compile(
-    r"\b(" + "|".join(re.escape(k) for k in _TZ_ABBREV) + r")\b"
-)
+_TZ_ABBREV_RE = re.compile(r"\b(" + "|".join(re.escape(k) for k in _TZ_ABBREV) + r")\b")
 # Also match US/... aliases.
 _TZ_US_ALIAS_RE = re.compile(r"\b(US/(?:Eastern|Central|Mountain|Pacific|Alaska|Hawaii))\b")
 _US_ALIAS_MAP: dict[str, str] = {
@@ -348,7 +520,6 @@ _PHILOSOPHY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 # Defaults from the research brief — used when the corpus is silent but the
 # field has a well-known canonical value. Confidence is correspondingly low.
 _DEFAULT_HINTS: dict[str, tuple[Any, float]] = {}
-
 
 
 # ---------------------------------------------------------------------------
@@ -536,7 +707,9 @@ def _extract_from_text_stream(
             # (e.g. relay-eu-1, host01, gw.example). Bare alphabetic
             # tokens are accepted only when long AND not common English.
             looks_like_host = (
-                "-" in host or "." in host or any(c.isdigit() for c in host)
+                "-" in host
+                or "." in host
+                or any(c.isdigit() for c in host)
                 or (len(host) >= 8 and host not in _HOSTNAME_COMMON_WORDS)
             )
             if not looks_like_host:
@@ -544,9 +717,7 @@ def _extract_from_text_stream(
             if host in _HOSTNAME_COMMON_WORDS:
                 continue
             # Strip a trailing dot (the regex captures one) — already done above.
-            slot = machine_hits.setdefault(
-                host, {"role": "", "ip": "", "tailscale": "", "hits": 0}
-            )
+            slot = machine_hits.setdefault(host, {"role": "", "ip": "", "tailscale": "", "hits": 0})
             slot["hits"] += 1
             _cite("machines", source, line_no)
 
@@ -566,8 +737,17 @@ def _extract_from_text_stream(
         # Handle: aggregate from github.com/<user>, gitlab.com/<user>,
         # git remote URLs, and @mentions; rank by frequency.
         _HANDLE_STOPLIST = {
-            "anthropic", "anthropics", "claude", "claude-code", "openai",
-            "google", "microsoft", "facebook", "meta", "aws", "amazon",
+            "anthropic",
+            "anthropics",
+            "claude",
+            "claude-code",
+            "openai",
+            "google",
+            "microsoft",
+            "facebook",
+            "meta",
+            "aws",
+            "amazon",
         }
         for h in _HANDLE_GITHUB_RE.findall(text):
             hk = h.lower()
@@ -592,9 +772,24 @@ def _extract_from_text_stream(
 
         # Org: derive from email domain tokens, org/company fields.
         _ORG_DOMAIN_STOPLIST = {
-            "gmail", "yahoo", "hotmail", "outlook", "icloud", "proton",
-            "protonmail", "fastmail", "hey", "duck", "anthropic", "claude",
-            "github", "gitlab", "google", "microsoft", "apple", "amazon",
+            "gmail",
+            "yahoo",
+            "hotmail",
+            "outlook",
+            "icloud",
+            "proton",
+            "protonmail",
+            "fastmail",
+            "hey",
+            "duck",
+            "anthropic",
+            "claude",
+            "github",
+            "gitlab",
+            "google",
+            "microsoft",
+            "apple",
+            "amazon",
         }
         for domain in _ORG_FROM_EMAIL_RE.findall(text):
             # Use the second-level domain token as the org hint.
@@ -760,20 +955,14 @@ def _extract_from_text_stream(
         profile.confidence["home_uplinks"] = min(1.0, 0.4 + 0.1 * sum(uplinks.values()))
     if banned:
         profile.banned_providers = [b for b, _ in banned.most_common()]
-        profile.confidence["banned_providers"] = min(
-            1.0, 0.5 + 0.1 * sum(banned.values())
-        )
+        profile.confidence["banned_providers"] = min(1.0, 0.5 + 0.1 * sum(banned.values()))
     if own_prods:
         profile.own_products = [p for p, _ in own_prods.most_common()]
-        profile.confidence["own_products"] = min(
-            1.0, 0.4 + 0.05 * sum(own_prods.values())
-        )
+        profile.confidence["own_products"] = min(1.0, 0.4 + 0.05 * sum(own_prods.values()))
     if philosophy_hits:
         profile.philosophy = [p for p, _ in philosophy_hits.most_common()]
         # Confidence per slogan is proportional to its hit count, max 1.0.
-        profile.confidence["philosophy"] = min(
-            1.0, 0.4 + 0.05 * sum(philosophy_hits.values())
-        )
+        profile.confidence["philosophy"] = min(1.0, 0.4 + 0.05 * sum(philosophy_hits.values()))
 
     # Machines: best-effort enrichment with the collected IPs. We don't try
     # to perfectly map each IP to a host — sessions usually mention them
@@ -846,15 +1035,25 @@ def extract_operator_profile_from_records(records: Iterable[Any]) -> OperatorPro
 
 # Fields that are "scalar identity" — supersede semantics (one value wins).
 _SCALAR_FIELDS: tuple[str, ...] = (
-    "name", "handle", "org", "email_primary", "github_user",
-    "gitlab_host", "timezone", "billing_rail", "scm_policy",
+    "name",
+    "handle",
+    "org",
+    "email_primary",
+    "github_user",
+    "gitlab_host",
+    "timezone",
+    "billing_rail",
+    "scm_policy",
     "default_cloud_provider",
 )
 
 # Fields that are unordered lists — append-with-dedupe semantics.
 _LIST_FIELDS: tuple[str, ...] = (
-    "emails_alt", "home_uplinks", "banned_providers",
-    "philosophy", "own_products",
+    "emails_alt",
+    "home_uplinks",
+    "banned_providers",
+    "philosophy",
+    "own_products",
 )
 
 
@@ -1017,16 +1216,13 @@ def extract_incremental(
     # them to the storage-layer tentative bucket without a schema change.
     if tentative:
         merged.sources["_tentative"] = [
-            f"{k}={json.dumps(v, ensure_ascii=False, sort_keys=True)}"
-            for k, v in tentative.items()
+            f"{k}={json.dumps(v, ensure_ascii=False, sort_keys=True)}" for k, v in tentative.items()
         ]
 
     return merged
 
 
-def persist_incremental_profile(
-    conn, profile: OperatorProfile
-) -> int:
+def persist_incremental_profile(conn, profile: OperatorProfile) -> int:
     """Persist ``profile`` plus any ``_tentative`` candidates.
 
     Tentative candidates land under the reserved ``_tentative.<field>``

@@ -6,6 +6,7 @@ signature (cmd_tail → index.tail.tail_loop / index.ingest.ingest_all), and CLI
 subcommands that were never smoke-tested. Every check here is fast (signature
 inspection + Click --help), so it runs in the normal unit suite.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -42,8 +43,19 @@ def test_all_subcommands_have_help() -> None:
 def test_expected_subcommands_present() -> None:
     """The 13 shipped subcommands are all registered (catches accidental drop)."""
     expected = {
-        "index", "query", "stats", "inspect", "tail", "dump", "rebuild",
-        "metrics", "adaptive", "consolidate", "sources", "llm-model", "version",
+        "index",
+        "query",
+        "stats",
+        "inspect",
+        "tail",
+        "dump",
+        "rebuild",
+        "metrics",
+        "adaptive",
+        "consolidate",
+        "sources",
+        "llm-model",
+        "version",
     }
     missing = expected - set(cli.commands)
     assert not missing, f"subcommands missing from CLI: {missing}"
@@ -92,9 +104,7 @@ def test_cmd_tail_call_site_kwargs_are_valid() -> None:
     src = inspect.getsource(cmd_tail)
     # Match the retired kwarg as a whole token, not the `force_full=` substring.
     assert "force_full=False" in src, "cmd_tail should pass force_full=False"
-    assert not re.search(r"(?<![\w_])full=", src), (
-        "cmd_tail still passes the retired full= kwarg"
-    )
+    assert not re.search(r"(?<![\w_])full=", src), "cmd_tail still passes the retired full= kwarg"
 
 
 @pytest.mark.skipif(

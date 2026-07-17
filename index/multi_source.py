@@ -198,8 +198,10 @@ def filter_dedup_rows(
         if should_suppress(source, existing):
             suppressed += 1
             log.debug(
-                "filter_dedup_rows: suppressing %s row at cwd=%s "
-                "(superseded by %s)", source, cwd, existing,
+                "filter_dedup_rows: suppressing %s row at cwd=%s (superseded by %s)",
+                source,
+                cwd,
+                existing,
             )
             continue
         # New source is preferred — update ownership but still keep the

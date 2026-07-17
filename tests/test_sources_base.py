@@ -48,12 +48,20 @@ def test_session_file_minimal_construction():
 def test_session_file_extra_is_per_instance():
     """Defaults shouldn't accidentally share state across instances."""
     a = SessionFile(
-        source="x", path=Path("/a"), cwd=None, session_id="a",
-        started_at=None, last_modified=0.0,
+        source="x",
+        path=Path("/a"),
+        cwd=None,
+        session_id="a",
+        started_at=None,
+        last_modified=0.0,
     )
     b = SessionFile(
-        source="x", path=Path("/b"), cwd=None, session_id="b",
-        started_at=None, last_modified=0.0,
+        source="x",
+        path=Path("/b"),
+        cwd=None,
+        session_id="b",
+        started_at=None,
+        last_modified=0.0,
     )
     a.extra["k"] = "v"
     assert b.extra == {}
@@ -89,6 +97,7 @@ def test_incomplete_subclass_cannot_instantiate():
 
         def is_available(self) -> bool:
             return False
+
         # missing discover_sessions, iter_records
 
     with pytest.raises(TypeError):

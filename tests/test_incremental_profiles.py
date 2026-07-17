@@ -185,9 +185,7 @@ def test_extract_incremental_is_idempotent():
 def test_persist_incremental_profile_writes_tentative_bucket(op_conn):
     """Tentative facts must persist under a reserved ``_tentative.<field>`` key."""
     # Seed a strong existing email so the new mention is routed to tentative.
-    upsert_profile_field(
-        op_conn, "email_primary", "primary@example.com", confidence=0.95
-    )
+    upsert_profile_field(op_conn, "email_primary", "primary@example.com", confidence=0.95)
 
     recs = [_user_with_email("alt is challenger@example.com")]
     existing = OperatorProfile()
@@ -207,9 +205,7 @@ def test_persist_incremental_profile_writes_tentative_bucket(op_conn):
     assert tent is not None
     candidates = tent[0]
     assert isinstance(candidates, list)
-    assert any(
-        c.get("value") == "challenger@example.com" for c in candidates
-    )
+    assert any(c.get("value") == "challenger@example.com" for c in candidates)
 
 
 # ---------------------------------------------------------------------------
@@ -262,11 +258,21 @@ def test_voice_incremental_counter_fields_accumulate():
     """``signature_typos`` should union-count, not get EMA-blurred away."""
     existing = {
         "lowercase_start_pct": 0.5,
-        "mean_chars": 30, "chars_p10": 5, "chars_p50": 20, "chars_p90": 60,
-        "mean_tokens": 4.0, "tokens_p10": 1, "tokens_p50": 3, "tokens_p90": 8,
-        "ends_period_pct": 0.3, "ends_question_pct": 0.1, "ends_no_punct_pct": 0.5,
+        "mean_chars": 30,
+        "chars_p10": 5,
+        "chars_p50": 20,
+        "chars_p90": 60,
+        "mean_tokens": 4.0,
+        "tokens_p10": 1,
+        "tokens_p50": 3,
+        "tokens_p90": 8,
+        "ends_period_pct": 0.3,
+        "ends_question_pct": 0.1,
+        "ends_no_punct_pct": 0.5,
         "imperative_first_word_pct": 0.4,
-        "we_vs_i_ratio": 0.2, "profanity_per_1k_turns": 0.0, "one_word_turn_pct": 0.05,
+        "we_vs_i_ratio": 0.2,
+        "profanity_per_1k_turns": 0.0,
+        "one_word_turn_pct": 0.05,
         "signature_typos": [["teh", 3]],
         "top_first_words": [["fix", 5]],
         "sample_size": 100,
@@ -391,27 +397,45 @@ def test_ingest_file_triggers_incremental_profile_updates(
     ts = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
     fake_records = [
         SimpleNamespace(
-            type="user", uuid="u1", parent_uuid=None,
-            session_id="sess-1", ts=ts, cwd="/proj/a", git_branch="main",
+            type="user",
+            uuid="u1",
+            parent_uuid=None,
+            session_id="sess-1",
+            ts=ts,
+            cwd="/proj/a",
+            git_branch="main",
             text="ssh novabox and ping dana@example.com",
             content_kind="string",
-            tool_results=[], content="ssh novabox and ping dana@example.com",
+            tool_results=[],
+            content="ssh novabox and ping dana@example.com",
             byte_offset=0,
         ),
         SimpleNamespace(
-            type="user", uuid="u2", parent_uuid="u1",
-            session_id="sess-1", ts=ts, cwd="/proj/a", git_branch="main",
+            type="user",
+            uuid="u2",
+            parent_uuid="u1",
+            session_id="sess-1",
+            ts=ts,
+            cwd="/proj/a",
+            git_branch="main",
             text="rebuilding on novabox",
             content_kind="string",
-            tool_results=[], content="rebuilding on novabox",
+            tool_results=[],
+            content="rebuilding on novabox",
             byte_offset=50,
         ),
         SimpleNamespace(
-            type="user", uuid="u3", parent_uuid="u2",
-            session_id="sess-1", ts=ts, cwd="/proj/a", git_branch="main",
+            type="user",
+            uuid="u3",
+            parent_uuid="u2",
+            session_id="sess-1",
+            ts=ts,
+            cwd="/proj/a",
+            git_branch="main",
             text="dana@example.com again",
             content_kind="string",
-            tool_results=[], content="dana@example.com again",
+            tool_results=[],
+            content="dana@example.com again",
             byte_offset=100,
         ),
     ]
@@ -446,10 +470,12 @@ def test_ingest_file_triggers_incremental_profile_updates(
         # The update_vocabulary_counts path only bumps terms already in the table,
         # so we verify the counter path works by pre-seeding the term.
         from index.ontology import upsert_vocabulary_term as _upsert_vt
+
         _upsert_vt(
             conn, term="novabox", definition="test workstation", category="machine", frequency=1
         )
         from extractors.ontology import update_vocabulary_counts as _uvc
+
         _uvc(fake_records, conn)
         term = get_term(conn, "novabox")
         assert term is not None
@@ -470,15 +496,21 @@ def test_ingest_file_survives_extractor_failure(
     fake_path.write_text("payload\n", encoding="utf-8")
     ts = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
     rec = SimpleNamespace(
-        type="user", uuid="u1", parent_uuid=None,
-        session_id="sess-1", ts=ts, cwd="/proj/a", git_branch="main",
-        text="hello", content_kind="string",
-        tool_results=[], content="hello", byte_offset=0,
+        type="user",
+        uuid="u1",
+        parent_uuid=None,
+        session_id="sess-1",
+        ts=ts,
+        cwd="/proj/a",
+        git_branch="main",
+        text="hello",
+        content_kind="string",
+        tool_results=[],
+        content="hello",
+        byte_offset=0,
     )
 
-    monkeypatch.setattr(
-        index_ingest, "_iter_records", lambda p, start_offset=0: iter([(10, rec)])
-    )
+    monkeypatch.setattr(index_ingest, "_iter_records", lambda p, start_offset=0: iter([(10, rec)]))
     monkeypatch.setattr(index_ingest, "_HAS_WALKER", True)
 
     # Sabotage one of the three updaters — operator_profile.extract_incremental.

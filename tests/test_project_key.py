@@ -32,6 +32,7 @@ from index.query import search_extractions
 # Unit: project_key
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "cwd,expected",
     [
@@ -44,8 +45,7 @@ from index.query import search_extractions
             "/home/operator/acme-net/acmenet",
         ),
         (
-            "/home/operator/beta-services/.worktrees/"
-            "m0-safety-floor/apps/atria-council",
+            "/home/operator/beta-services/.worktrees/m0-safety-floor/apps/atria-council",
             "/home/operator/beta-services",
         ),
         # No marker -> unchanged (do not over-strip plugin cache paths).
@@ -66,6 +66,7 @@ def test_project_key(cwd, expected):
 # ---------------------------------------------------------------------------
 # Migration: v4 -> v5
 # ---------------------------------------------------------------------------
+
 
 def _build_v4_db(db_path: Path, wt_cwd: str, parent: str) -> None:
     raw = sqlite3.connect(db_path)
@@ -124,36 +125,36 @@ def test_schema_v4_to_v5_migration(tmp_path: Path) -> None:
         assert "project_key" in ext_cols
 
         # Worktree cwd collapsed to repo root in backfill.
-        pk = c.execute(
-            "SELECT project_key FROM messages WHERE text = 'wt row'"
-        ).fetchone()["project_key"]
+        pk = c.execute("SELECT project_key FROM messages WHERE text = 'wt row'").fetchone()[
+            "project_key"
+        ]
         assert pk == parent
         # Plain row left as-is.
-        pk2 = c.execute(
-            "SELECT project_key FROM messages WHERE text = 'plain row'"
-        ).fetchone()["project_key"]
+        pk2 = c.execute("SELECT project_key FROM messages WHERE text = 'plain row'").fetchone()[
+            "project_key"
+        ]
         assert pk2 == parent
         # Extraction backfilled too.
-        epk = c.execute(
-            "SELECT project_key FROM extractions WHERE content = 'wt fact'"
-        ).fetchone()["project_key"]
+        epk = c.execute("SELECT project_key FROM extractions WHERE content = 'wt fact'").fetchone()[
+            "project_key"
+        ]
         assert epk == parent
 
-        ver = c.execute(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-        ).fetchone()["value"]
+        ver = c.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()[
+            "value"
+        ]
         assert ver == "5"
 
         # Idempotent: second apply leaves everything unchanged.
         apply_schema(c)
-        ver2 = c.execute(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-        ).fetchone()["value"]
+        ver2 = c.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()[
+            "value"
+        ]
         assert ver2 == "5"
         assert c.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 2
-        pk_after = c.execute(
-            "SELECT project_key FROM messages WHERE text = 'wt row'"
-        ).fetchone()["project_key"]
+        pk_after = c.execute("SELECT project_key FROM messages WHERE text = 'wt row'").fetchone()[
+            "project_key"
+        ]
         assert pk_after == parent
     finally:
         c.close()
@@ -162,6 +163,7 @@ def test_schema_v4_to_v5_migration(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Pooling: search_extractions
 # ---------------------------------------------------------------------------
+
 
 def _conn() -> sqlite3.Connection:
     c = sqlite3.connect(":memory:")
@@ -179,8 +181,17 @@ def _insert_ext(c, *, content, cwd, source_uuid, kind="note", ts=1_700_000_000):
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            kind, content, "s1", cwd, ts, source_uuid, 0.8, "project",
-            json.dumps({}), "claude_code", project_key(cwd),
+            kind,
+            content,
+            "s1",
+            cwd,
+            ts,
+            source_uuid,
+            0.8,
+            "project",
+            json.dumps({}),
+            "claude_code",
+            project_key(cwd),
         ),
     )
     c.commit()
@@ -225,11 +236,14 @@ def test_search_extractions_exact_cwd_does_not_pool():
 def test_search_extractions_different_projects_never_pool():
     c = _conn()
     _insert_ext(
-        c, content="falcon-core fact",
-        cwd="/home/operator/falcon-core/.claude/worktrees/wf_a-1", source_uuid="u1",
+        c,
+        content="falcon-core fact",
+        cwd="/home/operator/falcon-core/.claude/worktrees/wf_a-1",
+        source_uuid="u1",
     )
     _insert_ext(
-        c, content="aispeed fact",
+        c,
+        content="aispeed fact",
         cwd="/home/operator/acme-net/acmenet/.claude/worktrees/wf_b-1",
         source_uuid="u2",
     )
@@ -243,13 +257,23 @@ def test_search_extractions_different_projects_never_pool():
 # Pooling: goals
 # ---------------------------------------------------------------------------
 
+
 def _goal_ext(content, cwd, ts=1_700_000_000):
-    return type("E", (), {
-        "kind": "goal", "content": content,
-        "ts": datetime.fromtimestamp(ts, tz=timezone.utc),
-        "cwd": cwd, "session_id": "s1", "source_uuid": f"u-{ts}",
-        "score": 0.8, "scope": "project", "context": {},
-    })()
+    return type(
+        "E",
+        (),
+        {
+            "kind": "goal",
+            "content": content,
+            "ts": datetime.fromtimestamp(ts, tz=timezone.utc),
+            "cwd": cwd,
+            "session_id": "s1",
+            "source_uuid": f"u-{ts}",
+            "score": 0.8,
+            "scope": "project",
+            "context": {},
+        },
+    )()
 
 
 def test_goal_pooling_worktree_retrievable_via_parent():
@@ -287,13 +311,13 @@ def test_goals_apply_schema_backfills_legacy_worktree_project():
     c.commit()
     # Re-apply schema -> idempotent backfill collapses it.
     goals_apply_schema(c)
-    proj = c.execute(
-        "SELECT project FROM goal_stack WHERE goal_text = 'legacy goal'"
-    ).fetchone()["project"]
+    proj = c.execute("SELECT project FROM goal_stack WHERE goal_text = 'legacy goal'").fetchone()[
+        "project"
+    ]
     assert proj == parent
     # Idempotent second run.
     goals_apply_schema(c)
-    proj2 = c.execute(
-        "SELECT project FROM goal_stack WHERE goal_text = 'legacy goal'"
-    ).fetchone()["project"]
+    proj2 = c.execute("SELECT project FROM goal_stack WHERE goal_text = 'legacy goal'").fetchone()[
+        "project"
+    ]
     assert proj2 == parent

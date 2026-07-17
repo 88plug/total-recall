@@ -61,9 +61,39 @@ from extractors.continuation_packet import (  # noqa: E402
 
 _WORD_RE = re.compile(r"[A-Za-z0-9_./-]+")
 _STOP = {
-    "the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "is", "are",
-    "this", "that", "it", "with", "as", "be", "at", "by", "we", "i", "you",
-    "do", "did", "so", "then", "now", "next", "let", "let's", "ok", "okay",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "to",
+    "of",
+    "in",
+    "on",
+    "for",
+    "is",
+    "are",
+    "this",
+    "that",
+    "it",
+    "with",
+    "as",
+    "be",
+    "at",
+    "by",
+    "we",
+    "i",
+    "you",
+    "do",
+    "did",
+    "so",
+    "then",
+    "now",
+    "next",
+    "let",
+    "let's",
+    "ok",
+    "okay",
 }
 # Path-ish file tokens: must contain a slash or a dotted extension.
 _PATHLIKE_RE = re.compile(r"[\w./-]*[/.][\w./-]+")
@@ -199,11 +229,7 @@ def gold_after(records: list[dict], boundary_pos: int, post_window: int) -> dict
 def _content_words(text: str | None) -> set[str]:
     if not text:
         return set()
-    return {
-        w.lower()
-        for w in _WORD_RE.findall(text)
-        if w.lower() not in _STOP and len(w) > 2
-    }
+    return {w.lower() for w in _WORD_RE.findall(text) if w.lower() not in _STOP and len(w) > 2}
 
 
 def _jaccard(a: set[str], b: set[str]) -> float:
@@ -340,9 +366,7 @@ def score_case(
         }
 
     # goal_alignment: packet intent vs. where work actually resumed.
-    intent = " ".join(
-        str(packet.get(f, "")) for f in ("active_goal", "last_user_directive")
-    )
+    intent = " ".join(str(packet.get(f, "")) for f in ("active_goal", "last_user_directive"))
     resumed = gold.get("first_user_text") or baseline[:400]
     goal_alignment = round(_jaccard(_content_words(intent), _content_words(resumed)), 4)
 

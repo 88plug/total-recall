@@ -226,9 +226,7 @@ def test_intent_have_we_discussed_uses_extractions_first(monkeypatch, stub_conn)
     assert rec.calls["query.search_messages"] == 0
 
 
-def test_intent_operator_preference_lookup_hits_bans_and_operator(
-    monkeypatch, stub_conn
-):
+def test_intent_operator_preference_lookup_hits_bans_and_operator(monkeypatch, stub_conn):
     rec = _install_recording_backends(monkeypatch)
     out = rtt.recall_targeted("operator_preference_lookup", "cloud_provider")
     # Ban stub fires (strong negative) → recommendation collapses to "avoid".
@@ -240,9 +238,7 @@ def test_intent_operator_preference_lookup_hits_bans_and_operator(
     assert rec.calls["query.search_extractions"] == 0
 
 
-def test_intent_before_suggesting_default_short_circuits_on_ban(
-    monkeypatch, stub_conn
-):
+def test_intent_before_suggesting_default_short_circuits_on_ban(monkeypatch, stub_conn):
     """The composite route checks bans → decisions → corrections in order.
 
     A positive ban hit should short-circuit and *not* call decisions /
@@ -378,9 +374,7 @@ def test_empty_subject_for_lookup_intent_returns_verify(monkeypatch, stub_conn):
     assert sum(rec.calls.values()) == 0
 
 
-def test_have_we_discussed_falls_back_to_messages_when_extractions_empty(
-    monkeypatch, stub_conn
-):
+def test_have_we_discussed_falls_back_to_messages_when_extractions_empty(monkeypatch, stub_conn):
     """If extractions FTS returns nothing, the route should sweep messages."""
     rec = _CallRecorder()
 
@@ -418,9 +412,7 @@ def test_cwd_hint_empty_string_widens_to_all_projects(monkeypatch, stub_conn):
 
 def test_cwd_hint_explicit_scopes_lookup(monkeypatch, stub_conn):
     rec = _install_recording_backends(monkeypatch)
-    rtt.recall_targeted(
-        "checking_past_correction", "kafka", cwd_hint="/home/operator/foo"
-    )
+    rtt.recall_targeted("checking_past_correction", "kafka", cwd_hint="/home/operator/foo")
     args, _ = rec.last_args["query.search_extractions"]
     assert args[1] == "/home/operator/foo"
 

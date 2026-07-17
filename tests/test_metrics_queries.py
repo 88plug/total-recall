@@ -76,9 +76,16 @@ def _insert_turn(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'end_turn', 'req', ?, '/tmp/x.jsonl')
         """,
         (
-            session_id, cwd, ts, model,
-            input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens,
-            duration_ms, uuid or f"turn-{session_id}-{ts}",
+            session_id,
+            cwd,
+            ts,
+            model,
+            input_tokens,
+            cache_creation_tokens,
+            cache_read_tokens,
+            output_tokens,
+            duration_ms,
+            uuid or f"turn-{session_id}-{ts}",
         ),
     )
 
@@ -100,8 +107,7 @@ def _insert_compaction(
             trigger, message_uuid, source_file
         ) VALUES (?, ?, ?, ?, ?, 1500, 'auto', ?, '/tmp/x.jsonl')
         """,
-        (session_id, cwd, ts, pre_tokens, post_tokens,
-         uuid or f"compact-{session_id}-{ts}"),
+        (session_id, cwd, ts, pre_tokens, post_tokens, uuid or f"compact-{session_id}-{ts}"),
     )
 
 
@@ -167,18 +173,33 @@ def v2_db(tmp_path: Path) -> Path:
         # so the wall-clock fields are non-trivial.
         _insert_message(
             conn,
-            session_id=sid, cwd=cwd, ts=base, text=f"title-for-{sid}",
-            uuid=f"{sid}-title", role="assistant", kind="ai-title",
+            session_id=sid,
+            cwd=cwd,
+            ts=base,
+            text=f"title-for-{sid}",
+            uuid=f"{sid}-title",
+            role="assistant",
+            kind="ai-title",
         )
         _insert_message(
             conn,
-            session_id=sid, cwd=cwd, ts=base + 1, text="first",
-            uuid=f"{sid}-first", role="user", kind="user",
+            session_id=sid,
+            cwd=cwd,
+            ts=base + 1,
+            text="first",
+            uuid=f"{sid}-first",
+            role="user",
+            kind="user",
         )
         _insert_message(
             conn,
-            session_id=sid, cwd=cwd, ts=base + 60 * n_turns, text="last",
-            uuid=f"{sid}-last", role="user", kind="user",
+            session_id=sid,
+            cwd=cwd,
+            ts=base + 60 * n_turns,
+            text="last",
+            uuid=f"{sid}-last",
+            role="user",
+            kind="user",
         )
         for i in range(n_turns):
             uuid_counter += 1
@@ -216,13 +237,19 @@ def v2_db(tmp_path: Path) -> Path:
         conn,
         kind="decision",
         content="deploy with terraform",
-        session_id="sess-2", cwd=cwd_a, ts=base + 200, source_uuid="dec-1",
+        session_id="sess-2",
+        cwd=cwd_a,
+        ts=base + 200,
+        source_uuid="dec-1",
     )
     _insert_extraction(
         conn,
         kind="correction",
         content="rename the function please",
-        session_id="sess-2", cwd=cwd_a, ts=base + 300, source_uuid="corr-x",
+        session_id="sess-2",
+        cwd=cwd_a,
+        ts=base + 300,
+        source_uuid="corr-x",
     )
 
     # Two ingest runs, one with an error, one without.
@@ -276,13 +303,20 @@ def v1_db(tmp_path: Path) -> Path:
     base = _now() - 3600
     _insert_message(
         conn,
-        session_id="s1", cwd="/proj/x", ts=base, text="hello",
+        session_id="s1",
+        cwd="/proj/x",
+        ts=base,
+        text="hello",
         uuid="s1-1",
     )
     _insert_extraction(
         conn,
-        kind="correction", content="use provider-y",
-        session_id="s1", cwd="/proj/x", ts=base, source_uuid="c1",
+        kind="correction",
+        content="use provider-y",
+        session_id="s1",
+        cwd="/proj/x",
+        ts=base,
+        source_uuid="c1",
     )
     conn.commit()
     conn.close()
@@ -315,9 +349,7 @@ def test_parse_since_minutes() -> None:
 
 def test_parse_since_iso_date() -> None:
     val = M._parse_since("2026-05-20")
-    expected = int(
-        datetime(2026, 5, 20, tzinfo=timezone.utc).timestamp()
-    )
+    expected = int(datetime(2026, 5, 20, tzinfo=timezone.utc).timestamp())
     assert val == expected
 
 
@@ -544,8 +576,14 @@ def test_summary_top_corrections_groups_paraphrased(tmp_path: Path) -> None:
 
     # Anchor message so the session shows up.
     _insert_message(
-        conn, session_id="s1", cwd=cwd, ts=base, text="anchor",
-        uuid="s1-anchor", role="user", kind="user",
+        conn,
+        session_id="s1",
+        cwd=cwd,
+        ts=base,
+        text="anchor",
+        uuid="s1-anchor",
+        role="user",
+        kind="user",
     )
 
     # 5 paraphrasings of the same "use Edit not Write" rule.

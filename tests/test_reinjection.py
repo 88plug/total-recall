@@ -128,8 +128,8 @@ def test_soft_two_signals_fires():
 def test_soft_long_silence_plus_verbose_under_correction_fires():
     state = _baseline(
         escalation_risk=2,
-        silence_seconds=900,         # >600s
-        turns_since_inject=10,       # >5
+        silence_seconds=900,  # >600s
+        turns_since_inject=10,  # >5
     )
     long_draft = " ".join(["word"] * 250)  # >200 words
     fire, reasons = should_reinject(state, "back", draft_response=long_draft)

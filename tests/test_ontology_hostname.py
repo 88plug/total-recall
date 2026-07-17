@@ -5,6 +5,7 @@ directory slugs like ``a-conversation-with-daniel-kahneman-about-noise`` and
 ``claude-code-session-logs-data-mining`` flooded the ``machines`` table (~61k
 garbage rows). ``_is_cwd_slug`` now filters them while keeping real terse hosts.
 """
+
 from __future__ import annotations
 
 import pytest

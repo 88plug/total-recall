@@ -43,12 +43,21 @@ def test_get_active_goal_for_cwd_pools_worktree():
     _seed(conn)
     wt = "/home/operator/proj/.claude/worktrees/wf_a-1"
     parent = "/home/operator/proj"
-    ext = type("E", (), {
-        "kind": "goal", "content": "finish the migration",
-        "ts": datetime.fromtimestamp(1_700_000_000, tz=timezone.utc),
-        "cwd": wt, "session_id": "s1", "source_uuid": "u1",
-        "score": 0.8, "scope": "project", "context": {},
-    })()
+    ext = type(
+        "E",
+        (),
+        {
+            "kind": "goal",
+            "content": "finish the migration",
+            "ts": datetime.fromtimestamp(1_700_000_000, tz=timezone.utc),
+            "cwd": wt,
+            "session_id": "s1",
+            "source_uuid": "u1",
+            "score": 0.8,
+            "scope": "project",
+            "context": {},
+        },
+    )()
     upsert_from_extractions(conn, [ext])
 
     # Pools: query by either worktree or parent cwd hits the same goal.
@@ -68,10 +77,12 @@ def test_top_decisions_for_scope_cascade():
     _seed(conn)
     proj = "/home/operator/proj"
     # A project-scoped decision and a global one.
-    upsert_decision(conn, topic="db", chose="sqlite", over="postgres",
-                    rationale="simple", scope=proj)
-    upsert_decision(conn, topic="ci", chose="gha", over="jenkins",
-                    rationale="hosted", scope="global")
+    upsert_decision(
+        conn, topic="db", chose="sqlite", over="postgres", rationale="simple", scope=proj
+    )
+    upsert_decision(
+        conn, topic="ci", chose="gha", over="jenkins", rationale="hosted", scope="global"
+    )
 
     # Project scope (worktree collapses to proj) prefers the project row.
     wt = proj + "/.claude/worktrees/wf_x-1"
@@ -94,10 +105,20 @@ def test_top_bans_global_recency():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     _seed(conn)
-    upsert_ban(conn, banned_thing="provider-y", ban_strength="absolute",
-               ban_text="never use provider-y", ts=100)
-    upsert_ban(conn, banned_thing="jwt", ban_strength="preference",
-               ban_text="prefer session tokens", ts=200)
+    upsert_ban(
+        conn,
+        banned_thing="provider-y",
+        ban_strength="absolute",
+        ban_text="never use provider-y",
+        ts=100,
+    )
+    upsert_ban(
+        conn,
+        banned_thing="jwt",
+        ban_strength="preference",
+        ban_text="prefer session tokens",
+        ts=200,
+    )
 
     rows = top_bans(conn, cwd="/home/operator/proj", limit=3)
     assert rows
@@ -142,8 +163,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def real_db_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("TOTAL_RECALL_DB_DIR", str(tmp_path))
     for mod in (
-        "mcp_server", "mcp_server.server", "mcp_server.tools",
-        "mcp_server.resources", "mcp_server.extras",
+        "mcp_server",
+        "mcp_server.server",
+        "mcp_server.tools",
+        "mcp_server.resources",
+        "mcp_server.extras",
         "mcp_server.extras.operator_context_tools",
     ):
         sys.modules.pop(mod, None)
@@ -167,21 +191,41 @@ def test_get_operator_context_real_sections_appear(real_db_dir, monkeypatch):
     op.upsert_profile_field(conn, "name", "Andrew", confidence=0.95)
 
     goals_idx.apply_schema(conn)
-    goal_ext = type("E", (), {
-        "kind": "goal", "content": "ship the operator-context aggregator",
-        "ts": datetime.fromtimestamp(1_700_000_000, tz=timezone.utc),
-        "cwd": "/home/operator/proj", "session_id": "s1", "source_uuid": "g1",
-        "score": 0.8, "scope": "project", "context": {},
-    })()
+    goal_ext = type(
+        "E",
+        (),
+        {
+            "kind": "goal",
+            "content": "ship the operator-context aggregator",
+            "ts": datetime.fromtimestamp(1_700_000_000, tz=timezone.utc),
+            "cwd": "/home/operator/proj",
+            "session_id": "s1",
+            "source_uuid": "g1",
+            "score": 0.8,
+            "scope": "project",
+            "context": {},
+        },
+    )()
     goals_idx.upsert_from_extractions(conn, [goal_ext])
 
     dec.ensure_schema(conn)
-    dec.upsert_decision(conn, topic="db", chose="sqlite", over="postgres",
-                        rationale="simple", scope="/home/operator/proj")
+    dec.upsert_decision(
+        conn,
+        topic="db",
+        chose="sqlite",
+        over="postgres",
+        rationale="simple",
+        scope="/home/operator/proj",
+    )
 
     bans_idx.ensure_schema(conn)
-    bans_idx.upsert_ban(conn, banned_thing="provider-y", ban_strength="absolute",
-                        ban_text="never use provider-y", ts=100)
+    bans_idx.upsert_ban(
+        conn,
+        banned_thing="provider-y",
+        ban_strength="absolute",
+        ban_text="never use provider-y",
+        ts=100,
+    )
 
     onto.ensure_schema(conn)
     onto.upsert_machine(conn, "wildnuc", role="primary", last_seen_ts=999)
@@ -190,13 +234,9 @@ def test_get_operator_context_real_sections_appear(real_db_dir, monkeypatch):
     conn.close()
 
     importlib.import_module("mcp_server.server")
-    tool_mod = importlib.import_module(
-        "mcp_server.extras.operator_context_tools"
-    )
+    tool_mod = importlib.import_module("mcp_server.extras.operator_context_tools")
 
-    out = tool_mod.get_operator_context(
-        cwd="/home/operator/proj", max_chars=4000
-    )
+    out = tool_mod.get_operator_context(cwd="/home/operator/proj", max_chars=4000)
     assert isinstance(out, dict)
     # The four FIX-2 sections + identity must all materialize from real data.
     assert "identity" in out and out["identity"].get("name") == "Andrew"

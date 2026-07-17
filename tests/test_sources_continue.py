@@ -75,7 +75,7 @@ def _make_continue_tree(tmp_path: Path) -> Path:
                 {
                     "toolCallId": "tc-1",
                     "toolCall": {
-                        "function": {"name": "edit_file", "arguments": "{\"path\":\"/tmp/x\"}"},
+                        "function": {"name": "edit_file", "arguments": '{"path":"/tmp/x"}'},
                     },
                 }
             ],
@@ -320,7 +320,7 @@ def test_iter_records_tool_use_falls_back_to_toolcallstates(tmp_path):
                         "toolCall": {
                             "function": {
                                 "name": "do_thing",
-                                "arguments": "{\"a\": 1}",
+                                "arguments": '{"a": 1}',
                             }
                         },
                     }
@@ -379,15 +379,18 @@ def test_iter_records_malformed_file_yields_nothing(tmp_path):
 
 def test_adapter_in_registry_after_import():
     import lib.sources.continue_dev  # noqa: F401
+
     assert ContinueSource in SOURCES
 
 
 def test_source_by_name_returns_continue():
     import lib.sources.continue_dev  # noqa: F401
+
     src = source_by_name("continue")
     assert isinstance(src, ContinueSource)
 
 
 def test_all_sources_includes_continue():
     import lib.sources.continue_dev  # noqa: F401
+
     assert any(isinstance(s, ContinueSource) for s in all_sources())

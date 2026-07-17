@@ -180,9 +180,7 @@ def apply_vec_schema(conn: sqlite3.Connection, *, dim: int = 384) -> None:
     # The vec0 virtual table dim is baked into the schema string and can't be
     # ALTERed in place. Only create it if absent; if a row in `vec_meta` says
     # a different dim is in force, raise.
-    cur.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='vec_chunks'"
-    )
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='vec_chunks'")
     exists = cur.fetchone() is not None
 
     if exists:
@@ -268,16 +266,13 @@ def upsert_extraction_embedding(
 
     vectors = embedder.embed(chunks)
     if len(vectors) != len(chunks):
-        raise RuntimeError(
-            f"Embedder returned {len(vectors)} vectors for {len(chunks)} chunks"
-        )
+        raise RuntimeError(f"Embedder returned {len(vectors)} vectors for {len(chunks)} chunks")
 
     _delete_existing(conn, extraction_id)
     cur = conn.cursor()
     for idx, (chunk, vec) in enumerate(zip(chunks, vectors, strict=False)):
         cur.execute(
-            "INSERT INTO chunk_embeddings(extraction_id, chunk_text, chunk_index) "
-            "VALUES (?, ?, ?)",
+            "INSERT INTO chunk_embeddings(extraction_id, chunk_text, chunk_index) VALUES (?, ?, ?)",
             (extraction_id, chunk, idx),
         )
         rowid = cur.lastrowid
@@ -292,9 +287,7 @@ def upsert_extraction_embedding(
 
 def _delete_existing(conn: sqlite3.Connection, extraction_id: int) -> None:
     """Remove any prior chunks/vectors for this extraction (idempotent upsert)."""
-    cur = conn.execute(
-        "SELECT id FROM chunk_embeddings WHERE extraction_id = ?", (extraction_id,)
-    )
+    cur = conn.execute("SELECT id FROM chunk_embeddings WHERE extraction_id = ?", (extraction_id,))
     ids = [r[0] for r in cur.fetchall()]
     if not ids:
         return

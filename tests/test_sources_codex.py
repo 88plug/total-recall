@@ -148,6 +148,7 @@ def _token_count_event(
 def test_codex_registered():
     """Importing :mod:`lib.sources` triggers CodexSource registration."""
     import lib.sources  # noqa: F401
+
     names = [cls.name for cls in SOURCES]
     assert "codex" in names
     s = source_by_name("codex")
@@ -268,16 +269,16 @@ def test_iter_records_model_threading_with_mid_session_switch(tmp_path):
     # message(assistant), function_call_output.
     kinds = [type(r).__name__ for r in recs]
     assert kinds == [
-        "SystemRecord",    # session_meta
-        "SystemRecord",    # turn_context #1
-        "UserRecord",      # first prompt
-        "AssistantRecord", # first reply (model = gpt-5-codex)
-        "AssistantRecord", # function_call (model = gpt-5-codex)
-        "SystemRecord",    # turn_context #2 (model switch)
-        "SystemRecord",    # compact_boundary
-        "UserRecord",      # replayed prompt from replacement_history
-        "AssistantRecord", # after-compact reply (model = gpt-5-codex-high)
-        "UserRecord",      # function_call_output
+        "SystemRecord",  # session_meta
+        "SystemRecord",  # turn_context #1
+        "UserRecord",  # first prompt
+        "AssistantRecord",  # first reply (model = gpt-5-codex)
+        "AssistantRecord",  # function_call (model = gpt-5-codex)
+        "SystemRecord",  # turn_context #2 (model switch)
+        "SystemRecord",  # compact_boundary
+        "UserRecord",  # replayed prompt from replacement_history
+        "AssistantRecord",  # after-compact reply (model = gpt-5-codex-high)
+        "UserRecord",  # function_call_output
     ]
 
     # session_meta carried cwd + session_id forward
@@ -452,9 +453,9 @@ def test_token_count_field_remapping(tmp_path):
     assert tc.subtype == "event_msg:token_count"
     usage = tc.payload["usage"]
     assert usage["input_tokens"] == 200
-    assert usage["cache_read_tokens"] == 80          # cached_input → cache_read
+    assert usage["cache_read_tokens"] == 80  # cached_input → cache_read
     assert usage["output_tokens"] == 120
-    assert usage["cache_creation_tokens"] == 15      # reasoning_output → cache_creation
+    assert usage["cache_creation_tokens"] == 15  # reasoning_output → cache_creation
     assert usage["total_tokens"] == 415
     # And the raw OpenAI shape is preserved.
     assert usage["_codex_raw"]["cached_input_tokens"] == 80

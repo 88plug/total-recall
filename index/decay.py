@@ -58,10 +58,10 @@ def adjusted_confidence(
 
 # Source quality tiers (R2 §5.3). Higher = more trustworthy.
 SOURCE_QUALITY: dict[str, int] = {
-    "explicit_user_assertion": 4,    # "my email is X"
-    "git_config_or_claude_md": 3,    # `git config user.email X` in transcript
-    "inferred_from_mention": 2,      # passing reference
-    "quoted_or_hypothetical": 1,     # operator quoting some doc
+    "explicit_user_assertion": 4,  # "my email is X"
+    "git_config_or_claude_md": 3,  # `git config user.email X` in transcript
+    "inferred_from_mention": 2,  # passing reference
+    "quoted_or_hypothetical": 1,  # operator quoting some doc
 }
 
 

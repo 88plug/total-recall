@@ -112,12 +112,27 @@ def _install_all_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def top_decisions_for_scope(conn, cwd=None, limit=3):
         return [
-            {"topic": "vps_provider", "chose": "provider-x", "over": "provider-y",
-             "scope": "global", "assertion_count": 7},
-            {"topic": "billing", "chose": "stripe", "over": "paypal",
-             "scope": "global", "assertion_count": 4},
-            {"topic": "auth", "chose": "session-token", "over": "JWT",
-             "scope": cwd or "global", "assertion_count": 2},
+            {
+                "topic": "vps_provider",
+                "chose": "provider-x",
+                "over": "provider-y",
+                "scope": "global",
+                "assertion_count": 7,
+            },
+            {
+                "topic": "billing",
+                "chose": "stripe",
+                "over": "paypal",
+                "scope": "global",
+                "assertion_count": 4,
+            },
+            {
+                "topic": "auth",
+                "chose": "session-token",
+                "over": "JWT",
+                "scope": cwd or "global",
+                "assertion_count": 2,
+            },
         ][:limit]
 
     decisions_mod.top_decisions_for_scope = top_decisions_for_scope  # type: ignore[attr-defined]
@@ -127,12 +142,27 @@ def _install_all_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def top_bans(conn, cwd=None, limit=3):
         return [
-            {"target": "Cloudflare Workers", "kind": "provider",
-             "reason": "vendor lock-in", "severity": 0.9, "scope": "global"},
-            {"target": "git push --force to main", "kind": "pattern",
-             "reason": "destructive", "severity": 1.0, "scope": "global"},
-            {"target": "npm install -g", "kind": "tool",
-             "reason": "use uv/pipx", "severity": 0.7, "scope": "global"},
+            {
+                "target": "Cloudflare Workers",
+                "kind": "provider",
+                "reason": "vendor lock-in",
+                "severity": 0.9,
+                "scope": "global",
+            },
+            {
+                "target": "git push --force to main",
+                "kind": "pattern",
+                "reason": "destructive",
+                "severity": 1.0,
+                "scope": "global",
+            },
+            {
+                "target": "npm install -g",
+                "kind": "tool",
+                "reason": "use uv/pipx",
+                "severity": 0.7,
+                "scope": "global",
+            },
         ][:limit]
 
     bans_mod.top_bans = top_bans  # type: ignore[attr-defined]
@@ -163,8 +193,10 @@ def _install_all_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
                 content="no, never use provider-y",
                 ts="2026-05-24T12:00:00+00:00",
                 context=json.dumps(
-                    {"rejected_approach": "Switch the relay to provider-y",
-                     "correction": "no, never use provider-y"}
+                    {
+                        "rejected_approach": "Switch the relay to provider-y",
+                        "correction": "no, never use provider-y",
+                    }
                 ),
             ),
             _Row(
@@ -172,8 +204,10 @@ def _install_all_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
                 content="stop suggesting Stripe",
                 ts="2026-05-25T09:00:00+00:00",
                 context=json.dumps(
-                    {"rejected_approach": "Use Stripe Checkout",
-                     "correction": "stop suggesting Stripe"}
+                    {
+                        "rejected_approach": "Use Stripe Checkout",
+                        "correction": "stop suggesting Stripe",
+                    }
                 ),
             ),
         ][:limit]
@@ -307,12 +341,12 @@ def test_graceful_degradation_when_some_modules_missing(tmp_db_dir, monkeypatch)
     # Install only two of the seven surfaces.
     operator_mod = types.ModuleType("index.operator")
     operator_mod.get_profile = lambda conn: {  # type: ignore[attr-defined]
-        "name": "Andrew", "handle": "88plug"
+        "name": "Andrew",
+        "handle": "88plug",
     }
     decisions_mod = types.ModuleType("index.decisions")
     decisions_mod.list_decisions = lambda conn, include_reversed=False, limit=3: [  # type: ignore[attr-defined]
-        {"topic": "vps_provider", "chose": "provider-x", "scope": "global",
-         "assertion_count": 7}
+        {"topic": "vps_provider", "chose": "provider-x", "scope": "global", "assertion_count": 7}
     ]
     parent = types.ModuleType("index")
     parent.operator = operator_mod  # type: ignore[attr-defined]
@@ -323,8 +357,7 @@ def test_graceful_degradation_when_some_modules_missing(tmp_db_dir, monkeypatch)
     # Block the others by inserting None into sys.modules — Python's import
     # machinery treats this as "definitely-not-importable" and raises
     # ImportError immediately.
-    for name in ("index.goals", "index.bans", "index.voice",
-                 "index.query", "index.ontology"):
+    for name in ("index.goals", "index.bans", "index.voice", "index.query", "index.ontology"):
         monkeypatch.setitem(sys.modules, name, None)
 
     _, tool_mod = _import_tool_module()
@@ -354,7 +387,8 @@ def test_max_chars_truncates_from_tail_of_priority(tmp_db_dir, monkeypatch):
 
     serialized = json.dumps(
         {k: v for k, v in out.items() if not k.startswith("_")},
-        ensure_ascii=False, separators=(",", ":")
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
     # _build_payload's cap applies to the pre-tag payload; the final dict has
     # the tags re-added afterward.
@@ -409,17 +443,23 @@ def test_empty_sections_are_pruned(tmp_db_dir, monkeypatch):
 
     parent = types.ModuleType("index")
     for attr, mod in (
-        ("operator", operator_mod), ("goals", goals_mod),
-        ("decisions", decisions_mod), ("bans", bans_mod),
-        ("voice", voice_mod), ("query", query_mod),
+        ("operator", operator_mod),
+        ("goals", goals_mod),
+        ("decisions", decisions_mod),
+        ("bans", bans_mod),
+        ("voice", voice_mod),
+        ("query", query_mod),
         ("ontology", ontology_mod),
     ):
         setattr(parent, attr, mod)
     monkeypatch.setitem(sys.modules, "index", parent)
     for name, mod in (
-        ("index.operator", operator_mod), ("index.goals", goals_mod),
-        ("index.decisions", decisions_mod), ("index.bans", bans_mod),
-        ("index.voice", voice_mod), ("index.query", query_mod),
+        ("index.operator", operator_mod),
+        ("index.goals", goals_mod),
+        ("index.decisions", decisions_mod),
+        ("index.bans", bans_mod),
+        ("index.voice", voice_mod),
+        ("index.query", query_mod),
         ("index.ontology", ontology_mod),
     ):
         monkeypatch.setitem(sys.modules, name, mod)
@@ -428,8 +468,14 @@ def test_empty_sections_are_pruned(tmp_db_dir, monkeypatch):
     out = tool_mod.get_operator_context(cwd="/home/operator/proj-a")
 
     assert "identity" in out
-    for empty_section in ("active_goal", "standing_decisions", "bans",
-                          "voice", "recent_corrections", "machines"):
+    for empty_section in (
+        "active_goal",
+        "standing_decisions",
+        "bans",
+        "voice",
+        "recent_corrections",
+        "machines",
+    ):
         assert empty_section not in out
 
 
@@ -467,7 +513,7 @@ def test_signpost_v2_no_db_silent(tmp_path, monkeypatch):
     # Ensure the recall_data root is fresh — no DB → fresh-install bootstrap
     # path. The bootstrap banner is allowed to emit once; we test that the
     # script still exits 0 either way.
-    env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{env.get('PYTHONPATH','')}"
+    env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{env.get('PYTHONPATH', '')}"
 
     proc = subprocess.run(
         ["bash", str(script)],
@@ -512,10 +558,10 @@ def test_signpost_v2_with_populated_db(tmp_path, monkeypatch):
     conn = sqlite3.connect(db_path)
     # Real operator_profile schema + one row so the collector returns data.
     from index.operator import ensure_schema, upsert_profile_field
+
     ensure_schema(conn)
     upsert_profile_field(conn, "name", "Andrew", confidence=0.95)
-    upsert_profile_field(conn, "primary_email", "claude@cryptoandcoffee.com",
-                         confidence=0.95)
+    upsert_profile_field(conn, "primary_email", "claude@cryptoandcoffee.com", confidence=0.95)
     conn.commit()
     conn.close()
 
@@ -533,7 +579,7 @@ def test_signpost_v2_with_populated_db(tmp_path, monkeypatch):
     # context, which is valid behaviour but makes additionalContext non-JSON and
     # would break the json.loads assertion below.
     env["TOTAL_RECALL_LLM_PROVIDER"] = "none"
-    env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{env.get('PYTHONPATH','')}"
+    env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{env.get('PYTHONPATH', '')}"
 
     proc = subprocess.run(
         ["bash", str(script)],

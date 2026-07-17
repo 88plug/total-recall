@@ -29,7 +29,11 @@ TS_POST = "2025-05-01T12:20:00.000Z"
 
 def _user(text, uuid, ts=TS_PRE, compact=False):
     return {
-        "type": "user", "uuid": uuid, "sessionId": SID, "cwd": CWD, "timestamp": ts,
+        "type": "user",
+        "uuid": uuid,
+        "sessionId": SID,
+        "cwd": CWD,
+        "timestamp": ts,
         "isCompactSummary": compact,
         "message": {"role": "user", "content": text},
     }
@@ -37,16 +41,27 @@ def _user(text, uuid, ts=TS_PRE, compact=False):
 
 def _tool(name, inp, tid, uuid, ts=TS_PRE):
     return {
-        "type": "assistant", "uuid": uuid, "sessionId": SID, "cwd": CWD, "timestamp": ts,
-        "message": {"role": "assistant",
-                    "content": [{"type": "tool_use", "name": name, "id": tid, "input": inp}]},
+        "type": "assistant",
+        "uuid": uuid,
+        "sessionId": SID,
+        "cwd": CWD,
+        "timestamp": ts,
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "name": name, "id": tid, "input": inp}],
+        },
     }
 
 
 def _boundary(ts=TS_BOUND, uuid="bnd"):
     return {
-        "type": "system", "subtype": "compact_boundary", "uuid": uuid,
-        "sessionId": SID, "cwd": CWD, "timestamp": ts, "content": "compacted",
+        "type": "system",
+        "subtype": "compact_boundary",
+        "uuid": uuid,
+        "sessionId": SID,
+        "cwd": CWD,
+        "timestamp": ts,
+        "content": "compacted",
     }
 
 
@@ -85,8 +100,14 @@ def test_time_guard_no_leak_in_packet(tmp_path):
     positions = bt._boundary_positions(records)
     descs = bt.enumerate_boundaries(path)
     case = bt.score_case(
-        records, positions[0], descs[0]["idx"], path, SID, CWD,
-        db_path=None, post_window=50,
+        records,
+        positions[0],
+        descs[0]["idx"],
+        path,
+        SID,
+        CWD,
+        db_path=None,
+        post_window=50,
     )
     # alpha.py is GOLD too? No — alpha is pre-boundary; GOLD is POST only.
     assert case["n_gold_files"] >= 1

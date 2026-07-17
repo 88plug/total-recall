@@ -127,9 +127,9 @@ for _gi, _grp in enumerate(_COMMAND_GROUPS):
 
 @dataclass
 class ImplicitPreference:
-    category: str           # e.g. "edit_strategy", "tool_choice", "shell_command", "vocabulary"
-    value: str              # e.g. "prefer_edit", "prefer_uv"
-    confidence: float       # 0.0..1.0
+    category: str  # e.g. "edit_strategy", "tool_choice", "shell_command", "vocabulary"
+    value: str  # e.g. "prefer_edit", "prefer_uv"
+    confidence: float  # 0.0..1.0
     evidence_sessions: int  # number of distinct sessions exhibiting pattern
     evidence_projects: int  # number of distinct cwds
     contradiction_count: int  # times operator did the opposite
@@ -245,9 +245,9 @@ _EMOJI_RANGES: list[tuple[int, int]] = [
     (0x1F900, 0x1F9FF),  # Supplemental symbols and pictographs
     (0x1FA00, 0x1FA6F),  # Chess symbols
     (0x1FA70, 0x1FAFF),  # Symbols and pictographs extended-A
-    (0x2600, 0x26FF),    # Misc symbols
-    (0x2700, 0x27BF),    # Dingbats
-    (0xFE00, 0xFE0F),    # Variation selectors
+    (0x2600, 0x26FF),  # Misc symbols
+    (0x2700, 0x27BF),  # Dingbats
+    (0xFE00, 0xFE0F),  # Variation selectors
     (0x1F1E0, 0x1F1FF),  # Flags
 ]
 
@@ -277,7 +277,7 @@ def _ngrams(text: str, n: int) -> list[str]:
     words = _WORD_RE.findall(text.lower())
     if len(words) < n:
         return []
-    return [" ".join(words[i:i + n]) for i in range(len(words) - n + 1)]
+    return [" ".join(words[i : i + n]) for i in range(len(words) - n + 1)]
 
 
 # ---------------------------------------------------------------------------
@@ -461,9 +461,9 @@ def _merge_profiles(
                 evidence_sessions=existing.evidence_sessions + pref.evidence_sessions,
                 evidence_projects=max(existing.evidence_projects, pref.evidence_projects),
                 contradiction_count=existing.contradiction_count + pref.contradiction_count,
-                sample_phrases=list(
-                    dict.fromkeys(existing.sample_phrases + pref.sample_phrases)
-                )[:3],
+                sample_phrases=list(dict.fromkeys(existing.sample_phrases + pref.sample_phrases))[
+                    :3
+                ],
             )
             index[key] = merged_pref
         else:

@@ -155,9 +155,7 @@ def _write_markdown(cur: Any, sink: TextIO, *, source: str) -> None:
             sink.write((d.get("content") or "").rstrip() + "\n")
             sink.write("```\n\n")
         else:  # messages
-            sink.write(
-                f"## #{d.get('id')} · {d.get('role')}/{d.get('kind') or '-'}\n\n"
-            )
+            sink.write(f"## #{d.get('id')} · {d.get('role')}/{d.get('kind') or '-'}\n\n")
             sink.write(f"- session: `{d.get('session_id')}`\n")
             sink.write(f"- cwd: `{d.get('cwd') or ''}`\n")
             sink.write(f"- ts: {iso_or_none(d.get('ts')) or d.get('ts')}\n")

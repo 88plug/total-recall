@@ -16,6 +16,7 @@ This test is hermetic (synthetic corpus, no ollama, no network) and MUST NOT ski
 It lives in tests/integration/ only to signal "end-to-end wiring", but it brings its
 own corpus so it has no dependency on ~/.claude/projects.
 """
+
 from __future__ import annotations
 
 import json
@@ -256,8 +257,7 @@ def test_ingest_hotpath_emits_no_incremental_warnings(tmp_path: pytest.TempPathF
         )
         sample_size = voice.get("sample_size", 0)
         assert sample_size > 0, (
-            f"voice_profile.sample_size is 0 — no records were scored. "
-            f"Full voice profile: {voice}"
+            f"voice_profile.sample_size is 0 — no records were scored. Full voice profile: {voice}"
         )
 
         # --- Assert 5: workflow_profile populated ---
@@ -277,9 +277,7 @@ def test_ingest_hotpath_emits_no_incremental_warnings(tmp_path: pytest.TempPathF
 
         # --- Assert 6: satisfaction tables exist (may be empty on tiny corpus) ---
         sat = get_satisfaction_summary(conn2)
-        assert isinstance(sat, dict), (
-            f"get_satisfaction_summary returned non-dict: {sat!r}"
-        )
+        assert isinstance(sat, dict), f"get_satisfaction_summary returned non-dict: {sat!r}"
         # sample_size >= 0 (may be 0 if synthetic corpus has no clear
         # praise/frustration signals — that's fine; the point is it didn't crash).
         assert sat.get("sample_size", 0) >= 0

@@ -9,6 +9,7 @@ racing the SQLite writer.
 This drives the real bash helper via subprocess — no Python reimplementation —
 so a regression in common.sh is caught here.
 """
+
 from __future__ import annotations
 
 import os
@@ -21,9 +22,7 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 COMMON_SH = REPO / "hooks" / "lib" / "common.sh"
 
-pytestmark = pytest.mark.skipif(
-    not COMMON_SH.is_file(), reason="hooks/lib/common.sh not present"
-)
+pytestmark = pytest.mark.skipif(not COMMON_SH.is_file(), reason="hooks/lib/common.sh not present")
 
 
 def _has_flock() -> bool:
@@ -43,10 +42,7 @@ def _make_stub_py(path: Path) -> Path:
     """A fake 'python' shim that records each invocation to an output file."""
     out = path / "child.out"
     shim = path / "stub_py"
-    shim.write_text(
-        "#!/usr/bin/env bash\n"
-        f'echo "RAN args=$*" >> {out}\n'
-    )
+    shim.write_text(f'#!/usr/bin/env bash\necho "RAN args=$*" >> {out}\n')
     shim.chmod(0o755)
     return shim
 

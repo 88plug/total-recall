@@ -101,9 +101,7 @@ class LLMCache:
         key = self._make_key(model, system, user, schema_json)
         try:
             conn = self._connect()
-            row = conn.execute(
-                "SELECT value FROM llm_cache WHERE key = ?", (key,)
-            ).fetchone()
+            row = conn.execute("SELECT value FROM llm_cache WHERE key = ?", (key,)).fetchone()
             if row is None:
                 return None
             result: dict[str, Any] = json.loads(row[0])

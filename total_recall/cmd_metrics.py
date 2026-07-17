@@ -100,17 +100,14 @@ def _print_summary_human(data: dict[str, Any], since: str) -> None:
     sessions = _g(data, "sessions")
     projects = _g(data, "projects")
     compactions = _g(data, "compactions")
-    click.echo(
-        f"  sessions: {sessions}   projects: {projects}   compactions: {compactions}"
-    )
+    click.echo(f"  sessions: {sessions}   projects: {projects}   compactions: {compactions}")
 
     in_tok = int(_g(data, "input_tokens"))
     out_tok = int(_g(data, "output_tokens"))
     cache_pct = float(_g(data, "cache_read_pct", 0.0))
     cost = float(_g(data, "estimated_cost", 0.0))
     click.echo(
-        f"  tokens:  in {in_tok:,} ({cache_pct:.0f}% cache-read), "
-        f"out {out_tok:,}    ~ ${cost:.2f}"
+        f"  tokens:  in {in_tok:,} ({cache_pct:.0f}% cache-read), out {out_tok:,}    ~ ${cost:.2f}"
     )
 
     active_h = float(_g(data, "active_hours", 0.0))
@@ -120,8 +117,7 @@ def _print_summary_human(data: dict[str, Any], since: str) -> None:
     top = data.get("top_corrections") or []
     if top:
         formatted = ",  ".join(
-            f'"{shorten(c.get("content", ""), 60)}" x{c.get("count", 0)}'
-            for c in top[:3]
+            f'"{shorten(c.get("content", ""), 60)}" x{c.get("count", 0)}' for c in top[:3]
         )
         click.echo(f"  top corrections: {formatted}")
 
@@ -137,9 +133,7 @@ def _print_summary_human(data: dict[str, Any], since: str) -> None:
         dur = float(longest.get("duration_min", 0.0))
         toks = int(longest.get("tokens", 0))
         title = longest.get("ai_title") or longest.get("title") or ""
-        click.echo(
-            f"  longest session: {dur:.0f} min, {toks:,} tokens — \"{title}\""
-        )
+        click.echo(f'  longest session: {dur:.0f} min, {toks:,} tokens — "{title}"')
 
 
 # --------------------------------------------------------------------------- #
@@ -150,9 +144,7 @@ def _print_summary_human(data: dict[str, Any], since: str) -> None:
 def _parse_rate(spec: str) -> tuple[str, float, float]:
     """Parse ``"sonnet=3/15"`` → ``("sonnet", 3.0, 15.0)`` ($/Mtok in/out)."""
     if "=" not in spec or "/" not in spec.split("=", 1)[1]:
-        raise click.BadParameter(
-            f"--rate must look like 'model=IN/OUT' (got {spec!r})"
-        )
+        raise click.BadParameter(f"--rate must look like 'model=IN/OUT' (got {spec!r})")
     model, rest = spec.split("=", 1)
     in_s, out_s = rest.split("/", 1)
     try:
@@ -204,10 +196,12 @@ def cost_subcmd(ctx: click.Context, rate: tuple[str, ...], since: str, project: 
             }
             for r in by_model
         ]
-        click.echo(format_table(
-            rows,
-            headers=["model", "in_tokens", "cache_read", "out_tokens", "cost"],
-        ))
+        click.echo(
+            format_table(
+                rows,
+                headers=["model", "in_tokens", "cache_read", "out_tokens", "cost"],
+            )
+        )
     else:
         click.echo("(no usage in window)")
 
@@ -228,9 +222,7 @@ def cost_subcmd(ctx: click.Context, rate: tuple[str, ...], since: str, project: 
 @click.option("--since", default="30d", help="Time window: '7d', '30d', '24h', or YYYY-MM-DD.")
 @click.option("--project", default=None, help="Filter to one cwd.")
 @click.pass_context
-def sessions_cmd(
-    ctx: click.Context, top: int, by: str, since: str, project: str | None
-) -> None:
+def sessions_cmd(ctx: click.Context, top: int, by: str, since: str, project: str | None) -> None:
     m = _load_metrics()
     db_path = resolve_db_path(ctx.obj.get("db_path"))
     data = m.sessions(db_path, since=since, project=project, by=by, top=top)

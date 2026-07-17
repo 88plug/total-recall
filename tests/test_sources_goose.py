@@ -287,8 +287,12 @@ def test_goose_msg_to_record_user_text() -> None:
 
 def test_goose_msg_to_record_assistant_thinking_and_text() -> None:
     sess = SessionFile(
-        source="goose", path=Path("/x"), cwd=None, session_id="s1",
-        started_at=None, last_modified=0.0,
+        source="goose",
+        path=Path("/x"),
+        cwd=None,
+        session_id="s1",
+        started_at=None,
+        last_modified=0.0,
     )
     rec = _goose_msg_to_record(
         role="assistant",
@@ -310,8 +314,12 @@ def test_goose_msg_to_record_assistant_thinking_and_text() -> None:
 def test_goose_msg_to_record_tool_request_becomes_tool_use() -> None:
     """A toolRequest block maps onto an assistant ``tool_use`` block."""
     sess = SessionFile(
-        source="goose", path=Path("/x"), cwd=None, session_id="s1",
-        started_at=None, last_modified=0.0,
+        source="goose",
+        path=Path("/x"),
+        cwd=None,
+        session_id="s1",
+        started_at=None,
+        last_modified=0.0,
     )
     rec = _goose_msg_to_record(
         role="assistant",
@@ -342,8 +350,12 @@ def test_goose_msg_to_record_tool_request_becomes_tool_use() -> None:
 def test_goose_msg_to_record_tool_response_becomes_tool_result() -> None:
     """A toolResponse block on a user row maps onto a ``tool_result``."""
     sess = SessionFile(
-        source="goose", path=Path("/x"), cwd=None, session_id="s1",
-        started_at=None, last_modified=0.0,
+        source="goose",
+        path=Path("/x"),
+        cwd=None,
+        session_id="s1",
+        started_at=None,
+        last_modified=0.0,
     )
     rec = _goose_msg_to_record(
         role="user",
@@ -375,8 +387,12 @@ def test_goose_msg_to_record_tool_response_becomes_tool_result() -> None:
 
 def test_goose_msg_to_record_error_tool_response() -> None:
     sess = SessionFile(
-        source="goose", path=Path("/x"), cwd=None, session_id="s1",
-        started_at=None, last_modified=0.0,
+        source="goose",
+        path=Path("/x"),
+        cwd=None,
+        session_id="s1",
+        started_at=None,
+        last_modified=0.0,
     )
     rec = _goose_msg_to_record(
         role="user",
@@ -404,11 +420,19 @@ def test_goose_msg_to_record_error_tool_response() -> None:
 def test_goose_msg_to_record_empty_content() -> None:
     """An empty content array must not raise; yields an empty user record."""
     sess = SessionFile(
-        source="goose", path=Path("/x"), cwd=None, session_id="s1",
-        started_at=None, last_modified=0.0,
+        source="goose",
+        path=Path("/x"),
+        cwd=None,
+        session_id="s1",
+        started_at=None,
+        last_modified=0.0,
     )
     rec = _goose_msg_to_record(
-        role="user", content=[], ts=_TS_USER, message_id="m6", session=sess,
+        role="user",
+        content=[],
+        ts=_TS_USER,
+        message_id="m6",
+        session=sess,
     )
     assert isinstance(rec, UserRecord)
     assert rec.content_kind == "empty"
@@ -417,12 +441,20 @@ def test_goose_msg_to_record_empty_content() -> None:
 
 def test_goose_msg_to_record_raw_preserved() -> None:
     sess = SessionFile(
-        source="goose", path=Path("/x"), cwd=None, session_id="s1",
-        started_at=None, last_modified=0.0,
+        source="goose",
+        path=Path("/x"),
+        cwd=None,
+        session_id="s1",
+        started_at=None,
+        last_modified=0.0,
     )
     content = [{"type": "text", "text": "hi", "extra": "kept"}]
     rec = _goose_msg_to_record(
-        role="user", content=content, ts=_TS_USER, message_id="m7", session=sess,
+        role="user",
+        content=content,
+        ts=_TS_USER,
+        message_id="m7",
+        session=sess,
     )
     # The original content array round-trips through raw.
     assert rec.raw["content"] == content
@@ -527,12 +559,8 @@ def test_discover_sessions_skips_archived(tmp_path: Path) -> None:
     db = data_dir / "sessions" / "sessions.db"
     _make_db(db, session_id="active")
     conn = sqlite3.connect(str(db))
-    _insert_session(
-        conn, "archived", "/home/operator/old", archived_at="2026-06-01 00:00:00"
-    )
-    _insert_message(
-        conn, "archived", "user", [{"type": "text", "text": "old"}], _TS_USER
-    )
+    _insert_session(conn, "archived", "/home/operator/old", archived_at="2026-06-01 00:00:00")
+    _insert_message(conn, "archived", "user", [{"type": "text", "text": "old"}], _TS_USER)
     conn.commit()
     conn.close()
 

@@ -35,33 +35,30 @@ from collections.abc import Mapping
 
 DEFAULT_RATES: dict[str, tuple[float, float]] = {
     # ---- Anthropic family aliases (used when exact model isn't matched) ----
-    "haiku":  ( 0.80,  4.00),
-    "sonnet": ( 3.00, 15.00),
-    "opus":   (15.00, 75.00),
+    "haiku": (0.80, 4.00),
+    "sonnet": (3.00, 15.00),
+    "opus": (15.00, 75.00),
     # Specific Anthropic model ids
-    "claude-haiku-4-5-20251001":  ( 1.00,  5.00),
-    "claude-sonnet-4-6":          ( 3.00, 15.00),
-    "claude-opus-4-7":            (15.00, 75.00),
-
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-opus-4-7": (15.00, 75.00),
     # ---- OpenAI (Codex CLI) ----
     # GPT-5 line: $1.25/$10 (released Aug 2025, still the cheap tier in 2026).
     # GPT-5.4 doubled to $2.50/$15, GPT-5.5 doubled again to $5/$30 — users
     # who need those must override via --rate or the env var.
-    "gpt-5":      ( 1.25, 10.00),
-    "gpt-5-mini": ( 0.25,  2.00),
-    "gpt-5-nano": ( 0.05,  0.40),
-    "o3":         (10.00, 40.00),
-    "o4-mini":    ( 2.50, 10.00),
-
+    "gpt-5": (1.25, 10.00),
+    "gpt-5-mini": (0.25, 2.00),
+    "gpt-5-nano": (0.05, 0.40),
+    "o3": (10.00, 40.00),
+    "o4-mini": (2.50, 10.00),
     # ---- Google Gemini (Gemini CLI) ----
-    "gemini-2.5-pro":        ( 1.00, 10.00),
-    "gemini-2.5-flash":      ( 0.30,  2.50),
-    "gemini-2.5-flash-lite": ( 0.10,  0.40),
+    "gemini-2.5-pro": (1.00, 10.00),
+    "gemini-2.5-flash": (0.30, 2.50),
+    "gemini-2.5-flash-lite": (0.10, 0.40),
     # Family alias — bare 'gemini' or older 'gemini-pro' falls through to Pro rates.
-    "gemini-pro":            ( 1.00, 10.00),
-
+    "gemini-pro": (1.00, 10.00),
     # ---- Fallback ----
-    "default": ( 3.00, 15.00),
+    "default": (3.00, 15.00),
 }
 
 # Per-provider cache pricing multipliers (relative to the input rate).
@@ -78,10 +75,10 @@ PROVIDER_CACHE_MULTIPLIERS: dict[str, dict[str, float]] = {
     # which, combined with cache_creation_tokens=0 on real transcripts, means
     # no double-billing. Operators who use the older GPT-4o-era 50% rate can
     # override via the `cache_multipliers` argument to `estimate_cost`.
-    "openai":    {"read": 0.10, "create": 1.00},
+    "openai": {"read": 0.10, "create": 1.00},
     # Gemini context caching: reads at 10% of standard input. Storage cost is
     # billed per-hour and not modelled here.
-    "google":    {"read": 0.10, "create": 1.00},
+    "google": {"read": 0.10, "create": 1.00},
 }
 
 # Backwards-compat constants for callers that import these directly. They

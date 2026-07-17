@@ -118,12 +118,9 @@ class FakeDag:
 
 def test_corrections_fires_on_profane_correction_with_dag_context():
     """Worked example from the spec: profane correction → score >= 0.9 with rejected_approach."""
-    a_prev = _assistant(
-        "I'll scan the /24 with nmap to find which IPs are live.", uuid="a1"
-    )
+    a_prev = _assistant("I'll scan the /24 with nmap to find which IPs are live.", uuid="a1")
     u_correct = _user(
-        "no you fucking crazy - they are static ips, i said, "
-        "try every single host with ssh",
+        "no you fucking crazy - they are static ips, i said, try every single host with ssh",
         uuid="u1",
         parent_uuid="a1",
     )
@@ -196,8 +193,7 @@ def test_corrections_skips_meta_records():
 
 def test_decisions_instead_of_parses_chose_and_over():
     rec = _assistant(
-        "I'll use sqlite-vec instead of pgvector here. "
-        "It keeps everything local. No network deps."
+        "I'll use sqlite-vec instead of pgvector here. It keeps everything local. No network deps."
     )
     results = list(Decisions().extract([rec]))
     assert results
@@ -346,9 +342,7 @@ def test_domain_facts_project_scope(text):
 
 
 def test_domain_facts_global_scope_for_identity():
-    rec = _user(
-        "the default github user on this machine should be Sam Rivera / sam@example.com"
-    )
+    rec = _user("the default github user on this machine should be Sam Rivera / sam@example.com")
     results = list(DomainFacts().extract([rec]))
     assert results
     ext = results[0]
@@ -464,8 +458,7 @@ def test_scrub_secrets_handles_non_string():
 def test_pipeline_runs_all_extractors_with_scrubbing():
     """10 mixed synthetic records → assert per-kind counts and scrubbing."""
     a_plan = _assistant(
-        "I'll use rsync instead of scp. Faster for the resumed transfer. "
-        "Should be fine.",
+        "I'll use rsync instead of scp. Faster for the resumed transfer. Should be fine.",
         uuid="a-plan",
     )
     u_correct = _user(
@@ -481,8 +474,7 @@ def test_pipeline_runs_all_extractors_with_scrubbing():
     a_done = _assistant("Done. Committed as deadbeef.", uuid="a-done")
     u_fact = _user("its local lan", uuid="u-fact")
     u_fact2 = _user(
-        "the default github user on this machine should be Sam Rivera / "
-        "sam@example.com",
+        "the default github user on this machine should be Sam Rivera / sam@example.com",
         uuid="u-fact2",
     )
     u_imp = _user("run the tests please", uuid="u-imp")  # imperative — not a fact
@@ -643,11 +635,7 @@ def test_scrub_slack_broader_token_shapes(prefix):
 
 def test_scrub_pem_private_key_block():
     body = "MIIE" + "v" * 40 + "\n" + "A" * 40 + "\n" + "Q==\n"
-    block = (
-        "-----BE" + "GIN RSA PRIVATE KEY-----\n"
-        + body
-        + "-----EN" + "D RSA PRIVATE KEY-----"
-    )
+    block = "-----BE" + "GIN RSA PRIVATE KEY-----\n" + body + "-----EN" + "D RSA PRIVATE KEY-----"
     raw = "config:\n" + block + "\ntrailing"
     out = scrub_secrets(raw)
     # Original body must be gone.
@@ -678,9 +666,12 @@ def test_scrub_generic_secret_token_private_key_assignments():
         out = scrub_secrets(raw)
         assert "[REDACTED]" in out, raw
         # The right-hand side value should be gone.
-        assert ("v" * 20) not in out or ("w" * 20) not in out or (
-            "x" * 20
-        ) not in out or ("y" * 20) not in out
+        assert (
+            ("v" * 20) not in out
+            or ("w" * 20) not in out
+            or ("x" * 20) not in out
+            or ("y" * 20) not in out
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -861,9 +852,7 @@ def test_domain_facts_score_varies_with_signal_strength():
         "and there is some discussion ongoing about how to handle retries",
         uuid="u-df-long",
     )
-    short_global = _user(
-        "we use provider-y for everything", uuid="u-df-short"
-    )
+    short_global = _user("we use provider-y for everything", uuid="u-df-short")
     lp = list(DomainFacts().extract([long_proj]))
     sg = list(DomainFacts().extract([short_global]))
     assert lp and sg
@@ -891,10 +880,7 @@ def test_away_summaries_score_varies_with_signal_strength():
         uuid="s-aw-act",
         subtype="away_summary",
         payload={
-            "content": (
-                "A long recap with detail. " * 10
-                + "Next: rebase onto main and re-run CI."
-            )
+            "content": ("A long recap with detail. " * 10 + "Next: rebase onto main and re-run CI.")
         },
     )
     s = list(AwaySummaries().extract([short]))

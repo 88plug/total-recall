@@ -73,7 +73,9 @@ def tail_loop(
 
     iterations = 0
     log.info(
-        "tail_loop: polling %s every %ss", projects_root, interval,
+        "tail_loop: polling %s every %ss",
+        projects_root,
+        interval,
     )
     while not stopped["v"]:
         t0 = time.monotonic()

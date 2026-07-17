@@ -133,9 +133,7 @@ def _to_dt(ts: Any) -> datetime:
         return datetime.fromtimestamp(ts, tz=timezone.utc)
     if isinstance(ts, str):
         try:
-            return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(
-                timezone.utc
-            )
+            return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
         except ValueError:
             return datetime.fromtimestamp(0, tz=timezone.utc)
     return datetime.fromtimestamp(0, tz=timezone.utc)
@@ -339,8 +337,10 @@ def search_extractions(
         sql += " ORDER BY rank LIMIT ?"
         sql_params.append(max(limit * _OVERFETCH, _OVERFETCH_FLOOR))
     else:
-        sql = "SELECT e.id, e.kind, e.content, e.session_id, e.cwd, e.ts, " \
-              "e.score, e.context_json, NULL AS rank FROM extractions e"
+        sql = (
+            "SELECT e.id, e.kind, e.content, e.session_id, e.cwd, e.ts, "
+            "e.score, e.context_json, NULL AS rank FROM extractions e"
+        )
         if where:
             sql += " WHERE " + " AND ".join(where)
         sql += " ORDER BY e.ts DESC, e.score DESC LIMIT ?"
@@ -468,8 +468,7 @@ def top_topics_for_cwd(
 def session_count_for_cwd(conn: sqlite3.Connection, cwd: str) -> int:
     """Count distinct sessions known for a cwd."""
     cur = conn.execute(
-        "SELECT COUNT(DISTINCT session_id) AS n FROM messages "
-        "WHERE project_key = ?",
+        "SELECT COUNT(DISTINCT session_id) AS n FROM messages WHERE project_key = ?",
         (project_key(cwd),),
     )
     row = cur.fetchone()

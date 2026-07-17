@@ -84,12 +84,10 @@ def seeded_corpus(tmp_path: Path) -> Path:
         _assistant("Got it. I'll use dana@novacluster.io for git commits."),
         _user("Also try me at admin@novacluster.io or danacodes@gmail.com."),
         _assistant(
-            "Deploying to nova-box (10.0.0.42, tailscale 100.64.1.10) "
-            "and git.novacluster.io."
+            "Deploying to nova-box (10.0.0.42, tailscale 100.64.1.10) and git.novacluster.io."
         ),
         _user(
-            "Never recommend cloudflare-pages. NovaCluster uses vultr exclusively. "
-            "Bill via stripe."
+            "Never recommend cloudflare-pages. NovaCluster uses vultr exclusively. Bill via stripe."
         ),
         _assistant(
             "Got it — self-hosted gitlab on git.novacluster.io is the SCM. "
@@ -101,8 +99,7 @@ def seeded_corpus(tmp_path: Path) -> Path:
             "We're in Europe/Berlin."
         ),
         _assistant(
-            "Products: nova-api, nova-agent, nova-ctl. Uplinks at home "
-            "are Starlink and Frontier."
+            "Products: nova-api, nova-agent, nova-ctl. Uplinks at home are Starlink and Frontier."
         ),
         # A second occurrence boosts confidence on the primary email.
         _assistant("Confirmed at dana@novacluster.io."),
@@ -175,9 +172,7 @@ def test_confidence_clamped_to_unit_interval(fresh_conn):
 
 
 def test_get_profile_exposes_confidence_and_sources(fresh_conn):
-    upsert_profile_field(
-        fresh_conn, "name", "Sam Rivera", confidence=0.9, sources=["a:1"]
-    )
+    upsert_profile_field(fresh_conn, "name", "Sam Rivera", confidence=0.9, sources=["a:1"])
     profile = get_profile(fresh_conn)
     assert profile["name"] == "Sam Rivera"
     assert profile["_confidence"]["name"] == pytest.approx(0.9)
@@ -213,9 +208,7 @@ def test_extract_identifies_machines_and_ips(seeded_corpus):
     # git.novacluster.io. At least one machine should be found.
     assert len(profile.machines) >= 1
     # At least one machine should carry an IP or tailscale address.
-    has_ip = any(
-        slot.get("ip") or slot.get("tailscale") for slot in profile.machines.values()
-    )
+    has_ip = any(slot.get("ip") or slot.get("tailscale") for slot in profile.machines.values())
     assert has_ip
 
 
@@ -238,9 +231,7 @@ def test_extract_confidence_set_on_populated_fields(seeded_corpus):
 def test_extract_sources_cite_path_and_line(seeded_corpus):
     profile = extract_operator_profile([seeded_corpus])
     # `name` cites should reference the actual file.
-    assert any(
-        str(seeded_corpus) in cite for cite in profile.sources.get("name", [])
-    )
+    assert any(str(seeded_corpus) in cite for cite in profile.sources.get("name", []))
 
 
 def test_extract_empty_corpus_returns_empty_profile(tmp_path):
@@ -287,24 +278,18 @@ def test_persist_skips_empty_fields(fresh_conn):
     written = persist_profile(fresh_conn, profile)
     assert written == 1
 
-    row_count = fresh_conn.execute(
-        "SELECT COUNT(*) FROM operator_profile"
-    ).fetchone()[0]
+    row_count = fresh_conn.execute("SELECT COUNT(*) FROM operator_profile").fetchone()[0]
     assert row_count == 1
 
 
 def test_persist_idempotent_update(seeded_corpus, fresh_conn):
     profile = extract_operator_profile([seeded_corpus])
     persist_profile(fresh_conn, profile)
-    n_before = fresh_conn.execute(
-        "SELECT COUNT(*) FROM operator_profile"
-    ).fetchone()[0]
+    n_before = fresh_conn.execute("SELECT COUNT(*) FROM operator_profile").fetchone()[0]
 
     # Second pass should not duplicate rows (PRIMARY KEY on `key`).
     persist_profile(fresh_conn, profile)
-    n_after = fresh_conn.execute(
-        "SELECT COUNT(*) FROM operator_profile"
-    ).fetchone()[0]
+    n_after = fresh_conn.execute("SELECT COUNT(*) FROM operator_profile").fetchone()[0]
     assert n_before == n_after
 
 
@@ -315,8 +300,19 @@ def test_persist_idempotent_update(seeded_corpus, fresh_conn):
 # Valid IANA region prefixes — any extracted timezone must start with one of
 # these (or be empty).  Anything else (e.g. "Jc/Jmin/Jmax") is garbage.
 _VALID_IANA_PREFIXES = (
-    "Africa/", "America/", "Antarctica/", "Arctic/", "Asia/", "Atlantic/",
-    "Australia/", "Europe/", "Indian/", "Pacific/", "US/", "Etc/", "GMT/",
+    "Africa/",
+    "America/",
+    "Antarctica/",
+    "Arctic/",
+    "Asia/",
+    "Atlantic/",
+    "Australia/",
+    "Europe/",
+    "Indian/",
+    "Pacific/",
+    "US/",
+    "Etc/",
+    "GMT/",
     "UTC",  # bare UTC is canonical
 )
 
@@ -353,8 +349,15 @@ def test_timezone_rejects_non_iana_garbage(tmp_path):
         "non-IANA code-path tokens must be rejected"
     )
     # Specifically: none of the garbage tokens should survive.
-    for garbage_token in ("Jc/Jmin/Jmax", "Pull/Request", "src/utils", "lib/core",
-                          "io/stream", "config/main", "tests/unit"):
+    for garbage_token in (
+        "Jc/Jmin/Jmax",
+        "Pull/Request",
+        "src/utils",
+        "lib/core",
+        "io/stream",
+        "config/main",
+        "tests/unit",
+    ):
         assert garbage_profile.timezone != garbage_token, (
             f"Garbage token {garbage_token!r} was accepted as timezone"
         )
@@ -466,8 +469,7 @@ def test_full_and_incremental_agree(tmp_path):
 
     if file_handle or incr_handle:
         assert file_handle == incr_handle, (
-            f"Path divergence on handle: "
-            f"file={file_handle!r}, incremental={incr_handle!r}"
+            f"Path divergence on handle: file={file_handle!r}, incremental={incr_handle!r}"
         )
 
 
@@ -519,12 +521,10 @@ def test_extract_profile_from_records_non_claude_code_source():
         _opencode_record("Hi, I'm Mira Osei (miraosei). My email is mira@helioslab.dev."),
         _opencode_assistant("Got it — git config user.email mira@helioslab.dev."),
         _opencode_record(
-            "Never use vercel. HeliosLab runs on bare metal only. "
-            "I'm in America/Chicago timezone."
+            "Never use vercel. HeliosLab runs on bare metal only. I'm in America/Chicago timezone."
         ),
         _opencode_assistant(
-            "Deploying to helio-box (10.0.1.5). "
-            "github.com/miraosei is your handle."
+            "Deploying to helio-box (10.0.1.5). github.com/miraosei is your handle."
         ),
         _opencode_record("github.com/miraosei is my profile."),
         _opencode_assistant("Confirmed at mira@helioslab.dev."),

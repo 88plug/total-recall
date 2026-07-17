@@ -14,6 +14,7 @@ every `commands/*.md` and `skills/*/SKILL.md` and asserts:
 
 Pure text inspection — no subprocess, fast, runs in the normal unit suite.
 """
+
 from __future__ import annotations
 
 import re
@@ -22,9 +23,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
-MD_FILES = sorted(
-    [*(REPO / "commands").glob("*.md"), *(REPO / "skills").glob("*/SKILL.md")]
-)
+MD_FILES = sorted([*(REPO / "commands").glob("*.md"), *(REPO / "skills").glob("*/SKILL.md")])
 
 
 def _real_subcommands() -> set[str]:
@@ -37,9 +36,7 @@ def _real_subcommands() -> set[str]:
 #   * recall-cli.sh <sub>           — the wrapper script; always a CLI call
 #   * `total-recall <sub>`          — bare CLI name ONLY inside backticks
 # Bare prose like "via the total-recall plugin" must NOT match.
-_INVOKE_RE = re.compile(
-    r"(?:recall-cli\.sh\"?|`total-recall)\s+((?:--json\s+)?)([a-z][a-z-]+)"
-)
+_INVOKE_RE = re.compile(r"(?:recall-cli\.sh\"?|`total-recall)\s+((?:--json\s+)?)([a-z][a-z-]+)")
 _PATH_REF_RE = re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}/([A-Za-z0-9_./-]+)")
 _DOCS_REF_RE = re.compile(r"(?<!/)\bdocs/[A-Za-z0-9_./-]+\.md\b")
 

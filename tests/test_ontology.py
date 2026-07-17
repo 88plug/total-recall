@@ -143,9 +143,7 @@ def synthetic_projects_root(tmp_path: Path) -> Path:
                 "cwd": "/home/operator/acme-net-tools",
                 "message": {
                     "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": "Patching parse.py — KISS applies."}
-                    ],
+                    "content": [{"type": "text", "text": "Patching parse.py — KISS applies."}],
                 },
             },
         ],
@@ -373,11 +371,7 @@ def test_co_mention_graph_populates_related_projects(tmp_path: Path) -> None:
                 "cwd": "/home/op/falcon-core",
                 "message": {
                     "role": "user",
-                    "content": (
-                        "Working on falcon-core."
-                        + raptor_mentions
-                        + viper_mentions
-                    ),
+                    "content": ("Working on falcon-core." + raptor_mentions + viper_mentions),
                 },
             }
         ],
@@ -439,8 +433,7 @@ def test_co_mention_graph_populates_related_projects(tmp_path: Path) -> None:
 
     # Should have exactly 2 entries (B and C)
     assert len(a.related_projects) == 2, (
-        f"expected 2 related projects for A, got {len(a.related_projects)}: "
-        f"{a.related_projects}"
+        f"expected 2 related projects for A, got {len(a.related_projects)}: {a.related_projects}"
     )
 
     # Each entry has the expected keys.
@@ -476,6 +469,7 @@ def test_co_mention_graph_populates_related_projects(tmp_path: Path) -> None:
     persist_ontology(memdb, snap)
 
     from index.ontology import get_project
+
     row_a = get_project(memdb, slug_a)
     assert row_a is not None
     rp = row_a["related_projects"]
@@ -595,8 +589,7 @@ def test_mine_vocabulary_keeps_operator_specific(tmp_path: Path) -> None:
     # Generic words must not be present.
     for word in ["home", "name", "state", "read", "andrew"]:
         assert word not in promoted_names, (
-            f"generic word {word!r} must not be promoted. "
-            f"Promoted: {sorted(promoted_names)}"
+            f"generic word {word!r} must not be promoted. Promoted: {sorted(promoted_names)}"
         )
 
 
@@ -623,13 +616,13 @@ def test_mine_vocabulary_drops_harness_artifacts(tmp_path: Path) -> None:
     proj.mkdir()
 
     artifact_tokens = [
-        "task-notification",   # harness XML block
-        "tool-use-id",         # exact exact blocklist
-        "output-file",         # exact blocklist
-        "rw-rw-r",             # unix perms
-        "toolu_abc123",        # tool-call ID (toolu_ prefix)
-        "claude-1000",         # tmp dir (claude- + digits)
-        "home-dana-myproj",    # cwd slug with leading home- segment
+        "task-notification",  # harness XML block
+        "tool-use-id",  # exact exact blocklist
+        "output-file",  # exact blocklist
+        "rw-rw-r",  # unix perms
+        "toolu_abc123",  # tool-call ID (toolu_ prefix)
+        "claude-1000",  # tmp dir (claude- + digits)
+        "home-dana-myproj",  # cwd slug with leading home- segment
     ]
     # Legit operator term that must survive the filter.
     legit_token = "relay-eu-west"
@@ -756,16 +749,30 @@ def test_extract_ontology_from_records_empty() -> None:
     assert len(snap.vocabulary) == len(_UNIVERSAL_CLAUDE_CODE_TERMS)
 
 
-@pytest.mark.parametrize("h", [
-    "a013-4f1a-9a75-13c768f26f92", "a01d-5333afd7bc86",
-    "a025ca8d7a59c5e9-iad", "deadbeef-cafe-1234", "5333afd7bc86",
-])
+@pytest.mark.parametrize(
+    "h",
+    [
+        "a013-4f1a-9a75-13c768f26f92",
+        "a01d-5333afd7bc86",
+        "a025ca8d7a59c5e9-iad",
+        "deadbeef-cafe-1234",
+        "5333afd7bc86",
+    ],
+)
 def test_hex_id_fragments_rejected_as_machines(h):
     assert _looks_like_hex_id(h) is True
 
 
-@pytest.mark.parametrize("h", [
-    "relay-eu-west", "server-01", "db-prod", "wild-nuc", "host-01", "ap-southeast",
-])
+@pytest.mark.parametrize(
+    "h",
+    [
+        "relay-eu-west",
+        "server-01",
+        "db-prod",
+        "wild-nuc",
+        "host-01",
+        "ap-southeast",
+    ],
+)
 def test_real_hostnames_not_hex_rejected(h):
     assert _looks_like_hex_id(h) is False

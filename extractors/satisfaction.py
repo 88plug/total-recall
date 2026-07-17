@@ -72,9 +72,7 @@ __all__ = [
 # Reaction patterns
 # ---------------------------------------------------------------------------
 
-_RE_PRAISE_QUALITY = re.compile(
-    r"\b(perfect|exactly|nice|great|love it)\b", re.IGNORECASE
-)
+_RE_PRAISE_QUALITY = re.compile(r"\b(perfect|exactly|nice|great|love it)\b", re.IGNORECASE)
 
 _RE_PRAISE_LAUNCH = re.compile(
     r"^(send it|do it|go|ship it|yes|continue|proceed|yep|ok)$",
@@ -91,9 +89,7 @@ _RE_FRUSTRATION_BROKE = re.compile(
     re.IGNORECASE,
 )
 
-_RE_FRUSTRATION_WTF = re.compile(
-    r"\b(wtf|ffs|fuck|shit|bullshit)\b", re.IGNORECASE
-)
+_RE_FRUSTRATION_WTF = re.compile(r"\b(wtf|ffs|fuck|shit|bullshit)\b", re.IGNORECASE)
 
 _RE_FRUSTRATION_SCOPE = re.compile(
     r"\bdidn'?t ask\b|\bstick to\b|\btoo much\b|\bout of scope\b|\bscope creep\b"
@@ -168,9 +164,7 @@ def classify_ai_behavior(content_blocks: list[dict], full_text: str) -> str:
         if stripped.endswith("?"):
             # Extract last sentence (simple: after last period / newline).
             last_sentence_match = re.search(r"[.!\n]([^.!\n]+\?)\s*$", stripped)
-            last_sentence = (
-                last_sentence_match.group(1) if last_sentence_match else stripped
-            )
+            last_sentence = last_sentence_match.group(1) if last_sentence_match else stripped
             if _RE_CONFIRMATION_REQUEST.search(last_sentence):
                 return "confirmation_request"
         return "mid_prose"
@@ -178,9 +172,7 @@ def classify_ai_behavior(content_blocks: list[dict], full_text: str) -> str:
         stripped = full_text.rstrip()
         if stripped.endswith("?"):
             last_sentence_match = re.search(r"[.!\n]([^.!\n]+\?)\s*$", stripped)
-            last_sentence = (
-                last_sentence_match.group(1) if last_sentence_match else stripped
-            )
+            last_sentence = last_sentence_match.group(1) if last_sentence_match else stripped
             if _RE_CONFIRMATION_REQUEST.search(last_sentence):
                 return "confirmation_request"
     return "short_ack"
@@ -319,12 +311,13 @@ def _summarise(matrix: dict[str, dict[str, int]]) -> dict:
     """Compute top-line stats from the matrix and wrap into the profile dict."""
     _PRAISE = {"praise_quality", "praise_launch", "silent_accept"}
     _FRUSTRATION = {
-        "frustration_drift", "frustration_broke", "frustration_wtf",
-        "frustration_scope", "frustration_verbosity",
+        "frustration_drift",
+        "frustration_broke",
+        "frustration_wtf",
+        "frustration_scope",
+        "frustration_verbosity",
     }
-    total_praise = sum(
-        c for r, bmap in matrix.items() if r in _PRAISE for c in bmap.values()
-    )
+    total_praise = sum(c for r, bmap in matrix.items() if r in _PRAISE for c in bmap.values())
     total_frustration = sum(
         c for r, bmap in matrix.items() if r in _FRUSTRATION for c in bmap.values()
     )
@@ -416,7 +409,7 @@ def _record_to_dag_dict(rec: Any) -> dict | None:
     elif rec_type == "assistant":
         # Rebuild content blocks list from Block dataclass instances.
         raw_blocks: list[dict] = []
-        for blk in (getattr(rec, "content", None) or []):
+        for blk in getattr(rec, "content", None) or []:
             btype = getattr(blk, "type", "")
             if btype == "text":
                 raw_blocks.append({"type": "text", "text": getattr(blk, "text", "") or ""})
@@ -426,12 +419,14 @@ def _record_to_dag_dict(rec: Any) -> dict | None:
                 )
             elif btype == "tool_use":
                 tu = getattr(blk, "tool_use", None)
-                raw_blocks.append({
-                    "type": "tool_use",
-                    "id": getattr(tu, "id", "") if tu else "",
-                    "name": getattr(tu, "name", "") if tu else "",
-                    "input": getattr(tu, "input", {}) if tu else {},
-                })
+                raw_blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": getattr(tu, "id", "") if tu else "",
+                        "name": getattr(tu, "name", "") if tu else "",
+                        "input": getattr(tu, "input", {}) if tu else {},
+                    }
+                )
             else:
                 raw_blocks.append(getattr(blk, "raw", None) or {"type": btype})
         message = {"role": "assistant", "content": raw_blocks}

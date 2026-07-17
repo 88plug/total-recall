@@ -168,9 +168,7 @@ def test_iter_records_round_trips_via_walker(tmp_path: Path):
     root = _make_projects_root(tmp_path)
     src = ClaudeCodeSource(projects_root=root)
     sessions = list(src.discover_sessions())
-    target = next(
-        s for s in sessions if s.session_id.startswith("11111111")
-    )
+    target = next(s for s in sessions if s.session_id.startswith("11111111"))
 
     via_adapter = list(src.iter_records(target))
     via_walker = list(cc_iter_records(target.path))
@@ -186,19 +184,13 @@ def test_iter_records_round_trips_via_walker(tmp_path: Path):
 def test_iter_records_emits_expected_record_subclasses(tmp_path: Path):
     root = _make_projects_root(tmp_path)
     src = ClaudeCodeSource(projects_root=root)
-    s1 = next(
-        s for s in src.discover_sessions()
-        if s.session_id.startswith("11111111")
-    )
+    s1 = next(s for s in src.discover_sessions() if s.session_id.startswith("11111111"))
     records = [r for _, r in src.iter_records(s1)]
     assert isinstance(records[0], PermissionModeRecord)
     assert isinstance(records[1], UserRecord)
     assert records[1].text == "hi"
 
-    s2 = next(
-        s for s in src.discover_sessions()
-        if s.session_id.startswith("22222222")
-    )
+    s2 = next(s for s in src.discover_sessions() if s.session_id.startswith("22222222"))
     records2 = [r for _, r in src.iter_records(s2)]
     assert isinstance(records2[0], AssistantRecord)
     assert records2[0].model == "claude-opus-4-7"
@@ -207,10 +199,7 @@ def test_iter_records_emits_expected_record_subclasses(tmp_path: Path):
 def test_iter_records_respects_start_offset(tmp_path: Path):
     root = _make_projects_root(tmp_path)
     src = ClaudeCodeSource(projects_root=root)
-    s1 = next(
-        s for s in src.discover_sessions()
-        if s.session_id.startswith("11111111")
-    )
+    s1 = next(s for s in src.discover_sessions() if s.session_id.startswith("11111111"))
     full = list(src.iter_records(s1))
     assert len(full) == 2
     mid_offset = full[0][0]

@@ -60,9 +60,7 @@ _GOAL_MARKER_RE = re.compile(
 
 # Progress markers (mirror of `progress.py`, but we link them to goals).
 # Anchored at paragraph start so we don't pick up "Done." inside narrative.
-_PROGRESS_RE = re.compile(
-    r"^(Done\.|All shipped\b|Shipped\b|Committed\b|Fixed\b)"
-)
+_PROGRESS_RE = re.compile(r"^(Done\.|All shipped\b|Shipped\b|Committed\b|Fixed\b)")
 
 # "Still broken" / "blocked on" near a goal hints at blocked status.
 _BLOCKED_RE = re.compile(r"(?i)\b(still broken|blocked on|stuck on|can'?t get past)\b")
@@ -73,8 +71,8 @@ _DONE_INLINE_RE = re.compile(r"(?i)\b(done|shipped|landed|merged)\b")
 
 _BASE_GOAL_SCORE = 0.65
 _EXPLICIT_MARKER_BONUS = 0.15  # goal: / objective: / trying to ...
-_FIRST_MESSAGE_BONUS = 0.1     # first user-string after permission-mode
-_LONG_GOAL_BONUS = 0.05        # >40 chars (more specific = more useful)
+_FIRST_MESSAGE_BONUS = 0.1  # first user-string after permission-mode
+_LONG_GOAL_BONUS = 0.05  # >40 chars (more specific = more useful)
 _LONG_GOAL_THRESHOLD = 40
 
 _BASE_PROGRESS_SCORE = 0.55
@@ -188,7 +186,11 @@ class Goals(Extractor):
 
                 log.debug(
                     "goals: declaration session=%s uuid=%s marker=%s first=%s score=%.2f",
-                    sid, rec.uuid, marker_hit, first_goal, score,
+                    sid,
+                    rec.uuid,
+                    marker_hit,
+                    first_goal,
+                    score,
                 )
                 yield Extraction(
                     kind="goal",
@@ -212,7 +214,9 @@ class Goals(Extractor):
                     marker = para.split("\n", 1)[0][:120]
                     log.debug(
                         "goals: progress session=%s uuid=%s marker=%r",
-                        sid, rec.uuid, marker,
+                        sid,
+                        rec.uuid,
+                        marker,
                     )
                     yield Extraction(
                         kind="goal_progress",

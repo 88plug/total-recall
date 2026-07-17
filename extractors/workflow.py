@@ -107,15 +107,23 @@ _AUTONOMY_WORDS: frozenset[str] = frozenset(
 )
 # Short phrases (2–3 tokens) that also signal autonomy / fire-and-forget.
 _AUTONOMY_PHRASES: tuple[str, ...] = (
-    "do it", "full send", "go ahead", "just do it", "run it", "send it",
-    "fire away", "make it so", "just go", "keep going",
+    "do it",
+    "full send",
+    "go ahead",
+    "just do it",
+    "run it",
+    "send it",
+    "fire away",
+    "make it so",
+    "just go",
+    "keep going",
 )
 
 # Planning-idiom keywords in priority order (first match wins per session).
 _PLANNING_IDIOMS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("waves",   re.compile(r"\bwaves?\b", re.IGNORECASE)),
-    ("phases",  re.compile(r"\bphases?\b", re.IGNORECASE)),
-    ("steps",   re.compile(r"\bsteps?\b", re.IGNORECASE)),
+    ("waves", re.compile(r"\bwaves?\b", re.IGNORECASE)),
+    ("phases", re.compile(r"\bphases?\b", re.IGNORECASE)),
+    ("steps", re.compile(r"\bsteps?\b", re.IGNORECASE)),
     ("sprints", re.compile(r"\bsprints?\b", re.IGNORECASE)),
 )
 
@@ -129,8 +137,8 @@ _SUBAGENT_TOOL_NAMES: frozenset[str] = frozenset(
 )
 
 # Session shape thresholds (user messages per session).
-_OPS_BURST_MAX = 10   # short-ops sessions
-_MARATHON_MIN = 200   # marathon sessions
+_OPS_BURST_MAX = 10  # short-ops sessions
+_MARATHON_MIN = 200  # marathon sessions
 
 
 # ---------------------------------------------------------------------------
@@ -241,9 +249,9 @@ def _work_window(hour_counts: Counter) -> str:
         return "mixed"
 
     bins = {
-        "morning":    sum(hour_counts[h] for h in range(6, 12)),
-        "afternoon":  sum(hour_counts[h] for h in range(12, 18)),
-        "evening":    sum(hour_counts[h] for h in range(18, 22)),
+        "morning": sum(hour_counts[h] for h in range(6, 12)),
+        "afternoon": sum(hour_counts[h] for h in range(12, 18)),
+        "evening": sum(hour_counts[h] for h in range(18, 22)),
         "late_night": sum(hour_counts[h] for h in list(range(22, 24)) + list(range(0, 6))),
     }
     dominant_bin, dominant_count = max(bins.items(), key=lambda x: x[1])
@@ -420,8 +428,12 @@ def _process_file(
             if not isinstance(rec, dict):
                 continue
             _process_record(
-                rec, str(path),
-                sessions, hour_counter, fan_out_vocab, agent_counts,
+                rec,
+                str(path),
+                sessions,
+                hour_counter,
+                fan_out_vocab,
+                agent_counts,
                 planning_idiom_votes,
             )
 
@@ -479,14 +491,16 @@ def _extract_workflow_from_records(records: Iterable[dict]) -> WorkflowProfile:
         if not isinstance(rec, dict):
             continue
         _process_record(
-            rec, "_records_batch",
-            sessions, hour_counter, fan_out_vocab, agent_counts,
+            rec,
+            "_records_batch",
+            sessions,
+            hour_counter,
+            fan_out_vocab,
+            agent_counts,
             planning_idiom_votes,
         )
 
-    return _build_profile(
-        sessions, hour_counter, fan_out_vocab, agent_counts, planning_idiom_votes
-    )
+    return _build_profile(sessions, hour_counter, fan_out_vocab, agent_counts, planning_idiom_votes)
 
 
 def _build_profile(

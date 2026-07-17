@@ -87,9 +87,7 @@ def persist_implicit_preferences(
     ts = int(now if now is not None else time.time())
 
     for pref in profile.preferences:
-        phrases_json = json.dumps(
-            pref.sample_phrases[:3], ensure_ascii=False
-        )
+        phrases_json = json.dumps(pref.sample_phrases[:3], ensure_ascii=False)
         conn.execute(
             """
             INSERT INTO implicit_preferences
@@ -173,9 +171,17 @@ def get_implicit_preferences(
             d: dict[str, Any] = dict(row)
         except (TypeError, AttributeError):
             keys = [
-                "id", "category", "value", "confidence", "evidence_sessions",
-                "evidence_projects", "contradiction_count", "sample_phrases_json",
-                "first_seen_ts", "last_seen_ts", "updated_ts",
+                "id",
+                "category",
+                "value",
+                "confidence",
+                "evidence_sessions",
+                "evidence_projects",
+                "contradiction_count",
+                "sample_phrases_json",
+                "first_seen_ts",
+                "last_seen_ts",
+                "updated_ts",
             ]
             d = dict(zip(keys, row, strict=False))
         raw_phrases = d.pop("sample_phrases_json", "[]")

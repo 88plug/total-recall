@@ -111,8 +111,7 @@ def get_voice_field(
     """Return ``(value, measured_at, sample_size)`` for ``key`` or ``None``."""
     ensure_schema(conn)
     row = conn.execute(
-        "SELECT key, value, measured_at, sample_size "
-        "FROM voice_profile WHERE key = ?",
+        "SELECT key, value, measured_at, sample_size FROM voice_profile WHERE key = ?",
         (key,),
     ).fetchone()
     if row is None:
@@ -138,8 +137,7 @@ def get_voice(conn: sqlite3.Connection) -> dict[str, Any]:
     """
     ensure_schema(conn)
     rows = conn.execute(
-        "SELECT key, value, measured_at, sample_size "
-        "FROM voice_profile ORDER BY key"
+        "SELECT key, value, measured_at, sample_size FROM voice_profile ORDER BY key"
     ).fetchall()
 
     values: dict[str, Any] = {}
@@ -179,6 +177,4 @@ def persist_voice_profile(
     for key, value in fields.items():
         if key.startswith("_"):
             continue
-        upsert_voice_field(
-            conn, key, value, sample_size=sample_size, measured_at=ts
-        )
+        upsert_voice_field(conn, key, value, sample_size=sample_size, measured_at=ts)

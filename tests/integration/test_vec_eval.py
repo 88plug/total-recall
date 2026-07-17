@@ -17,6 +17,7 @@ in the printed scorecard for the human v2.0 decision, not enforced here (a
 
 Run with output:  TOTAL_RECALL_VEC_EVAL=1 pytest tests/integration/test_vec_eval.py -s
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -122,9 +123,7 @@ def test_hybrid_not_worse_than_fts5_on_paraphrases(tmp_path, capsys) -> None:
         # Weak gate: hybrid must not REGRESS recall vs FTS5 on paraphrases.
         # The strong +5pp promotion gate is reported above for the human v2.0
         # decision; a 15-pair set is too small to hard-fail a build on.
-        assert hyb_p >= fts_p, (
-            f"hybrid regressed vs FTS5: hybrid={hyb_p:.3f} fts={fts_p:.3f}"
-        )
+        assert hyb_p >= fts_p, f"hybrid regressed vs FTS5: hybrid={hyb_p:.3f} fts={fts_p:.3f}"
     finally:
         conn.close()
 
@@ -148,34 +147,47 @@ def test_rebuild_populates_vec_embeddings(tmp_path, monkeypatch) -> None:
     slug.mkdir(parents=True)
     sess = slug / "11111111-1111-1111-1111-111111111111.jsonl"
     lines = [
-        {"type": "user", "uuid": "u1", "sessionId": "s1", "cwd": "/proj/vec",
-         "timestamp": "2026-05-01T00:00:00Z",
-         "message": {"role": "user", "content": "we decided to use asyncpg for postgres"}},
-        {"type": "user", "uuid": "u2", "sessionId": "s1", "cwd": "/proj/vec",
-         "timestamp": "2026-05-01T00:01:00Z",
-         "message": {"role": "user", "content": "never use psycopg2 here, it is banned"}},
+        {
+            "type": "user",
+            "uuid": "u1",
+            "sessionId": "s1",
+            "cwd": "/proj/vec",
+            "timestamp": "2026-05-01T00:00:00Z",
+            "message": {"role": "user", "content": "we decided to use asyncpg for postgres"},
+        },
+        {
+            "type": "user",
+            "uuid": "u2",
+            "sessionId": "s1",
+            "cwd": "/proj/vec",
+            "timestamp": "2026-05-01T00:01:00Z",
+            "message": {"role": "user", "content": "never use psycopg2 here, it is banned"},
+        },
     ]
     import json as _json
+
     sess.write_text("\n".join(_json.dumps(x) for x in lines) + "\n")
 
     db = tmp_path / "index.db"
     monkeypatch.setenv("TOTAL_RECALL_VEC", "1")
     monkeypatch.setenv("TOTAL_RECALL_LLM_PROVIDER", "none")
 
-    rc = main([
-        "--db", str(db), "rebuild", "--yes",
-        "--projects-root", str(projects),
-    ])
+    rc = main(
+        [
+            "--db",
+            str(db),
+            "rebuild",
+            "--yes",
+            "--projects-root",
+            str(projects),
+        ]
+    )
     assert rc == 0, "rebuild should exit 0"
 
     # The vec backfill should have created + populated chunk_embeddings.
     conn = sqlite3.connect(db)
     try:
-        tables = {
-            r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "chunk_embeddings" in tables, "vec schema not applied by rebuild"
         n = conn.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()[0]
         assert n > 0, "rebuild did not backfill any embeddings"

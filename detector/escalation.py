@@ -221,8 +221,7 @@ def assess_escalation(
             triggers.append("verbosity_under_correction")
 
         banned_hits = [
-            p for p in BANNED_DRAFT_PATTERNS
-            if re.search(p, draft_response, re.IGNORECASE)
+            p for p in BANNED_DRAFT_PATTERNS if re.search(p, draft_response, re.IGNORECASE)
         ]
         if banned_hits:
             risk += 2

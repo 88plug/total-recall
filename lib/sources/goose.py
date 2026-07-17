@@ -214,11 +214,7 @@ def _user_text(content: Any) -> str | None:
     """Flatten user ``text`` blocks to a single string."""
     if not isinstance(content, list):
         return None
-    parts = [
-        b.get("text", "")
-        for b in content
-        if isinstance(b, dict) and b.get("type") == "text"
-    ]
+    parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
     joined = "\n".join(p for p in parts if p)
     return joined or None
 

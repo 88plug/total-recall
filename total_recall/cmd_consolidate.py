@@ -239,9 +239,7 @@ def _reconcile_tentative(
             ).fetchall()
             out["dropped"] = len(stale)
             if not dry_run and stale:
-                conn.execute(
-                    "DELETE FROM tentative_facts WHERE created_ts < ?", (cutoff,)
-                )
+                conn.execute("DELETE FROM tentative_facts WHERE created_ts < ?", (cutoff,))
         except sqlite3.Error:
             pass
     return out
@@ -252,9 +250,7 @@ def _reconcile_tentative(
 # --------------------------------------------------------------------------- #
 
 
-def _promote_vocabulary(
-    conn: sqlite3.Connection, *, dry_run: bool
-) -> dict[str, int]:
+def _promote_vocabulary(conn: sqlite3.Connection, *, dry_run: bool) -> dict[str, int]:
     """3-tier vocabulary promotion / demotion per R2."""
     out = {"tier0_to_1": 0, "tier1_to_2": 0, "demoted": 0, "archived": 0}
 
@@ -290,14 +286,18 @@ def _promote_vocabulary(
         except sqlite3.Error:
             cols = []
         if {"tier", "n_sessions", "n_days"}.issubset(cols):
-            rows = conn.execute(
-                "SELECT rowid AS _rid FROM vocabulary "
-                "WHERE tier=1 AND (n_sessions >= 7 AND n_days >= 14) "
-                "   OR (user_confirmed=1 AND tier=1)"
-            ).fetchall() if "user_confirmed" in cols else conn.execute(
-                "SELECT rowid AS _rid FROM vocabulary "
-                "WHERE tier=1 AND n_sessions >= 7 AND n_days >= 14"
-            ).fetchall()
+            rows = (
+                conn.execute(
+                    "SELECT rowid AS _rid FROM vocabulary "
+                    "WHERE tier=1 AND (n_sessions >= 7 AND n_days >= 14) "
+                    "   OR (user_confirmed=1 AND tier=1)"
+                ).fetchall()
+                if "user_confirmed" in cols
+                else conn.execute(
+                    "SELECT rowid AS _rid FROM vocabulary "
+                    "WHERE tier=1 AND n_sessions >= 7 AND n_days >= 14"
+                ).fetchall()
+            )
             out["tier1_to_2"] = len(rows)
             if not dry_run and rows:
                 conn.executemany(
@@ -393,8 +393,7 @@ def _auto_dream_cleanup(
             continue
         try:
             stale = conn.execute(
-                f"SELECT rowid FROM {table} "
-                f"WHERE archived=1 AND last_reasserted_ts < ?",
+                f"SELECT rowid FROM {table} WHERE archived=1 AND last_reasserted_ts < ?",
                 (cutoff,),
             ).fetchall()
         except sqlite3.Error:
@@ -566,9 +565,7 @@ def consolidate_cmd(ctx: click.Context, dry_run: bool, verbose: bool) -> None:
         for table in _DECAY_TABLES:
             if verbose:
                 click.echo(f"[consolidate] decay: {table}", err=True)
-            report["decay"][table] = _decay_one_table(
-                conn, table, adjusted_conf, dry_run=dry_run
-            )
+            report["decay"][table] = _decay_one_table(conn, table, adjusted_conf, dry_run=dry_run)
 
         if verbose:
             click.echo("[consolidate] tentative reconciliation", err=True)
@@ -606,20 +603,16 @@ def _emit(ctx: click.Context, report: dict[str, Any], as_json: bool) -> None:
         click.echo(format_json(report))
         return
     click.echo(
-        f"total-recall consolidate — {'DRY-RUN ' if report['dry_run'] else ''}"
-        f"db={report['db']}"
+        f"total-recall consolidate — {'DRY-RUN ' if report['dry_run'] else ''}db={report['db']}"
     )
     rows = _report_rows(report)
-    click.echo(
-        format_table(rows, headers=["section", "target", "scanned", "changed", "archived"])
-    )
+    click.echo(format_table(rows, headers=["section", "target", "scanned", "changed", "archived"]))
     drift = report.get("drift_candidates") or []
     if drift:
         click.echo(f"  drift candidates: {len(drift)} field(s)")
         for d in drift[:5]:
             click.echo(
-                f"    - {d.get('field')}: {d.get('current_value')!r} → "
-                f"{d.get('new_value')!r}"
+                f"    - {d.get('field')}: {d.get('current_value')!r} → {d.get('new_value')!r}"
             )
     skipped = report.get("skipped") or []
     if skipped:

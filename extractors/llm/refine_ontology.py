@@ -482,9 +482,7 @@ def refine_project_narratives(
                 narrative = _truncate_or_none(narrative)
             # Anti-echo: suppress narratives that are just the snippets parroted back.
             if isinstance(narrative, str):
-                joined_snippets = " ".join(
-                    input_index[returned_cwd].get("context_snippets") or []
-                )
+                joined_snippets = " ".join(input_index[returned_cwd].get("context_snippets") or [])
                 if _is_echo(narrative, joined_snippets):
                     log.debug("Echo detected for cwd %r -- suppressing narrative", returned_cwd)
                     narrative = None

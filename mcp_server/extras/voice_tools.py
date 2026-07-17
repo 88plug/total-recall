@@ -32,11 +32,11 @@ def _index_missing_error() -> dict[str, Any]:
 
 @mcp.tool(title="Get Voice Profile", annotations=ToolAnnotations(readOnlyHint=True))
 def get_voice_profile() -> dict:
-    (
-        "Return the operator's measured communication style — casing, brevity, profanity rate, "
-        "signature typos, top first words. Use to match cadence in responses. Calling this AND "
-        "following its rules eliminates the 'you sound like an AI' feel that prompts pushback."
-    )
+    """
+    Return the operator's measured communication style — casing, brevity, profanity rate,
+    signature typos, top first words. Use to match cadence in responses. Calling this AND
+    following its rules eliminates the 'you sound like an AI' feel that prompts pushback.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()

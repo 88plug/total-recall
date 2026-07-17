@@ -38,18 +38,18 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _CORRECTION_PATTERNS: list[str] = [
-    r"^\s*no[,\s]",                                             # directive flip
-    r"\bi\s+(told|said|asked)\s+you\b",                         # restatement
+    r"^\s*no[,\s]",  # directive flip
+    r"\bi\s+(told|said|asked)\s+you\b",  # restatement
     r"\b(already|how\s+many\s+times|you\s+forgot)\b",
     r"\bstop\s+(doing|using|adding|guessing|trying|thinking)\b",
     r"\b(don'?t|never)\s+(use|do|add|mention|recommend)\b",
     r"\b(wrong|that'?s\s+not|wtf)\b",
     r"\bwe\s+(never|don'?t|won'?t)\s+use\b",
     r"\bguessing\b",
-    r"\bcheck\s+(our|the)\s+session\s+logs\b",                  # cross-session memory appeal
-    r"\bdrift(ing)?\b",                                         # drift callout
-    r"\byou\s+(broke|are\s+lying)\b",                           # severity-high
-    r"\bnever\s+ever\b",                                        # strongest rule
+    r"\bcheck\s+(our|the)\s+session\s+logs\b",  # cross-session memory appeal
+    r"\bdrift(ing)?\b",  # drift callout
+    r"\byou\s+(broke|are\s+lying)\b",  # severity-high
+    r"\bnever\s+ever\b",  # strongest rule
 ]
 
 _PATTERN_RE = re.compile("|".join(_CORRECTION_PATTERNS), re.IGNORECASE)

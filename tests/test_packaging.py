@@ -26,6 +26,7 @@ SKIP_SLOW = os.environ.get("SKIP_SLOW_TESTS", "").strip() not in ("", "0")
 
 # ── Fast metadata tests (no build needed) ─────────────────────────────────
 
+
 def test_pyproject_version_matches_package_version() -> None:
     with open(ROOT / "pyproject.toml", "rb") as fh:
         data = tomllib.load(fh)
@@ -33,6 +34,7 @@ def test_pyproject_version_matches_package_version() -> None:
 
     # Import __version__ without pulling in optional heavy deps
     import importlib.util
+
     spec = importlib.util.spec_from_file_location(
         "total_recall", ROOT / "total_recall" / "__init__.py"
     )
@@ -42,8 +44,7 @@ def test_pyproject_version_matches_package_version() -> None:
     pkg_version: str = mod.__version__  # type: ignore[attr-defined]
 
     assert toml_version == pkg_version, (
-        f"pyproject.toml version ({toml_version}) != "
-        f"total_recall.__version__ ({pkg_version})"
+        f"pyproject.toml version ({toml_version}) != total_recall.__version__ ({pkg_version})"
     )
 
 
@@ -65,15 +66,19 @@ def test_readme_exists_and_is_referenced() -> None:
 
 # ── Slow build tests ───────────────────────────────────────────────────────
 
+
 @pytest.mark.slow
 @pytest.mark.skipif(SKIP_SLOW, reason="SKIP_SLOW_TESTS=1")
 def test_wheel_builds_successfully(tmp_path: Path) -> None:
     """Build a wheel into tmp_path and verify it completes without error."""
     result = subprocess.run(
         [
-            sys.executable, "-m", "build",
+            sys.executable,
+            "-m",
+            "build",
             "--wheel",
-            "--outdir", str(tmp_path),
+            "--outdir",
+            str(tmp_path),
             str(ROOT),
         ],
         capture_output=True,
@@ -92,9 +97,12 @@ def test_wheel_contains_all_top_level_packages(tmp_path: Path) -> None:
     """All 6 top-level packages must be present in the wheel."""
     result = subprocess.run(
         [
-            sys.executable, "-m", "build",
+            sys.executable,
+            "-m",
+            "build",
             "--wheel",
-            "--outdir", str(tmp_path),
+            "--outdir",
+            str(tmp_path),
             str(ROOT),
         ],
         capture_output=True,
@@ -127,8 +135,7 @@ def test_wheel_contains_all_top_level_packages(tmp_path: Path) -> None:
 
     missing = expected_packages - found_packages
     assert not missing, (
-        f"Wheel is missing top-level packages: {missing}\n"
-        f"Wheel contents (first 30): {names[:30]}"
+        f"Wheel is missing top-level packages: {missing}\nWheel contents (first 30): {names[:30]}"
     )
 
 
@@ -138,9 +145,13 @@ def test_twine_check_passes(tmp_path: Path) -> None:
     """twine check must report PASSED for both sdist and wheel."""
     build_result = subprocess.run(
         [
-            sys.executable, "-m", "build",
-            "--sdist", "--wheel",
-            "--outdir", str(tmp_path),
+            sys.executable,
+            "-m",
+            "build",
+            "--sdist",
+            "--wheel",
+            "--outdir",
+            str(tmp_path),
             str(ROOT),
         ],
         capture_output=True,

@@ -60,6 +60,7 @@ def inject_test_keywords(monkeypatch: pytest.MonkeyPatch) -> None:
 # infer_scope
 # ---------------------------------------------------------------------------
 
+
 def test_infer_scope_empty_returns_none():
     assert infer_scope("") is None
     assert infer_scope("/") is None
@@ -80,6 +81,7 @@ def test_infer_scope_deep_path_returns_last_segment():
 # score_scopes
 # ---------------------------------------------------------------------------
 
+
 def test_score_scopes_counts_hits_per_scope():
     s = score_scopes("we need to fix the relay wireguard tunnel on the fleet")
     assert s["relay-fleet"] >= 3  # "relay", "wireguard", "fleet"
@@ -95,6 +97,7 @@ def test_score_scopes_empty_text():
 # ---------------------------------------------------------------------------
 # detect_scope_shift — positives
 # ---------------------------------------------------------------------------
+
 
 def test_cwd_change_is_strong_signal():
     shift = detect_scope_shift(
@@ -147,6 +150,7 @@ def test_keyword_plus_pivot_positive():
 # ---------------------------------------------------------------------------
 # detect_scope_shift — negatives
 # ---------------------------------------------------------------------------
+
 
 def test_same_scope_no_shift():
     recent = ["fix the relay tunnel", "check relay-fleet wireguard"]
@@ -238,6 +242,7 @@ def test_mixed_scope_prompt_top_wins():
 # dominant_scope
 # ---------------------------------------------------------------------------
 
+
 def test_dominant_scope_empty():
     assert dominant_scope([]) is None
 
@@ -262,6 +267,7 @@ def test_dominant_scope_majority():
 # ---------------------------------------------------------------------------
 # PIVOT_REGEX sanity (helper used internally)
 # ---------------------------------------------------------------------------
+
 
 def test_pivot_regex_matches_common_phrases():
     for phrase in [

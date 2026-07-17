@@ -93,8 +93,9 @@ def _summary(sid: str, cwd: str, *, title: str = "", model: str = "grok-composer
     }
 
 
-def _assistant(content: str, tool_calls: list[dict] | None = None,
-               model: str = "grok-composer-2.5-fast") -> dict:
+def _assistant(
+    content: str, tool_calls: list[dict] | None = None, model: str = "grok-composer-2.5-fast"
+) -> dict:
     rec = {"type": "assistant", "content": content, "model_id": model}
     if tool_calls is not None:
         rec["tool_calls"] = tool_calls
@@ -237,7 +238,8 @@ def test_discover_sessions_yields_session_dirs(tmp_path):
     # started_at parsed from summary.json created_at
     assert s1.started_at == pytest.approx(
         # 2026-06-15T12:16:24.884900078Z
-        1781525784.8849, abs=1.0
+        1781525784.8849,
+        abs=1.0,
     )
     # canonical handle points at the chat stream
     assert s1.path.name == "chat_history.jsonl"
@@ -284,8 +286,10 @@ def test_discover_falls_back_to_url_decoded_cwd_when_no_summary(tmp_path):
 
 def test_discover_merges_multiple_workspaces(tmp_path):
     root = tmp_path / ".grok" / "sessions"
-    for cwd, sid in (("/home/u/a", "019aaaaa-0000-0000-0000-00000000000a"),
-                     ("/home/u/b", "019bbbbb-0000-0000-0000-00000000000b")):
+    for cwd, sid in (
+        ("/home/u/a", "019aaaaa-0000-0000-0000-00000000000a"),
+        ("/home/u/b", "019bbbbb-0000-0000-0000-00000000000b"),
+    ):
         ws = root / urllib.parse.quote(cwd, safe="")
         _write_jsonl(
             ws / sid / "chat_history.jsonl",
@@ -309,8 +313,7 @@ def test_iter_records_projects_canonical_records(tmp_path):
     root = _make_grok_tree(tmp_path)
     src = GrokSource(sessions_root=root)
     s1 = next(
-        s for s in src.discover_sessions()
-        if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
+        s for s in src.discover_sessions() if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
     )
     records = [r for _, r in src.iter_records(s1)]
 
@@ -323,7 +326,8 @@ def test_iter_records_projects_canonical_records(tmp_path):
 
     # assistant with text + a tool_use block synthesised from tool_calls[]
     asst = next(
-        r for r in records
+        r
+        for r in records
         if isinstance(r, AssistantRecord) and any(b.type == "tool_use" for b in r.content)
     )
     assert asst.model == "grok-composer-2.5-fast"
@@ -337,8 +341,7 @@ def test_iter_records_projects_canonical_records(tmp_path):
 
     # tool_result projected as a UserRecord(tool_result) keyed by tool_call_id
     tr_rec = next(
-        r for r in records
-        if isinstance(r, UserRecord) and r.content_kind == "tool_result"
+        r for r in records if isinstance(r, UserRecord) and r.content_kind == "tool_result"
     )
     assert len(tr_rec.tool_results) == 1
     assert tr_rec.tool_results[0].tool_use_id == "call-1"
@@ -349,8 +352,7 @@ def test_iter_records_reasoning_becomes_thinking_block(tmp_path):
     root = _make_grok_tree(tmp_path)
     src = GrokSource(sessions_root=root)
     s1 = next(
-        s for s in src.discover_sessions()
-        if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
+        s for s in src.discover_sessions() if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
     )
     records = [r for _, r in src.iter_records(s1)]
     thinking = [
@@ -368,13 +370,13 @@ def test_iter_records_assistant_without_tool_calls(tmp_path):
     root = _make_grok_tree(tmp_path)
     src = GrokSource(sessions_root=root)
     s1 = next(
-        s for s in src.discover_sessions()
-        if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
+        s for s in src.discover_sessions() if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
     )
     records = [r for _, r in src.iter_records(s1)]
     # the final "patched" assistant turn — text only, no tool_use
     final = [
-        r for r in records
+        r
+        for r in records
         if isinstance(r, AssistantRecord)
         and any(b.type == "text" and b.text == "patched" for b in r.content)
     ]
@@ -386,8 +388,7 @@ def test_iter_records_respects_start_offset(tmp_path):
     root = _make_grok_tree(tmp_path)
     src = GrokSource(sessions_root=root)
     s1 = next(
-        s for s in src.discover_sessions()
-        if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
+        s for s in src.discover_sessions() if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
     )
     full = list(src.iter_records(s1))
     assert len(full) >= 2
@@ -442,9 +443,14 @@ def test_iter_records_bad_tool_call_arguments_preserved(tmp_path):
     s = ws / "019ecdef-0000-0000-0000-00000badargs"
     _write_jsonl(
         s / "chat_history.jsonl",
-        [_assistant("calling", tool_calls=[
-            {"id": "c9", "name": "Shell", "arguments": "not-json"},
-        ])],
+        [
+            _assistant(
+                "calling",
+                tool_calls=[
+                    {"id": "c9", "name": "Shell", "arguments": "not-json"},
+                ],
+            )
+        ],
     )
     _write_json(
         s / "summary.json",
@@ -453,7 +459,8 @@ def test_iter_records_bad_tool_call_arguments_preserved(tmp_path):
     src = GrokSource(sessions_root=root)
     sf = next(iter(src.discover_sessions()))
     rec = next(
-        r for _, r in src.iter_records(sf)
+        r
+        for _, r in src.iter_records(sf)
         if isinstance(r, AssistantRecord) and any(b.type == "tool_use" for b in r.content)
     )
     tu = next(b.tool_use for b in rec.content if b.type == "tool_use")
@@ -468,8 +475,7 @@ def test_iter_records_missing_timestamp_yields_none_ts(tmp_path):
     root = _make_grok_tree(tmp_path)
     src = GrokSource(sessions_root=root)
     s1 = next(
-        s for s in src.discover_sessions()
-        if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
+        s for s in src.discover_sessions() if s.session_id == "019ecb36-291c-77c0-979c-05e50c08a620"
     )
     records = [r for _, r in src.iter_records(s1)]
     assert all(r.ts is None for r in records)
@@ -515,15 +521,18 @@ def test_iter_records_non_ascii_cwd(tmp_path):
 
 def test_adapter_in_registry_after_import():
     import lib.sources.grok  # noqa: F401
+
     assert GrokSource in SOURCES
 
 
 def test_source_by_name_returns_grok():
     import lib.sources.grok  # noqa: F401
+
     src = source_by_name("grok")
     assert isinstance(src, GrokSource)
 
 
 def test_all_sources_includes_grok():
     import lib.sources.grok  # noqa: F401
+
     assert any(isinstance(s, GrokSource) for s in all_sources())

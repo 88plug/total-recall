@@ -18,6 +18,7 @@ it. Quality scoring (precision/recall/define-coverage) is graded separately by
 the gated harness ``tests/integration/test_llm_eval.py``; this file only proves
 the path executes and honours its structural contracts.
 """
+
 from __future__ import annotations
 
 import os
@@ -44,9 +45,7 @@ pytestmark = pytest.mark.skipif(
 
 def _machines_dict(*hosts: str) -> dict[str, dict]:
     """Build the {hostname: record} shape refine_machines expects."""
-    return {
-        h: {"hostname": h, "role": "", "lan_ip": "", "public_ip": ""} for h in hosts
-    }
+    return {h: {"hostname": h, "role": "", "lan_ip": "", "public_ip": ""} for h in hosts}
 
 
 def test_default_model_is_qwen() -> None:

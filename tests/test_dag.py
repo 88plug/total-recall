@@ -130,9 +130,7 @@ def test_linearize_deepest_across_multiple_roots():
 
 def test_linearize_specified_leaf_policy_without_uuid_is_empty():
     """``policy="specified_leaf"`` with no leaf_uuid returns []."""
-    dag = build_dag(
-        [_mk_user("u1", None), _mk_assistant("a1", "u1")]
-    )
+    dag = build_dag([_mk_user("u1", None), _mk_assistant("a1", "u1")])
     assert linearize_main_branch(dag, policy="specified_leaf") == []
 
 
@@ -187,9 +185,7 @@ def test_metadata_records_excluded():
     meta = [
         parse_record({"type": "permission-mode", "permissionMode": "default"}),
         parse_record({"type": "ai-title", "aiTitle": "x"}),
-        parse_record(
-            {"type": "last-prompt", "lastPrompt": "hi", "leafUuid": "u1"}
-        ),
+        parse_record({"type": "last-prompt", "lastPrompt": "hi", "leafUuid": "u1"}),
         parse_record(
             {
                 "type": "attachment",

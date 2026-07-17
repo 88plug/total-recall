@@ -20,6 +20,7 @@ Usage examples
   TOTAL_RECALL_LLM_EVAL=1 TOTAL_RECALL_LLM_EVAL_MODEL=gemma4:e2b  pytest ... -s > eval_e2b.txt
   TOTAL_RECALL_LLM_EVAL=1 TOTAL_RECALL_LLM_EVAL_MODEL=llama3.2:3b pytest ... -s > eval_3b.txt
 """
+
 from __future__ import annotations
 
 import os
@@ -44,10 +45,12 @@ pytestmark = pytest.mark.skipif(
 # Fixture imports (gitignored — skip if absent)
 # ---------------------------------------------------------------------------
 
+
 def _load_fixtures():
     """Import fixture module from tests/local/; skip if absent."""
     try:
         from tests.local import llm_eval_fixtures as fx
+
         return fx
     except ImportError:
         pytest.skip("tests/local/llm_eval_fixtures.py not present — gitignored fixture")
@@ -56,6 +59,7 @@ def _load_fixtures():
 # ---------------------------------------------------------------------------
 # Client fixture — build once, skip if unavailable
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def eval_client():
@@ -82,6 +86,7 @@ def eval_client():
 # Helper: token overlap ratio
 # ---------------------------------------------------------------------------
 
+
 def _token_overlap(text: str, snippet: str) -> float:
     """Fraction of unique words in *text* that also appear in *snippet*."""
     if not text or not snippet:
@@ -89,6 +94,7 @@ def _token_overlap(text: str, snippet: str) -> float:
 
     def tokens(s: str) -> set[str]:
         import re
+
         return {w.lower() for w in re.split(r"[^a-z0-9]+", s.lower()) if len(w) > 1}
 
     text_tokens = tokens(text)
@@ -101,6 +107,7 @@ def _token_overlap(text: str, snippet: str) -> float:
 # ---------------------------------------------------------------------------
 # Test 1 — machines precision / recall
 # ---------------------------------------------------------------------------
+
 
 def test_machines_precision_recall(eval_client):
     """Assert precision >= 0.7; recall and F1 are printed as scorecard."""
@@ -152,6 +159,7 @@ def test_machines_precision_recall(eval_client):
 # Test 2 — vocab echo_rate and define_coverage (scorecard only, no hard assert)
 # ---------------------------------------------------------------------------
 
+
 def test_vocab_quality_scorecard(eval_client):
     """Print echo_rate and define_coverage; no hard assertions (measurement only)."""
     fx = _load_fixtures()
@@ -162,10 +170,7 @@ def test_vocab_quality_scorecard(eval_client):
         pytest.skip(f"refine_vocabulary_definitions not importable: {exc}")
 
     # Strip the eval-only _definable key before passing to the LLM.
-    terms_clean = [
-        {k: v for k, v in t.items() if not k.startswith("_")}
-        for t in fx.VOCAB_TERMS
-    ]
+    terms_clean = [{k: v for k, v in t.items() if not k.startswith("_")} for t in fx.VOCAB_TERMS]
 
     results = refine_vocabulary_definitions(terms=terms_clean, client=eval_client)
 
@@ -180,8 +185,7 @@ def test_vocab_quality_scorecard(eval_client):
         if def_map.get(t["term"]) is not None
     }
     echo_count = sum(
-        1 for snippet, defn in non_null.values()
-        if _token_overlap(defn, snippet) >= 0.6
+        1 for snippet, defn in non_null.values() if _token_overlap(defn, snippet) >= 0.6
     )
     echo_rate = echo_count / len(non_null) if non_null else 0.0
 
@@ -189,11 +193,14 @@ def test_vocab_quality_scorecard(eval_client):
     # non-echo definition (i.e., the model produced real signal).
     definable = fx.DEFINABLE_TERMS
     good_defs = {
-        term for term in definable
+        term
+        for term in definable
         if def_map.get(term) is not None
-        and _token_overlap(def_map[term], next(
-            t.get("context_snippet", "") for t in fx.VOCAB_TERMS if t["term"] == term
-        )) < 0.6
+        and _token_overlap(
+            def_map[term],
+            next(t.get("context_snippet", "") for t in fx.VOCAB_TERMS if t["term"] == term),
+        )
+        < 0.6
     }
     define_coverage = len(good_defs) / len(definable) if definable else 0.0
 
@@ -204,21 +211,22 @@ def test_vocab_quality_scorecard(eval_client):
         snippet = t.get("context_snippet", "")
         overlap = _token_overlap(defn or "", snippet)
         status = (
-            "null" if defn is None
+            "null"
+            if defn is None
             else (f"echo({overlap:.2f})" if overlap >= 0.6 else f"ok({overlap:.2f})")
         )
         print(f"  {term!r:20s}  [{status}]  {(defn or '')[:80]}")
     print(f"  echo_rate:        {echo_rate:.3f}  (ideally low — model should paraphrase, not copy)")
     print(
-        f"  define_coverage:  {define_coverage:.3f}  "
-        "(ideally high — definable terms got real defs)"
+        f"  define_coverage:  {define_coverage:.3f}  (ideally high — definable terms got real defs)"
     )
-    print(f"  null_rate:        {1 - len(non_null)/len(fx.VOCAB_TERMS):.3f}")
+    print(f"  null_rate:        {1 - len(non_null) / len(fx.VOCAB_TERMS):.3f}")
 
 
 # ---------------------------------------------------------------------------
 # Test 3 — determinism (hard assert: two calls return identical keep-set)
 # ---------------------------------------------------------------------------
+
 
 def test_machines_determinism(eval_client):
     """Two back-to-back refine_machines calls must return identical keep-sets."""
@@ -264,6 +272,7 @@ def test_machines_determinism(eval_client):
 # Test 4 — latency (printed as scorecard; no hard threshold)
 # ---------------------------------------------------------------------------
 
+
 def test_machines_latency(eval_client):
     """Time one refine_machines call; print wall-clock latency as scorecard."""
     fx = _load_fixtures()
@@ -293,6 +302,7 @@ def test_machines_latency(eval_client):
 # ---------------------------------------------------------------------------
 # Scorecard summary — runs last (soft, always passes if gate is open)
 # ---------------------------------------------------------------------------
+
 
 def test_print_scorecard(eval_client):
     """Print consolidated scorecard; no assertions — pure measurement."""
@@ -327,10 +337,7 @@ def test_print_scorecard(eval_client):
     f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
 
     # Vocab
-    terms_clean = [
-        {k: v for k, v in t.items() if not k.startswith("_")}
-        for t in fx.VOCAB_TERMS
-    ]
+    terms_clean = [{k: v for k, v in t.items() if not k.startswith("_")} for t in fx.VOCAB_TERMS]
     t0 = time.monotonic()
     vocab_result = refine_vocabulary_definitions(terms=terms_clean, client=eval_client)
     vocab_ms = (time.monotonic() - t0) * 1000.0
@@ -342,23 +349,25 @@ def test_print_scorecard(eval_client):
         if def_map.get(t["term"]) is not None
     }
     echo_count = sum(
-        1 for snippet, defn in non_null.values()
-        if _token_overlap(defn, snippet) >= 0.6
+        1 for snippet, defn in non_null.values() if _token_overlap(defn, snippet) >= 0.6
     )
     echo_rate = echo_count / len(non_null) if non_null else 0.0
     definable = fx.DEFINABLE_TERMS
     good_defs = {
-        term for term in definable
+        term
+        for term in definable
         if def_map.get(term) is not None
-        and _token_overlap(def_map[term], next(
-            t.get("context_snippet", "") for t in fx.VOCAB_TERMS if t["term"] == term
-        )) < 0.6
+        and _token_overlap(
+            def_map[term],
+            next(t.get("context_snippet", "") for t in fx.VOCAB_TERMS if t["term"] == term),
+        )
+        < 0.6
     }
     define_coverage = len(good_defs) / len(definable) if definable else 0.0
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"=== LLM EVAL SCORECARD (model={_EVAL_MODEL}) ===")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print("  MACHINES NER")
     print(f"    precision:        {prec:.3f}   (>= 0.70 required)")
     print(f"    recall:           {rec:.3f}")
@@ -369,6 +378,6 @@ def test_print_scorecard(eval_client):
     print("  VOCAB DEFINITIONS")
     print(f"    echo_rate:        {echo_rate:.3f}   (lower = less parroting)")
     print(f"    define_coverage:  {define_coverage:.3f}   (higher = more real defs)")
-    print(f"    null_rate:        {1 - len(non_null)/len(fx.VOCAB_TERMS):.3f}")
+    print(f"    null_rate:        {1 - len(non_null) / len(fx.VOCAB_TERMS):.3f}")
     print(f"    latency:          {vocab_ms:.0f} ms")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")

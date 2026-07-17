@@ -41,10 +41,10 @@ def _expected(base: float, days: float, n: int) -> float:
 @pytest.mark.parametrize(
     "base,days,n",
     [
-        (0.8, 0,   0),    # fresh, no reassertions → boost = 1.0
-        (0.8, 90,  1),    # exactly one half-life elapsed
-        (0.8, 90,  5),    # decayed but re-asserted five times
-        (0.8, 30,  10),   # active and hot
+        (0.8, 0, 0),  # fresh, no reassertions → boost = 1.0
+        (0.8, 90, 1),  # exactly one half-life elapsed
+        (0.8, 90, 5),  # decayed but re-asserted five times
+        (0.8, 30, 10),  # active and hot
     ],
 )
 def test_adjusted_confidence_matches_formula(base, days, n):

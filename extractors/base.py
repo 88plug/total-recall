@@ -114,9 +114,7 @@ _SKIP_PREFIXES = (
 
 
 def is_meta_or_compact(rec: RecordLike) -> bool:
-    return bool(getattr(rec, "is_meta", False)) or bool(
-        getattr(rec, "is_compact_summary", False)
-    )
+    return bool(getattr(rec, "is_meta", False)) or bool(getattr(rec, "is_compact_summary", False))
 
 
 def is_skipped_user_string(text: str) -> bool:

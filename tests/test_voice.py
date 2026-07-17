@@ -342,8 +342,6 @@ def test_persist_voice_profile_skips_reserved_keys(fresh_conn):
         },
         sample_size=200,
     )
-    rows = fresh_conn.execute(
-        "SELECT key FROM voice_profile ORDER BY key"
-    ).fetchall()
+    rows = fresh_conn.execute("SELECT key FROM voice_profile ORDER BY key").fetchall()
     keys = [r[0] for r in rows]
     assert keys == ["mean_chars"]

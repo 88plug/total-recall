@@ -143,12 +143,12 @@ def test_evaluate_scoped_per_session(conn):
     record_injection(conn, "s1", turn=5, triggers=["hard:repetition_callout"])
     record_injection(conn, "s2", turn=5, triggers=["hard:repetition_callout"])
     evaluate_pending(conn, "s1", 8, lambda *_: False)
-    s1 = conn.execute(
-        "SELECT outcome FROM reinjection_outcomes WHERE session_id='s1'"
-    ).fetchone()[0]
-    s2 = conn.execute(
-        "SELECT outcome FROM reinjection_outcomes WHERE session_id='s2'"
-    ).fetchone()[0]
+    s1 = conn.execute("SELECT outcome FROM reinjection_outcomes WHERE session_id='s1'").fetchone()[
+        0
+    ]
+    s2 = conn.execute("SELECT outcome FROM reinjection_outcomes WHERE session_id='s2'").fetchone()[
+        0
+    ]
     assert s1 == "useful"
     assert s2 == "pending"
 

@@ -13,6 +13,7 @@ from total_recall import cost as C
 # resolve_rate
 # ---------------------------------------------------------------------------
 
+
 def test_resolve_rate_exact_default():
     assert C.resolve_rate("claude-sonnet-4-6") == (3.00, 15.00)
     assert C.resolve_rate("claude-opus-4-7") == (15.00, 75.00)
@@ -58,6 +59,7 @@ def test_resolve_rate_caller_family_override(monkeypatch):
 # ---------------------------------------------------------------------------
 # estimate_cost
 # ---------------------------------------------------------------------------
+
 
 def test_estimate_cost_input_only_sonnet():
     # 1M input tokens at sonnet ($3/Mtok in) = $3.00
@@ -113,8 +115,10 @@ def test_estimate_cost_unknown_model_uses_default():
 def test_estimate_cost_with_rates_override():
     rates = {"opus": (10.0, 50.0)}
     got = C.estimate_cost(
-        input_tokens=1_000_000, output_tokens=1_000_000,
-        model="claude-opus-4-7", rates=rates,
+        input_tokens=1_000_000,
+        output_tokens=1_000_000,
+        model="claude-opus-4-7",
+        rates=rates,
     )
     # claude-opus-4-7 has exact default (15,75); caller rates only has "opus" family.
     # Exact default wins over caller's family.
@@ -122,8 +126,10 @@ def test_estimate_cost_with_rates_override():
 
     # But an unknown opus id should use the caller's family override.
     got2 = C.estimate_cost(
-        input_tokens=1_000_000, output_tokens=1_000_000,
-        model="claude-opus-vNext", rates=rates,
+        input_tokens=1_000_000,
+        output_tokens=1_000_000,
+        model="claude-opus-vNext",
+        rates=rates,
     )
     assert math.isclose(got2, 10.0 + 50.0, abs_tol=1e-9)
 
@@ -131,6 +137,7 @@ def test_estimate_cost_with_rates_override():
 # ---------------------------------------------------------------------------
 # parse_rate_arg
 # ---------------------------------------------------------------------------
+
 
 def test_parse_rate_arg_basic():
     assert C.parse_rate_arg("sonnet=3/15") == ("sonnet", (3.0, 15.0))
@@ -145,18 +152,21 @@ def test_parse_rate_arg_lowercases_name():
     assert name == "claude-sonnet-4-6"
 
 
-@pytest.mark.parametrize("bad", [
-    "",
-    "no-equals",
-    "name=",
-    "name=3",
-    "name=3/",
-    "name=/15",
-    "name=abc/15",
-    "name=3/xyz",
-    "=3/15",
-    "name=-1/15",
-])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "",
+        "no-equals",
+        "name=",
+        "name=3",
+        "name=3/",
+        "name=/15",
+        "name=abc/15",
+        "name=3/xyz",
+        "=3/15",
+        "name=-1/15",
+    ],
+)
 def test_parse_rate_arg_bad_inputs_raise(bad):
     with pytest.raises(ValueError):
         C.parse_rate_arg(bad)
@@ -170,6 +180,7 @@ def test_parse_rate_arg_non_string_raises():
 # ---------------------------------------------------------------------------
 # load_env_rates
 # ---------------------------------------------------------------------------
+
 
 def test_load_env_rates_missing(monkeypatch):
     monkeypatch.delenv("TOTAL_RECALL_RATES_JSON", raising=False)

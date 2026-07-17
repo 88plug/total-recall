@@ -1,4 +1,5 @@
 """Unit tests for total_recall.events."""
+
 from __future__ import annotations
 
 import gzip
@@ -171,6 +172,7 @@ def test_summarize_empty_when_no_file(tmp_path: Path) -> None:
 
 def test_read_events_since_ts(events_path: Path) -> None:
     import time
+
     events.emit_event("old", path=events_path)
     # Sleep just long enough that subsequent ISO timestamps differ.
     time.sleep(0.01)

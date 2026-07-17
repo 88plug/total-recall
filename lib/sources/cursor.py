@@ -110,9 +110,7 @@ def _parse_cursor_ts(raw: Any) -> datetime | None:
             return None
     if isinstance(raw, str):
         try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(
-                timezone.utc
-            )
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc)
         except (ValueError, TypeError):
             return None
     return None
@@ -207,9 +205,9 @@ def _cursor_line_to_record(
         text = _extract_text(content)
         return UserRecord(
             **base,
-            content_kind="string" if isinstance(content, str) else (
-                "text_array" if isinstance(content, list) and content else "empty"
-            ),
+            content_kind="string"
+            if isinstance(content, str)
+            else ("text_array" if isinstance(content, list) and content else "empty"),
             text=text,
             tool_results=[],
             tool_use_result_payload=None,
@@ -222,10 +220,7 @@ def _cursor_line_to_record(
         # UserRecord with a tool_result block so downstream extractors
         # that key off ``content_kind == "tool_result"`` keep working.
         tool_use_id = (
-            obj.get("tool_call_id")
-            or obj.get("toolCallId")
-            or obj.get("tool_use_id")
-            or ""
+            obj.get("tool_call_id") or obj.get("toolCallId") or obj.get("tool_use_id") or ""
         )
         text = _extract_text(content) or ""
         is_error = bool(obj.get("is_error") or obj.get("isError") or False)
@@ -270,8 +265,7 @@ def _cursor_user_bases() -> list[Path]:
         primary = home / "Library" / "Application Support" / "Cursor" / "User"
     elif sys.platform == "win32":
         primary = (
-            Path(os.environ.get("APPDATA", str(home / "AppData" / "Roaming")))
-            / "Cursor" / "User"
+            Path(os.environ.get("APPDATA", str(home / "AppData" / "Roaming"))) / "Cursor" / "User"
         )
     else:
         primary = home / ".config" / "Cursor" / "User"
@@ -323,7 +317,7 @@ def _resolve_cwd_for_vscdb(vscdb: Path) -> str | None:
             for field_key in ("folder", "workspace"):
                 folder = data.get(field_key) or ""
                 if folder.startswith("file://"):
-                    path_str = folder[len("file://"):]
+                    path_str = folder[len("file://") :]
                     return urllib.parse.unquote(path_str) or None
                 if folder:
                     return folder
@@ -346,9 +340,7 @@ def _parse_bubble_ts(data: dict[str, Any]) -> datetime | None:
     created = data.get("createdAt")
     if isinstance(created, str):
         try:
-            return datetime.fromisoformat(
-                created.replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
+            return datetime.fromisoformat(created.replace("Z", "+00:00")).astimezone(timezone.utc)
         except (ValueError, TypeError):
             pass
 
@@ -375,7 +367,7 @@ def _extract_bubble_text(data: dict[str, Any]) -> str | None:
 
     # Code blocks — used by both roles
     code_parts: list[str] = []
-    for cb in (data.get("codeBlocks") or []):
+    for cb in data.get("codeBlocks") or []:
         if isinstance(cb, dict):
             c = cb.get("content")
             if isinstance(c, str) and c.strip():
@@ -517,13 +509,10 @@ def _iter_item_table_records(
     data_str: str | None = None
     for key in _ITEM_TABLE_CHAT_KEYS:
         try:
-            row = conn.execute(
-                "SELECT value FROM ItemTable WHERE [key] = ?", (key,)
-            ).fetchone()
+            row = conn.execute("SELECT value FROM ItemTable WHERE [key] = ?", (key,)).fetchone()
             if row and row[0]:
                 data_str = (
-                    row[0] if isinstance(row[0], str)
-                    else row[0].decode("utf-8", errors="replace")
+                    row[0] if isinstance(row[0], str) else row[0].decode("utf-8", errors="replace")
                 )
                 break
         except sqlite3.Error:
@@ -569,8 +558,10 @@ def _iter_item_table_records(
                 continue
             cid = composer.get("composerId") or session.session_id
             msgs = (
-                composer.get("messages") or composer.get("bubbles")
-                or composer.get("conversation") or []
+                composer.get("messages")
+                or composer.get("bubbles")
+                or composer.get("conversation")
+                or []
             )
             for bubble in msgs:
                 if not isinstance(bubble, dict):
@@ -603,9 +594,7 @@ class CursorSource(SessionSource):
         cursor_home: Path | None = None,
         vscdb_paths: list[Path] | None = None,
     ) -> None:
-        self.cursor_home = (
-            cursor_home if cursor_home is not None else Path.home() / ".cursor"
-        )
+        self.cursor_home = cursor_home if cursor_home is not None else Path.home() / ".cursor"
         self.projects_root = self.cursor_home / "projects"
         # Allow explicit injection (tests); otherwise discover at construction.
         self._vscdb_paths: list[Path] = (
@@ -751,20 +740,17 @@ class CursorSource(SessionSource):
             if resolved_cwd is None:
                 ws_uri = meta.get("workspaceUri") or meta.get("workspacePath") or ""
                 if isinstance(ws_uri, str) and ws_uri.startswith("file://"):
-                    resolved_cwd = urllib.parse.unquote(ws_uri[len("file://"):]) or None
+                    resolved_cwd = urllib.parse.unquote(ws_uri[len("file://") :]) or None
 
             started_at: float | None = None
             raw_ts = meta.get("createdAt") or meta.get("startedAt")
             if isinstance(raw_ts, (int, float)):
                 started_at = (
-                    float(raw_ts) / 1000.0 if raw_ts > _MIN_VALID_UNIX_MS
-                    else float(raw_ts)
+                    float(raw_ts) / 1000.0 if raw_ts > _MIN_VALID_UNIX_MS else float(raw_ts)
                 )
             elif isinstance(raw_ts, str):
                 with contextlib.suppress(ValueError, TypeError):
-                    started_at = datetime.fromisoformat(
-                        raw_ts.replace("Z", "+00:00")
-                    ).timestamp()
+                    started_at = datetime.fromisoformat(raw_ts.replace("Z", "+00:00")).timestamp()
 
             extra: dict[str, Any] = {
                 "storage": "vscdb",
@@ -889,9 +875,7 @@ class CursorSource(SessionSource):
                 if not isinstance(obj, dict):
                     continue
                 try:
-                    rec = _cursor_line_to_record(
-                        obj, session, byte_offset=offset - line_len
-                    )
+                    rec = _cursor_line_to_record(obj, session, byte_offset=offset - line_len)
                 except Exception:
                     # Tolerant — schema drift should never abort a tail-read.
                     continue

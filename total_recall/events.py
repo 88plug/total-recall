@@ -27,9 +27,12 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-DEFAULT_EVENTS_PATH = Path(
-    os.environ.get("CLAUDE_PLUGIN_DATA", "~/.local/share/total-recall")
-).expanduser() / "total-recall" / "logs" / "events.jsonl"
+DEFAULT_EVENTS_PATH = (
+    Path(os.environ.get("CLAUDE_PLUGIN_DATA", "~/.local/share/total-recall")).expanduser()
+    / "total-recall"
+    / "logs"
+    / "events.jsonl"
+)
 
 MAX_SIZE_BYTES = 10 * 1024 * 1024  # 10 MiB
 KEEP_ROTATIONS = 3
@@ -85,7 +88,7 @@ def _rotate_if_needed(path: Path) -> None:
         # Shift .1.gz -> .2.gz -> ... up to KEEP_ROTATIONS; drop oldest.
         for i in range(KEEP_ROTATIONS - 1, 0, -1):
             src = path.with_suffix(f".jsonl.{i}.gz")
-            dst = path.with_suffix(f".jsonl.{i+1}.gz")
+            dst = path.with_suffix(f".jsonl.{i + 1}.gz")
             if src.exists():
                 src.replace(dst)
         # Compress current -> .1.gz.
@@ -124,11 +127,14 @@ def _iter_lines(p: Path):
         return
     try:
         if p.suffix == ".gz":
+
             def opener():
                 return gzip.open(p, "rt", encoding="utf-8")
         else:
+
             def opener():
                 return open(p, encoding="utf-8")
+
         with opener() as fh:
             for line in fh:
                 line = line.strip()
@@ -175,6 +181,7 @@ def _percentile(values: list[float], pct: float) -> float:
     s = sorted(values)
     # Nearest-rank: index = ceil(pct/100 * N) - 1, clamped.
     import math
+
     idx = max(0, min(len(s) - 1, math.ceil(pct / 100.0 * len(s)) - 1))
     return s[idx]
 

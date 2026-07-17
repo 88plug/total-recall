@@ -304,9 +304,7 @@ def _result_ok(result: dict | None) -> bool:
         text = content
     elif isinstance(content, list):
         text = " ".join(
-            b.get("text", "")
-            for b in content
-            if isinstance(b, dict) and b.get("type") == "text"
+            b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
         )
     low = text.lower()
     return not ("error" in low or "traceback" in low or "command failed" in low)
@@ -634,16 +632,12 @@ def _render_one(key: str, val: Any) -> list[str]:
         lines.append(f"{label}:")
         for item in val[:5]:
             if isinstance(item, dict):
-                txt = item.get("text") or item.get("goal") or json.dumps(
-                    item, ensure_ascii=False
-                )
+                txt = item.get("text") or item.get("goal") or json.dumps(item, ensure_ascii=False)
                 lines.append(f"  - {str(txt)[:240]}")
             else:
                 lines.append(f"  - {str(item)[:240]}")
     elif isinstance(val, dict):
-        txt = val.get("text") or val.get("goal") or json.dumps(
-            val, ensure_ascii=False
-        )
+        txt = val.get("text") or val.get("goal") or json.dumps(val, ensure_ascii=False)
         lines.append(f"{label}: {str(txt)[:280]}")
     else:
         lines.append(f"{label}: {str(val)[:280]}")

@@ -80,8 +80,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
 def _table_exists(conn: sqlite3.Connection) -> bool:
     try:
         row = conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='table' AND name='standing_decisions'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='standing_decisions'"
         ).fetchone()
     except sqlite3.Error:
         return False
@@ -98,12 +97,12 @@ def list_standing_decisions(
     topic: str | None = None,
     scope: str | None = None,
 ) -> list[dict]:
-    (
-        "Return standing decisions the operator has made (e.g. provider-a > provider-b, "
-        "billing-provider-a > billing-provider-b). Use BEFORE suggesting any default — if a "
-        "decision exists, honor it. Filter by topic ('cloud_provider', 'billing_rail', etc.) or "
-        "scope ('global' or cwd)."
-    )
+    """
+    Return standing decisions the operator has made (e.g. provider-a > provider-b,
+    billing-provider-a > billing-provider-b). Use BEFORE suggesting any default — if a
+    decision exists, honor it. Filter by topic ('cloud_provider', 'billing_rail', etc.) or
+    scope ('global' or cwd).
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -152,14 +151,14 @@ def get_decision_for_topic(
     topic: str,
     cwd: str | None = None,
 ) -> dict | None:
-    (
-        "Quick lookup: 'what did the operator decide about X for this project?' Resolves scope "
-        "with a fallback chain: first a project-scoped row matching cwd (defaults to the current "
-        "cwd when omitted), then a global row, preferring the most-asserted / most-recently "
-        "reasserted match. Returns a single standing_decisions row (topic, scope, the decision, "
-        "assertion_count, last_reasserted_ts, etc.), or None if no decision is recorded; returns "
-        "an error envelope if the index or standing_decisions table is missing."
-    )
+    """
+    Quick lookup: 'what did the operator decide about X for this project?' Resolves scope
+    with a fallback chain: first a project-scoped row matching cwd (defaults to the current
+    cwd when omitted), then a global row, preferring the most-asserted / most-recently
+    reasserted match. Returns a single standing_decisions row (topic, scope, the decision,
+    assertion_count, last_reasserted_ts, etc.), or None if no decision is recorded; returns
+    an error envelope if the index or standing_decisions table is missing.
+    """
     conn = get_conn()
     if conn is None:
         # Mirror the list_-tool error envelope rather than returning None,

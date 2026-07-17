@@ -3,6 +3,7 @@
 Fixtures are defensive: if a sibling worktree's module is not yet merged,
 tests that depend on it should `pytest.skip` rather than error at collection.
 """
+
 from __future__ import annotations
 
 import json
@@ -83,6 +84,7 @@ def tmp_db() -> Iterator[sqlite3.Connection]:
 
 # --- Synthetic corpus -------------------------------------------------------
 
+
 def _synth_records(session_id: str, cwd: str) -> list[dict]:
     base_ts = "2025-05-01T12:00:00.000Z"
     return [
@@ -114,9 +116,7 @@ def _synth_records(session_id: str, cwd: str) -> list[dict]:
                 "id": "msg_1",
                 "model": "claude-opus-4-7",
                 "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "Using provider-x for the relay deploy."}
-                ],
+                "content": [{"type": "text", "text": "Using provider-x for the relay deploy."}],
             },
         },
         {
@@ -139,9 +139,7 @@ def _synth_records(session_id: str, cwd: str) -> list[dict]:
                 "id": "msg_2",
                 "model": "claude-opus-4-7",
                 "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "Switching to provider-y as requested."}
-                ],
+                "content": [{"type": "text", "text": "Switching to provider-y as requested."}],
             },
         },
         {

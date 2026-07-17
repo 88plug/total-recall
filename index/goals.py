@@ -113,8 +113,7 @@ def apply_schema(conn: sqlite3.Connection) -> None:
     # contend with concurrent readers/writers on the same DB file.
     try:
         needs = conn.execute(
-            f"SELECT 1 FROM goal_stack WHERE project <> ({_PROJECT_KEY_CASE}) "
-            "LIMIT 1"
+            f"SELECT 1 FROM goal_stack WHERE project <> ({_PROJECT_KEY_CASE}) LIMIT 1"
         ).fetchone()
         if needs is not None:
             conn.execute(
@@ -151,8 +150,13 @@ class GoalRow:
             d = dict(row)
         else:
             cols = (
-                "id", "project", "goal_text", "declared_ts",
-                "last_progress_ts", "status", "related_projects",
+                "id",
+                "project",
+                "goal_text",
+                "declared_ts",
+                "last_progress_ts",
+                "status",
+                "related_projects",
                 "source_session",
             )
             d = dict(zip(cols, row, strict=False))
@@ -171,9 +175,7 @@ class GoalRow:
             goal_text=str(d["goal_text"]),
             declared_ts=int(d["declared_ts"]),
             last_progress_ts=(
-                int(d["last_progress_ts"])
-                if d.get("last_progress_ts") is not None
-                else None
+                int(d["last_progress_ts"]) if d.get("last_progress_ts") is not None else None
             ),
             status=str(d["status"]),
             related_projects=related,
@@ -216,6 +218,7 @@ def _ts_int(ts: Any) -> int | None:
     if isinstance(ts, str):
         # Best-effort ISO parse; we don't pull in dateutil for this.
         from datetime import datetime
+
         try:
             return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
         except ValueError:
@@ -474,9 +477,7 @@ def list_goals(
     surfacing in the slash-command layer).
     """
     if status != "any" and status not in VALID_STATUSES:
-        raise ValueError(
-            f"unknown status {status!r}; expected 'any' or one of {VALID_STATUSES}"
-        )
+        raise ValueError(f"unknown status {status!r}; expected 'any' or one of {VALID_STATUSES}")
 
     sql = (
         "SELECT id, project, goal_text, declared_ts, last_progress_ts, "
@@ -489,10 +490,7 @@ def list_goals(
     if status != "any":
         sql += " AND status = ?"
         params.append(status)
-    sql += (
-        " ORDER BY COALESCE(last_progress_ts, declared_ts) DESC, "
-        "declared_ts DESC LIMIT ?"
-    )
+    sql += " ORDER BY COALESCE(last_progress_ts, declared_ts) DESC, declared_ts DESC LIMIT ?"
     params.append(int(limit))
 
     rows = conn.execute(sql, params).fetchall()

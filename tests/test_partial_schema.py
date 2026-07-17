@@ -6,6 +6,7 @@ DB without applying the schema, so they hit "no such table". Before the fix
 these surfaced as `internal error` + exit 2. They should now exit 1 with a
 clear "index not built" message (handled centrally in __main__.main).
 """
+
 from __future__ import annotations
 
 import sqlite3

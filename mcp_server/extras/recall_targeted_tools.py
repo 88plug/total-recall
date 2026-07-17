@@ -180,16 +180,11 @@ def _route_is_thing_banned(conn: sqlite3.Connection, subject: str) -> dict:
     # Confidence climbs with strength + reassertion count. Anchored so a
     # single-shot "preference" still beats 0.5 (it's evidence, just not
     # absolute evidence).
-    strength_floor = {"absolute": 0.95, "context": 0.8, "preference": 0.65}.get(
-        strength, 0.6
-    )
+    strength_floor = {"absolute": 0.95, "context": 0.8, "preference": 0.65}.get(strength, 0.6)
     reassert_bonus = min(0.05 * (int(row.get("reassertion_count") or 1) - 1), 0.1)
     confidence = min(1.0, strength_floor + reassert_bonus)
 
-    finding = (
-        f"{subject!r} is banned ({strength})"
-        + (f" — context: {clause!r}" if clause else "")
-    )
+    finding = f"{subject!r} is banned ({strength})" + (f" — context: {clause!r}" if clause else "")
     return {
         "finding": finding,
         "confidence": confidence,
@@ -249,10 +244,7 @@ def _route_looking_up_decision(
 
     # Confidence climbs with assertion count: 1 → 0.75, 2 → 0.82, 5 → 0.95.
     confidence = min(0.95, 0.7 + 0.05 * assertion_count)
-    finding = (
-        f"operator chose {chose!r} for {subject!r}"
-        + (f" over {over!r}" if over else "")
-    )
+    finding = f"operator chose {chose!r} for {subject!r}" + (f" over {over!r}" if over else "")
     quotes: list[str] = []
     if rationale:
         quotes.append(rationale)
@@ -284,9 +276,7 @@ def _route_checking_past_correction(
                 limit=5,
             )
         except TypeError:
-            hits = mod.search_extractions(
-                conn, query=subject, cwd=cwd_filter, limit=20
-            )
+            hits = mod.search_extractions(conn, query=subject, cwd=cwd_filter, limit=20)
             hits = [h for h in hits if _hit_get(h, "kind") == "model_correction"]
     except Exception as e:
         log.exception("recall_targeted: search_extractions failed")
@@ -308,18 +298,14 @@ def _route_checking_past_correction(
     except (TypeError, ValueError):
         confidence = 0.6
     return {
-        "finding": (
-            f"{len(hits)} past correction(s) match {subject!r} — avoid repeating"
-        ),
+        "finding": (f"{len(hits)} past correction(s) match {subject!r} — avoid repeating"),
         "confidence": confidence,
         "verbatim_quotes": quotes,
         "recommendation": "avoid",
     }
 
 
-def _route_operator_preference_lookup(
-    conn: sqlite3.Connection, subject: str
-) -> dict:
+def _route_operator_preference_lookup(conn: sqlite3.Connection, subject: str) -> dict:
     """Combine ``operator_profile`` field lookup + ban check + decision check.
 
     Operator preferences live in three places: the structured profile
@@ -348,9 +334,7 @@ def _route_operator_preference_lookup(
             best_recommendation = "avoid"
             best_confidence = max(
                 best_confidence,
-                {"absolute": 0.95, "context": 0.8, "preference": 0.65}.get(
-                    strength, 0.6
-                ),
+                {"absolute": 0.95, "context": 0.8, "preference": 0.65}.get(strength, 0.6),
             )
 
     # 2) Profile field — does the operator have a stored preference for this?
@@ -395,18 +379,14 @@ def _route_have_we_discussed_this(
         )
 
     try:
-        ext_hits = mod.search_extractions(
-            conn, query=subject, cwd=cwd_hint, limit=5
-        )
+        ext_hits = mod.search_extractions(conn, query=subject, cwd=cwd_hint, limit=5)
     except Exception:
         ext_hits = []
 
     msg_hits: list[Any] = []
     if not ext_hits:
         try:
-            msg_hits = mod.search_messages(
-                conn, query=subject, cwd=cwd_hint, limit=5
-            )
+            msg_hits = mod.search_messages(conn, query=subject, cwd=cwd_hint, limit=5)
         except Exception:
             msg_hits = []
 
@@ -438,9 +418,7 @@ def _route_have_we_discussed_this(
     }
 
 
-def _route_what_is_active_goal(
-    conn: sqlite3.Connection, cwd_hint: str | None
-) -> dict:
+def _route_what_is_active_goal(conn: sqlite3.Connection, cwd_hint: str | None) -> dict:
     mod = _load("goals")
     if mod is None:
         return _empty_result(

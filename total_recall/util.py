@@ -129,9 +129,7 @@ def format_table(
     sep = "+".join("-" * (w + 2) for w in widths)
     sep = f"+{sep}+"
     header_line = (
-        "| "
-        + " | ".join(h.ljust(w) for h, w in zip(headers_disp, widths, strict=False))
-        + " |"
+        "| " + " | ".join(h.ljust(w) for h, w in zip(headers_disp, widths, strict=False)) + " |"
     )
     out_lines = [sep, header_line, sep]
     for row in body:

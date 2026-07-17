@@ -373,9 +373,7 @@ def upsert_vocabulary_term(
     )
 
 
-def bump_vocabulary_frequency(
-    conn: sqlite3.Connection, term: str, *, by: int = 1
-) -> None:
+def bump_vocabulary_frequency(conn: sqlite3.Connection, term: str, *, by: int = 1) -> None:
     """Increment ``frequency`` by ``by`` for an existing term.
 
     No-op if the term is unknown — frequencies are only meaningful once a
@@ -401,15 +399,11 @@ def _row_to_term(row: sqlite3.Row | tuple | None) -> dict[str, Any] | None:
 def get_term(conn: sqlite3.Connection, term: str) -> dict[str, Any] | None:
     ensure_schema(conn)
     # Match case-insensitively so callers can pass 'Relay Fleet' or 'relay fleet'.
-    row = conn.execute(
-        "SELECT * FROM vocabulary WHERE LOWER(term) = LOWER(?)", (term,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM vocabulary WHERE LOWER(term) = LOWER(?)", (term,)).fetchone()
     return _row_to_term(row)
 
 
-def list_terms(
-    conn: sqlite3.Connection, category: str | None = None
-) -> list[dict[str, Any]]:
+def list_terms(conn: sqlite3.Connection, category: str | None = None) -> list[dict[str, Any]]:
     ensure_schema(conn)
     if category:
         rows = conn.execute(
@@ -417,7 +411,5 @@ def list_terms(
             (category,),
         ).fetchall()
     else:
-        rows = conn.execute(
-            "SELECT * FROM vocabulary ORDER BY frequency DESC, term"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM vocabulary ORDER BY frequency DESC, term").fetchall()
     return [_row_to_term(r) for r in rows if r is not None]  # type: ignore[return-value]

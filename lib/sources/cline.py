@@ -105,8 +105,12 @@ def _vscode_global_storage_roots() -> list[Path]:
         roots.extend(
             [
                 home / "Library" / "Application Support" / "Code" / "User" / "globalStorage",
-                home / "Library" / "Application Support" / "Code - Insiders"
-                / "User" / "globalStorage",
+                home
+                / "Library"
+                / "Application Support"
+                / "Code - Insiders"
+                / "User"
+                / "globalStorage",
                 home / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage",
             ]
         )
@@ -545,11 +549,7 @@ class ClineSource(SessionSource):
             if not isinstance(msg, dict):
                 continue
             attach_usage: dict[str, Any] | None = None
-            if (
-                msg.get("role") == "assistant"
-                and not first_assistant_seen
-                and usage is not None
-            ):
+            if msg.get("role") == "assistant" and not first_assistant_seen and usage is not None:
                 attach_usage = usage
                 first_assistant_seen = True
             rec = _project_message_to_record(

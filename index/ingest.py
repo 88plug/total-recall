@@ -142,9 +142,7 @@ _METRICS_FALLBACK_WARNED = False
 def _warn_metrics_unavailable_once() -> None:
     global _METRICS_FALLBACK_WARNED
     if not _METRICS_FALLBACK_WARNED:
-        log.info(
-            "metrics tables not yet available; skipping turns/compactions extraction"
-        )
+        log.info("metrics tables not yet available; skipping turns/compactions extraction")
         _METRICS_FALLBACK_WARNED = True
 
 
@@ -178,8 +176,16 @@ def _record_ingest_run(
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                ts_int, files_seen, files_new, sum_messages, sum_extractions,
-                sum_turns, sum_compactions, elapsed_ms, sum_errors, trigger,
+                ts_int,
+                files_seen,
+                files_new,
+                sum_messages,
+                sum_extractions,
+                sum_turns,
+                sum_compactions,
+                elapsed_ms,
+                sum_errors,
+                trigger,
             ),
         )
     except sqlite3.OperationalError:
@@ -308,9 +314,7 @@ def _ts_int(rec: Any) -> int | None:
     return None
 
 
-def _row_for_message(
-    rec: Any, source_file: str, source: str = "claude_code"
-) -> tuple:
+def _row_for_message(rec: Any, source_file: str, source: str = "claude_code") -> tuple:
     text = _record_text(rec)
     # Scrub secrets BEFORE the row goes into messages.text. The MCP
     # `search_messages` tool returns raw transcript text and would otherwise
@@ -554,8 +558,11 @@ def _parse_file_pure(
         if record_iter is None:
             return _ParsedFile(
                 source_file=source_file,
-                inode=0, size=0, mtime=0,
-                rotated=False, start_offset=0,
+                inode=0,
+                size=0,
+                mtime=0,
+                rotated=False,
+                start_offset=0,
                 missing=True,
                 source=source,
             )
@@ -569,8 +576,11 @@ def _parse_file_pure(
 
     parsed = _ParsedFile(
         source_file=source_file,
-        inode=inode, size=size, mtime=mtime,
-        rotated=rotated, start_offset=effective_start,
+        inode=inode,
+        size=size,
+        mtime=mtime,
+        rotated=rotated,
+        start_offset=effective_start,
         last_session_id=last_session_id,
         source=source,
     )
@@ -587,18 +597,14 @@ def _parse_file_pure(
     for _offset, rec in record_iter:
         try:
             records.append(rec)
-            parsed.message_rows.append(
-                _row_for_message(rec, source_file, source=source)
-            )
+            parsed.message_rows.append(_row_for_message(rec, source_file, source=source))
             # Per-record snapshot for the incremental profile updaters.
             # We capture the minimum the three extractors need (no nested
             # dataclasses → cheap to pickle across the worker boundary).
             _snap = _profile_record_snapshot(rec)
             if _snap is not None:
                 parsed.profile_records.append(_snap)
-            parsed.last_session_id = (
-                getattr(rec, "session_id", None) or parsed.last_session_id
-            )
+            parsed.last_session_id = getattr(rec, "session_id", None) or parsed.last_session_id
             trow = _row_for_turn(rec, source_file)
             if trow is not None:
                 parsed.turn_rows.append(trow)
@@ -622,9 +628,7 @@ def _parse_file_pure(
     if _HAS_PIPELINE and records:
         try:
             for ext in _run_all(records):
-                parsed.extraction_rows.append(
-                    _row_for_extraction(ext, source=source)
-                )
+                parsed.extraction_rows.append(_row_for_extraction(ext, source=source))
         except Exception as exc:  # noqa: BLE001
             log.warning("_parse_file_pure: extractor pipeline error: %s", exc)
             parsed.errors += 1
@@ -662,15 +666,26 @@ def _parse_worker(args: tuple) -> _ParsedFile:
         st = _stat(Path(path_str))
         if st is None:
             return _ParsedFile(
-                source_file=path_str, inode=0, size=0, mtime=0,
-                rotated=False, start_offset=0, errors=1, missing=True,
+                source_file=path_str,
+                inode=0,
+                size=0,
+                mtime=0,
+                rotated=False,
+                start_offset=0,
+                errors=1,
+                missing=True,
                 source=source,
             )
         inode, size, mtime = st
         return _ParsedFile(
-            source_file=path_str, inode=inode, size=size, mtime=mtime,
-            rotated=rotated, start_offset=start_offset,
-            errors=1, last_session_id=last_session_id,
+            source_file=path_str,
+            inode=inode,
+            size=size,
+            mtime=mtime,
+            rotated=rotated,
+            start_offset=start_offset,
+            errors=1,
+            last_session_id=last_session_id,
             source=source,
         )
 
@@ -703,9 +718,7 @@ def _existing_profile_from_conn(conn: sqlite3.Connection) -> Any:
             except Exception:  # noqa: BLE001
                 continue
     profile.confidence = dict(stored.get("_confidence", {}) or {})
-    profile.sources = {
-        k: list(v) for k, v in (stored.get("_sources", {}) or {}).items()
-    }
+    profile.sources = {k: list(v) for k, v in (stored.get("_sources", {}) or {}).items()}
     return profile
 
 
@@ -900,8 +913,7 @@ def _commit_parsed(
             except sqlite3.OperationalError as exc:
                 if "project_key" in str(exc):
                     log.warning(
-                        "extractions.project_key column missing; falling back "
-                        "to v4 INSERT shape"
+                        "extractions.project_key column missing; falling back to v4 INSERT shape"
                     )
                     conn.executemany(
                         """
@@ -914,8 +926,7 @@ def _commit_parsed(
                     )
                 elif "source" in str(exc):
                     log.warning(
-                        "extractions.source column missing; falling back to "
-                        "v3 INSERT shape"
+                        "extractions.source column missing; falling back to v3 INSERT shape"
                     )
                     conn.executemany(
                         """
@@ -1034,6 +1045,7 @@ def _commit_parsed(
             try:
                 from extractors.workflow import extract_workflow_incremental as _wf_inc
                 from index.workflow import get_workflow, persist_workflow
+
                 _existing_wf = get_workflow(conn) or {}
                 _existing_wf.pop("_updated_ts", None)
                 _merged_wf = _wf_inc(_new_records, _existing_wf)
@@ -1052,6 +1064,7 @@ def _commit_parsed(
                     extract_implicit_preferences_incremental as _ip_inc,
                 )
                 from index.implicit_preferences import persist_implicit_preferences
+
                 _merged_ip = _ip_inc(_new_records, None)
                 if _merged_ip:
                     persist_implicit_preferences(conn, _merged_ip)
@@ -1067,6 +1080,7 @@ def _commit_parsed(
                     get_satisfaction_summary,
                     persist_satisfaction,
                 )
+
                 _existing_sat = get_satisfaction_summary(conn)
                 _merged_sat = _sat_inc(_new_records, _existing_sat)
                 if _merged_sat:
@@ -1143,9 +1157,7 @@ def ingest_file(
     pool and funnel writes back through a single SQLite connection.
     """
     jsonl_path = Path(jsonl_path)
-    start_offset, rotated, last_sid = _resolve_cursor(
-        conn, jsonl_path, force_full=force_full
-    )
+    start_offset, rotated, last_sid = _resolve_cursor(conn, jsonl_path, force_full=force_full)
     parsed = _parse_file_pure(
         jsonl_path,
         start_offset=start_offset,
@@ -1155,9 +1167,7 @@ def ingest_file(
     return _commit_parsed(conn, parsed)
 
 
-def _discover_jsonl_files(
-    projects_root: Path, cwd_filter: str | None
-) -> list[Path]:
+def _discover_jsonl_files(projects_root: Path, cwd_filter: str | None) -> list[Path]:
     """Walk projects_root and return the top-level .jsonl files to ingest.
 
     Subagent transcripts at ``<slug>/<uuid>/subagents/*.jsonl`` are excluded
@@ -1242,22 +1252,22 @@ def _ingest_all_multi_source(
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "ingest_all: %s.discover_sessions raised %s — skipping",
-                src_name, exc,
+                src_name,
+                exc,
             )
             continue
 
         if cwd_filter:
             sessions = [
-                s for s in sessions
+                s
+                for s in sessions
                 if getattr(s, "cwd", None) == cwd_filter
                 or getattr(s, "cwd", None) == cwd_filter.rstrip("/")
             ]
 
         for session in sessions:
             source_file_key = _source_file_key_for_session(session)
-            session_path = Path(
-                getattr(session, "path", source_file_key)
-            )
+            session_path = Path(getattr(session, "path", source_file_key))
 
             # Resolve cursor against the per-session key (handles SQLite
             # sources via "<db>#<session_id>" keys).
@@ -1272,17 +1282,15 @@ def _ingest_all_multi_source(
                 last_sid = state["last_session_id"]
 
             try:
-                record_iter = src.iter_records(
-                    session, start_offset=start_offset
-                )
+                record_iter = src.iter_records(session, start_offset=start_offset)
             except Exception as exc:  # noqa: BLE001
                 log.warning(
                     "ingest_all: %s.iter_records(%s) raised %s",
-                    src_name, source_file_key, exc,
+                    src_name,
+                    source_file_key,
+                    exc,
                 )
-                reports.append(
-                    IngestReport(source_file_key, 0, 0, 1, 0, 0)
-                )
+                reports.append(IngestReport(source_file_key, 0, 0, 1, 0, 0))
                 continue
 
             try:
@@ -1298,11 +1306,11 @@ def _ingest_all_multi_source(
             except Exception as exc:  # noqa: BLE001
                 log.warning(
                     "ingest_all: parse for %s/%s failed: %s",
-                    src_name, source_file_key, exc,
+                    src_name,
+                    source_file_key,
+                    exc,
                 )
-                reports.append(
-                    IngestReport(source_file_key, 0, 0, 1, 0, 0)
-                )
+                reports.append(IngestReport(source_file_key, 0, 0, 1, 0, 0))
                 continue
 
             # Cross-source dedup. Only meaningful when multiple sources
@@ -1321,7 +1329,8 @@ def _ingest_all_multi_source(
                 if suppressed:
                     log.info(
                         "ingest_all: dedup suppressed %d %s messages",
-                        suppressed, src_name,
+                        suppressed,
+                        src_name,
                     )
                 parsed.message_rows = kept
             if parsed.extraction_rows:
@@ -1336,7 +1345,8 @@ def _ingest_all_multi_source(
                 if suppressed_e:
                     log.info(
                         "ingest_all: dedup suppressed %d %s extractions",
-                        suppressed_e, src_name,
+                        suppressed_e,
+                        src_name,
                     )
                 parsed.extraction_rows = kept_e
 
@@ -1345,11 +1355,11 @@ def _ingest_all_multi_source(
             except Exception as exc:  # noqa: BLE001
                 log.warning(
                     "ingest_all: commit for %s/%s failed: %s",
-                    src_name, source_file_key, exc,
+                    src_name,
+                    source_file_key,
+                    exc,
                 )
-                reports.append(
-                    IngestReport(source_file_key, 0, 0, 1, 0, 0)
-                )
+                reports.append(IngestReport(source_file_key, 0, 0, 1, 0, 0))
 
     return reports
 
@@ -1390,7 +1400,8 @@ def _available_sources(names: list[str] | None) -> list[Any]:
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "ingest_all: %s.is_available() raised %s — skipping",
-                getattr(s, "name", type(s).__name__), exc,
+                getattr(s, "name", type(s).__name__),
+                exc,
             )
             continue
         if avail:
@@ -1474,9 +1485,7 @@ def ingest_all(
             for s in active:
                 if getattr(s, "name", None) == "claude_code":
                     s.projects_root = projects_root  # type: ignore[attr-defined]
-        non_cc_active = any(
-            getattr(s, "name", None) != "claude_code" for s in active
-        )
+        non_cc_active = any(getattr(s, "name", None) != "claude_code" for s in active)
         explicit = sources is not None
         # When the caller passed an explicit ``sources=`` list, we are
         # ALWAYS on the multi-source path even if the resolved list is
@@ -1510,9 +1519,7 @@ def ingest_all(
             if not use_parallel:
                 for path in files:
                     try:
-                        reports.append(
-                            ingest_file(conn, path, force_full=force_full)
-                        )
+                        reports.append(ingest_file(conn, path, force_full=force_full))
                     except Exception as exc:  # noqa: BLE001
                         log.warning("ingest_all: %s failed: %s", path, exc)
                         reports.append(
@@ -1532,19 +1539,15 @@ def ingest_all(
                     start_offset, rotated, last_sid = _resolve_cursor(
                         conn, path, force_full=force_full
                     )
-                    worker_args.append(
-                        (str(path), start_offset, rotated, last_sid, "claude_code")
-                    )
+                    worker_args.append((str(path), start_offset, rotated, last_sid, "claude_code"))
 
                 log.info(
                     "ingest_all: parallel parse, files=%d jobs=%d",
-                    len(files), jobs,
+                    len(files),
+                    jobs,
                 )
                 with cf.ProcessPoolExecutor(max_workers=jobs) as pool:
-                    futures = {
-                        pool.submit(_parse_worker, args): args[0]
-                        for args in worker_args
-                    }
+                    futures = {pool.submit(_parse_worker, args): args[0] for args in worker_args}
                     for fut in cf.as_completed(futures):
                         src = futures[fut]
                         try:
@@ -1552,7 +1555,8 @@ def ingest_all(
                         except Exception as exc:  # noqa: BLE001
                             log.warning(
                                 "ingest_all: worker for %s failed: %s",
-                                src, exc,
+                                src,
+                                exc,
                             )
                             reports.append(IngestReport(src, 0, 0, 1, 0, 0))
                             continue
@@ -1561,7 +1565,8 @@ def ingest_all(
                         except Exception as exc:  # noqa: BLE001
                             log.warning(
                                 "ingest_all: commit for %s failed: %s",
-                                src, exc,
+                                src,
+                                exc,
                             )
                             reports.append(IngestReport(src, 0, 0, 1, 0, 0))
 
@@ -1585,9 +1590,10 @@ def ingest_all(
                 try:
                     busy, log_pages, ckpt_pages = row[0], row[1], row[2]
                     log.info(
-                        "ingest_all: wal_checkpoint(TRUNCATE) busy=%s "
-                        "log_pages=%s checkpointed=%s",
-                        busy, log_pages, ckpt_pages,
+                        "ingest_all: wal_checkpoint(TRUNCATE) busy=%s log_pages=%s checkpointed=%s",
+                        busy,
+                        log_pages,
+                        ckpt_pages,
                     )
                 except (IndexError, TypeError):
                     log.debug("ingest_all: wal_checkpoint returned %r", row)

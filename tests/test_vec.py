@@ -41,6 +41,7 @@ def _have_sqlite_vec() -> bool:
         return False
     try:
         import sqlite_vec
+
         conn = sqlite3.connect(":memory:")
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
@@ -288,10 +289,14 @@ class TestGteCustomModels:
         from vec.embed import _clamp_tokenizer_max_length
 
         tc = tmp_path / "tokenizer_config.json"
-        tc.write_text(json.dumps({
-            "model_max_length": 1000000000000000000000000000000,
-            "model_type": "modernbert",
-        }))
+        tc.write_text(
+            json.dumps(
+                {
+                    "model_max_length": 1000000000000000000000000000000,
+                    "model_type": "modernbert",
+                }
+            )
+        )
         _clamp_tokenizer_max_length(tmp_path)
         d = json.loads(tc.read_text())
         assert d["model_max_length"] == 8192
@@ -334,11 +339,15 @@ class TestCustomModelPorts:
         from vec.embed import _clamp_tokenizer_max_length
 
         tc = tmp_path / "tokenizer_config.json"
-        tc.write_text(json.dumps({
-            "model_max_length": 1000000000000000019884624838656,
-            "max_length": 2000000000000,
-            "model_type": "modernbert",
-        }))
+        tc.write_text(
+            json.dumps(
+                {
+                    "model_max_length": 1000000000000000019884624838656,
+                    "max_length": 2000000000000,
+                    "model_type": "modernbert",
+                }
+            )
+        )
         _clamp_tokenizer_max_length(tmp_path)
         d = json.loads(tc.read_text())
         assert d["model_max_length"] == 8192
@@ -494,9 +503,7 @@ class _FakeEmbedder:
 
 
 class TestIncrementalVecBackfill:
-    @pytest.mark.skipif(
-        not HAS_SQLITE_VEC, reason="sqlite_vec required for vec schema"
-    )
+    @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec required for vec schema")
     def test_backfill_only_touches_new_extractions(self, tmp_path: Path) -> None:
         from vec.store import apply_vec_schema, backfill_all
 
@@ -659,16 +666,14 @@ class TestHybridSearchFallback:
             "VALUES (1, 'rate limiting nginx config', '/proj/a', '2025-01-01', 'decision')"
         )
         conn.execute(
-            "INSERT INTO extractions_fts(rowid, content) "
-            "VALUES (1, 'rate limiting nginx config')"
+            "INSERT INTO extractions_fts(rowid, content) VALUES (1, 'rate limiting nginx config')"
         )
         conn.execute(
             "INSERT INTO extractions(id, content, cwd, ts, kind) "
             "VALUES (2, 'unrelated banana smoothie', '/proj/b', '2025-01-02', 'note')"
         )
         conn.execute(
-            "INSERT INTO extractions_fts(rowid, content) "
-            "VALUES (2, 'unrelated banana smoothie')"
+            "INSERT INTO extractions_fts(rowid, content) VALUES (2, 'unrelated banana smoothie')"
         )
         conn.commit()
 
@@ -730,12 +735,27 @@ class TestIntegration:
             """
         )
         rows = [
-            (1, "Configure nginx rate limiting with limit_req_zone directive.",
-             "/proj/a", "2025-01-01", "decision"),
-            (2, "Best chocolate cake recipe with cocoa and butter.",
-             "/proj/b", "2025-01-02", "note"),
-            (3, "Use PostgreSQL row-level security for tenant isolation.",
-             "/proj/c", "2025-01-03", "decision"),
+            (
+                1,
+                "Configure nginx rate limiting with limit_req_zone directive.",
+                "/proj/a",
+                "2025-01-01",
+                "decision",
+            ),
+            (
+                2,
+                "Best chocolate cake recipe with cocoa and butter.",
+                "/proj/b",
+                "2025-01-02",
+                "note",
+            ),
+            (
+                3,
+                "Use PostgreSQL row-level security for tenant isolation.",
+                "/proj/c",
+                "2025-01-03",
+                "decision",
+            ),
         ]
         for r in rows:
             conn.execute(

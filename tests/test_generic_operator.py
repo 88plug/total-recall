@@ -37,14 +37,21 @@ from extractors.voice_profile import measure_voice
 # ---------------------------------------------------------------------------
 
 _FOREIGN_SENTINELS = {
-    "globex", "initech", "umbrella-corp", "umbrella corp",
-    "wayne enterprises", "stark industries", "acme widgets",
-    "foobar@example.org", "10.255.255.254",
+    "globex",
+    "initech",
+    "umbrella-corp",
+    "umbrella corp",
+    "wayne enterprises",
+    "stark industries",
+    "acme widgets",
+    "foobar@example.org",
+    "10.255.255.254",
 }
 
 
 def _load_private_denylist() -> set[str]:
     import os
+
     path = Path(
         os.environ.get(
             "BT_AUTHOR_DENYLIST",
@@ -78,6 +85,7 @@ def _contains_andrew_literal(obj: Any) -> bool:
 # ---------------------------------------------------------------------------
 # Synthetic corpus builder
 # ---------------------------------------------------------------------------
+
 
 def _user(text: str) -> dict:
     return {
@@ -116,9 +124,7 @@ DANA_CORPUS_RECORDS = [
     _user("Hi, this is Dana Lopez from NovaCluster."),
     _assistant("Got it! I'll use dana@novacluster.io for all git commits."),
     _user("My other email is ops@novacluster.io for ops alerts."),
-    _assistant(
-        "Deploying to nova-box (10.10.0.5, tailscale 100.100.1.5) via ssh dana@nova-box."
-    ),
+    _assistant("Deploying to nova-box (10.10.0.5, tailscale 100.100.1.5) via ssh dana@nova-box."),
     _user(
         "Never recommend digitalocean for us. We use vultr exclusively. "
         "Billing goes through stripe."
@@ -127,10 +133,7 @@ DANA_CORPUS_RECORDS = [
         "Confirmed — self-hosted gitlab on code.novacluster.io. "
         "github.com/danacodes is the public mirror."
     ),
-    _user(
-        "Rules: KISS, single-dev maintainer, self-hosted everything. "
-        "Timezone is Europe/Berlin."
-    ),
+    _user("Rules: KISS, single-dev maintainer, self-hosted everything. Timezone is Europe/Berlin."),
     _assistant("Products: nova-api, nova-agent, nova-ctl. ISP uplinks: Starlink and Ziply."),
     # Second confirm for email confidence bump.
     _assistant("Confirmed again at dana@novacluster.io."),
@@ -246,13 +249,10 @@ def test_no_andrew_literals_in_voice(dana_corpus: Path) -> None:
     voice_records = [
         {"type": "user", "content_kind": "string", "text": rec["message"]["content"]}
         for rec in DANA_CORPUS_RECORDS
-        if rec.get("type") == "user"
-        and isinstance(rec.get("message", {}).get("content"), str)
+        if rec.get("type") == "user" and isinstance(rec.get("message", {}).get("content"), str)
     ]
     voice = measure_voice(voice_records)
-    assert not _contains_andrew_literal(voice), (
-        f"Andrew literal found in voice profile: {voice}"
-    )
+    assert not _contains_andrew_literal(voice), f"Andrew literal found in voice profile: {voice}"
 
 
 # ---------------------------------------------------------------------------

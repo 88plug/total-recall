@@ -48,15 +48,20 @@ _KNOWN_DIMS: dict[str, int] = {
 # Configs verified from each model card: pooling, normalization, no query prompt.
 _CUSTOM_MODELS: dict[str, dict] = {
     "Alibaba-NLP/gte-modernbert-base": {
-        "pooling": "CLS", "normalization": True,
+        "pooling": "CLS",
+        "normalization": True,
         "hf": "Alibaba-NLP/gte-modernbert-base",
-        "model_file": "onnx/model.onnx", "additional_files": None, "dim": 768,
+        "model_file": "onnx/model.onnx",
+        "additional_files": None,
+        "dim": 768,
     },
     "onnx-community/granite-embedding-small-english-r2": {
-        "pooling": "CLS", "normalization": True,
+        "pooling": "CLS",
+        "normalization": True,
         "hf": "onnx-community/granite-embedding-small-english-r2-ONNX",
         "model_file": "onnx/model.onnx",
-        "additional_files": ["onnx/model.onnx_data"], "dim": 384,
+        "additional_files": ["onnx/model.onnx_data"],
+        "dim": 384,
     },
 }
 
@@ -68,6 +73,7 @@ def _clamp_tokenizer_max_length(model_dir) -> None:
     Idempotent; re-applied on next load if a re-download reverts it."""
     import json as _json
     from pathlib import Path as _Path
+
     tc = _Path(model_dir) / "tokenizer_config.json"
     if not tc.exists():
         return
@@ -113,11 +119,15 @@ def _register_custom_model(model: str) -> None:
         return
     from fastembed import TextEmbedding
     from fastembed.common.model_description import ModelSource, PoolingType
+
     try:
         TextEmbedding.add_custom_model(
-            model=model, dim=spec["dim"],
-            pooling=PoolingType[spec["pooling"]], normalization=spec["normalization"],
-            sources=ModelSource(hf=spec["hf"]), model_file=spec["model_file"],
+            model=model,
+            dim=spec["dim"],
+            pooling=PoolingType[spec["pooling"]],
+            normalization=spec["normalization"],
+            sources=ModelSource(hf=spec["hf"]),
+            model_file=spec["model_file"],
             additional_files=spec["additional_files"],
         )
     except ValueError as exc:

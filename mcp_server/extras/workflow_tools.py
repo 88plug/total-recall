@@ -35,13 +35,13 @@ def _index_missing_error() -> dict[str, Any]:
 
 @mcp.tool(title="Get Workflow Profile", annotations=ToolAnnotations(readOnlyHint=True))
 def get_workflow_profile() -> dict:
-    (
-        "Return the operator's measured workflow behaviour — fan-out vocabulary, autonomy "
-        "score, interrupt rate, planning idiom, peak working hours, session shape, and subagent "
-        "adoption. Use at session start to calibrate execution style: high autonomy_score means "
-        "execute without asking; a strong planning_idiom signals the operator's preferred "
-        "decomposition frame."
-    )
+    """
+    Return the operator's measured workflow behaviour — fan-out vocabulary, autonomy score,
+    interrupt rate, planning idiom, peak working hours, session shape, and subagent
+    adoption. Use at session start to calibrate execution style: high autonomy_score means
+    execute without asking; a strong planning_idiom signals the operator's preferred
+    decomposition frame.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()

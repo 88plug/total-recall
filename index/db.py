@@ -107,9 +107,7 @@ def _read_schema_version(conn: sqlite3.Connection) -> str | None:
     pre-bootstrap) or the row simply hasn't been inserted yet.
     """
     try:
-        row = conn.execute(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-        ).fetchone()
+        row = conn.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()
     except sqlite3.OperationalError:
         return None
     if row is None:
@@ -152,13 +150,10 @@ def _migrate_to_v4(conn: sqlite3.Connection) -> None:
     if msg_cols:  # only migrate if the table exists
         if "source" not in msg_cols:
             conn.execute(
-                "ALTER TABLE messages ADD COLUMN source TEXT "
-                "NOT NULL DEFAULT 'claude_code'"
+                "ALTER TABLE messages ADD COLUMN source TEXT NOT NULL DEFAULT 'claude_code'"
             )
         if "dedup_superseded_by_source" not in msg_cols:
-            conn.execute(
-                "ALTER TABLE messages ADD COLUMN dedup_superseded_by_source TEXT"
-            )
+            conn.execute("ALTER TABLE messages ADD COLUMN dedup_superseded_by_source TEXT")
         # The supporting index is created idempotently in schema.sql; if the
         # column was just added the CREATE INDEX in the executescript would
         # have errored before this point (sqlite executes left-to-right and
@@ -175,13 +170,10 @@ def _migrate_to_v4(conn: sqlite3.Connection) -> None:
     if ext_cols:
         if "source" not in ext_cols:
             conn.execute(
-                "ALTER TABLE extractions ADD COLUMN source TEXT "
-                "NOT NULL DEFAULT 'claude_code'"
+                "ALTER TABLE extractions ADD COLUMN source TEXT NOT NULL DEFAULT 'claude_code'"
             )
         if "dedup_superseded_by_source" not in ext_cols:
-            conn.execute(
-                "ALTER TABLE extractions ADD COLUMN dedup_superseded_by_source TEXT"
-            )
+            conn.execute("ALTER TABLE extractions ADD COLUMN dedup_superseded_by_source TEXT")
         with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_extractions_source_kind "
@@ -316,8 +308,7 @@ def apply_schema(conn: sqlite3.Connection) -> None:
         # schema_meta exists but no row — defensive, the script's INSERT OR
         # IGNORE should have populated it. Insert now.
         conn.execute(
-            "INSERT OR REPLACE INTO schema_meta(key, value) VALUES "
-            "('schema_version', ?)",
+            "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', ?)",
             (_CURRENT_SCHEMA_VERSION,),
         )
 

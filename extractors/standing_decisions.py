@@ -126,27 +126,19 @@ _NEVER_RE = re.compile(
     r"(?i)never\s+(?:ever\s+)?(?:recommend|use|mention)"
     r"(?:\s+or\s+\w+)*\s+(\w[\w\.\-]*)"
 )
-_WE_DONT_RE = re.compile(
-    r"(?i)\bwe\s+(?:never|don'?t|won'?t)\s+use\s+(\w[\w\.\-]*)"
-)
+_WE_DONT_RE = re.compile(r"(?i)\bwe\s+(?:never|don'?t|won'?t)\s+use\s+(\w[\w\.\-]*)")
 
 # Reversals
 _MIGRATED_AWAY_RE = re.compile(r"(?i)MIGRATED AWAY FROM\s+(\w[\w\.\-]*)")
-_ABANDONED_RE = re.compile(
-    r"(?i)\b(?:abandoned|dead|broken)\b.*?(\w[\w\.\-]*)"
-)
+_ABANDONED_RE = re.compile(r"(?i)\b(?:abandoned|dead|broken)\b.*?(\w[\w\.\-]*)")
 _REVERTED_CANONICAL_RE = re.compile(r"(?i)canonical\s+\S+\s+(?:path|again)")
 _SOFT_GUIDANCE_RE = re.compile(r"(?i)don'?t push this hard")
 
 # Money burn
-_MONEY_BURN_RE = re.compile(
-    r"\$(\d+(?:\.\d+)?)\s+(?:lost|burned|wasted)", re.IGNORECASE
-)
+_MONEY_BURN_RE = re.compile(r"\$(\d+(?:\.\d+)?)\s+(?:lost|burned|wasted)", re.IGNORECASE)
 
 # Codified preferences
-_WINS_BECAUSE_RE = re.compile(
-    r"\b(\w[\w\.\-]*)\s+(?:wins|beats)\s+because", re.IGNORECASE
-)
+_WINS_BECAUSE_RE = re.compile(r"\b(\w[\w\.\-]*)\s+(?:wins|beats)\s+because", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -222,9 +214,7 @@ class StandingDecisions(Extractor):
         # 3) "X instead of Y" / "X rather than Y" / "X over Y"
         for m in _INSTEAD_OF_RE.finditer(block):
             chose, over = m.group(1), m.group(2)
-            yield self._decision(
-                rec, block, m, chose=chose, over=over, pattern="instead_of"
-            )
+            yield self._decision(rec, block, m, chose=chose, over=over, pattern="instead_of")
 
         # 4) Door #N — operator's enumerated-choice shorthand.
         for m in _DOOR_RE.finditer(block):
@@ -305,7 +295,7 @@ class StandingDecisions(Extractor):
         for m in _WINS_BECAUSE_RE.finditer(block):
             chose = m.group(1)
             # Rationale = up to ~120 chars after "because"
-            tail = block[m.end():].lstrip()
+            tail = block[m.end() :].lstrip()
             rationale = tail.split("\n", 1)[0][:200].strip()
             yield self._decision(
                 rec,

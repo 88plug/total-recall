@@ -43,9 +43,7 @@ def inspect_cmd(
     conn = connect(db_path, read_only=True)
     try:
         # Basic counts.
-        total = _scalar(
-            conn, "SELECT COUNT(*) FROM messages WHERE session_id = ?", (session_id,)
-        )
+        total = _scalar(conn, "SELECT COUNT(*) FROM messages WHERE session_id = ?", (session_id,))
         if total == 0:
             click.echo(f"No messages for session_id={session_id!r}.", err=True)
             raise click.Abort

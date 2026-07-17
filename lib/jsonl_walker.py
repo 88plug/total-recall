@@ -117,9 +117,7 @@ def all_sessions(
 # ---------------------------------------------------------------------------
 
 
-def iter_records(
-    path: Path, start_offset: int = 0
-) -> Iterator[tuple[int, Record]]:
+def iter_records(path: Path, start_offset: int = 0) -> Iterator[tuple[int, Record]]:
     """Yield ``(next_byte_offset, Record)`` for each well-formed line in ``path``.
 
     Behavior:

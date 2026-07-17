@@ -9,6 +9,7 @@ index.db that is large enough to read as NOT fresh, so the populated path runs.
 Hermetic: a tmp CLAUDE_PLUGIN_DATA, a synthetic index built via index.db.connect,
 no touch of the operator's real ~/.claude. Skips cleanly if bash / jq / uv absent.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,8 +46,7 @@ def _build_populated_db(db_path: Path) -> None:
                 f"msg-{i}",
                 0,
                 f"/proj/dispatch/s{i % 5}.jsonl",
-                f"a synthetic message about widgets and provider-x number {i} "
-                * 4,
+                f"a synthetic message about widgets and provider-x number {i} " * 4,
             )
             for i in range(1200)
         ]

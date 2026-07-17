@@ -55,10 +55,7 @@ def session_digest_resource(session_id: str) -> str:
     if not isinstance(digest, dict):
         return f"# Session {session_id}\n\n_unexpected digest type: {type(digest).__name__}_\n"
     if "error" in digest:
-        return (
-            f"# Session {session_id}\n\n"
-            f"**Error:** {digest['error']}\n"
-        )
+        return f"# Session {session_id}\n\n**Error:** {digest['error']}\n"
 
     lines: list[str] = [f"# Session {session_id}"]
     title = digest.get("ai_title")

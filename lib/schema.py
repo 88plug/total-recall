@@ -438,9 +438,7 @@ def parse_record(obj: dict[str, Any], byte_offset: int = 0) -> Record:
         )
 
     if t == "permission-mode":
-        return PermissionModeRecord(
-            **base, permission_mode=obj.get("permissionMode", "") or ""
-        )
+        return PermissionModeRecord(**base, permission_mode=obj.get("permissionMode", "") or "")
 
     if t == "file-history-snapshot":
         return FileHistorySnapshotRecord(

@@ -48,6 +48,7 @@ class TestGetDefaultClientEnvOverride:
         monkeypatch.setenv("TOTAL_RECALL_LLM_MODEL", "my-custom-model:latest")
 
         from extractors.llm.client import get_default_client
+
         client = get_default_client()
         assert client.model == "my-custom-model:latest"
 
@@ -56,6 +57,7 @@ class TestGetDefaultClientEnvOverride:
         monkeypatch.delenv("TOTAL_RECALL_LLM_MODEL", raising=False)
 
         from extractors.llm.client import get_default_client
+
         client = get_default_client()
         assert client.model == DEFAULT_MODEL
 

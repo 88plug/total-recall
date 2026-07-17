@@ -28,6 +28,7 @@ invocations, the test output will identify exactly which file/line is
 non-compliant — that is EXPECTED until the sibling's edits land.  The test is
 written to the TARGET (fully-migrated) state.
 """
+
 from __future__ import annotations
 
 import re
@@ -44,9 +45,7 @@ COMMANDS_DIR = REPO_ROOT / "commands"
 # double-quoted ${CLAUDE_PLUGIN_ROOT}.
 # ---------------------------------------------------------------------------
 
-_APPROVED_RE = re.compile(
-    r'bash\s+"?\$\{CLAUDE_PLUGIN_ROOT\}/scripts/recall-cli\.sh"?'
-)
+_APPROVED_RE = re.compile(r'bash\s+"?\$\{CLAUDE_PLUGIN_ROOT\}/scripts/recall-cli\.sh"?')
 
 # ---------------------------------------------------------------------------
 # Banned raw-invocation patterns.
@@ -58,14 +57,12 @@ _APPROVED_RE = re.compile(
 # optionally preceded by whitespace, followed by a subcommand or end.
 # We reject: `total-recall metrics ...`, `total-recall rebuild`, etc.
 _BARE_TOTAL_RECALL_RE = re.compile(
-    r'(?:^|\s)`total-recall(?:\s+\S+)?`|'  # inline: `total-recall ...`
-    r'(?:^|\s)total-recall\s+\w',           # code block line: total-recall <subcmd>
+    r"(?:^|\s)`total-recall(?:\s+\S+)?`|"  # inline: `total-recall ...`
+    r"(?:^|\s)total-recall\s+\w",  # code block line: total-recall <subcmd>
 )
 
 # Matches bare python -m total_recall or python3 -m total_recall in code context.
-_BARE_PYTHON_RE = re.compile(
-    r'python3?\s+-m\s+total_recall'
-)
+_BARE_PYTHON_RE = re.compile(r"python3?\s+-m\s+total_recall")
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +100,7 @@ def _extract_invocation_lines(text: str) -> list[tuple[int, str]]:
 
         # Outside fences — look for inline backtick spans.
         # Extract every `...` span that starts with a CLI-style token.
-        for m in re.finditer(r'`([^`]+)`', raw):
+        for m in re.finditer(r"`([^`]+)`", raw):
             inner = m.group(1).strip()
             # Only care about spans whose first word looks like a command
             # (total-recall, bash, python, python3).
@@ -174,9 +171,8 @@ def test_command_uses_wrapper_not_bare_cli(command_file: Path) -> None:
                 f'bash "${{CLAUDE_PLUGIN_ROOT}}/scripts/recall-cli.sh" <subcmd>'
             )
 
-    assert not violations, (
-        f"{command_file.name}: CLI invocation violations found:\n"
-        + "\n".join(violations)
+    assert not violations, f"{command_file.name}: CLI invocation violations found:\n" + "\n".join(
+        violations
     )
 
 

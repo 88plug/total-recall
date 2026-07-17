@@ -120,23 +120,23 @@ class FakeDag:
 @pytest.mark.parametrize(
     "text",
     [
-        "no, that's wrong",                       # directive flip
-        "i told you we don't use provider-y",            # restatement (told)
-        "i asked you to check first",             # restatement (asked)
-        "you already tried that approach",        # already
-        "how many times do I have to say it",     # how many times
-        "stop using sed everywhere",              # stop using
-        "stop guessing and check the docs",       # stop guessing
-        "don't use Stripe for billing",           # don't use
-        "never recommend provider-y again",              # never recommend
-        "that's not what I asked for",            # that's not
-        "wtf are you doing",                      # wtf
-        "we never use provider-y for relays",            # we never use
-        "you're just guessing here",              # guessing
-        "check our session logs first",           # cross-session memory appeal
-        "you're drifting from the spec",          # drift callout
-        "you broke the build again",              # severity-high
-        "never ever push to main",                # strongest rule
+        "no, that's wrong",  # directive flip
+        "i told you we don't use provider-y",  # restatement (told)
+        "i asked you to check first",  # restatement (asked)
+        "you already tried that approach",  # already
+        "how many times do I have to say it",  # how many times
+        "stop using sed everywhere",  # stop using
+        "stop guessing and check the docs",  # stop guessing
+        "don't use Stripe for billing",  # don't use
+        "never recommend provider-y again",  # never recommend
+        "that's not what I asked for",  # that's not
+        "wtf are you doing",  # wtf
+        "we never use provider-y for relays",  # we never use
+        "you're just guessing here",  # guessing
+        "check our session logs first",  # cross-session memory appeal
+        "you're drifting from the spec",  # drift callout
+        "you broke the build again",  # severity-high
+        "never ever push to main",  # strongest rule
     ],
 )
 def test_pattern_fires_on_positive_examples(text):
@@ -195,11 +195,11 @@ def test_escalation_chain_bumps_second_correction():
     [
         "yes please proceed",
         "looks good, ship it",
-        "the no-op handler is fine",          # 'no' mid-sentence is not a directive
+        "the no-op handler is fine",  # 'no' mid-sentence is not a directive
         "<task-notification>foo</task-notification>",
         "<command-name>/foo</command-name>",
         "<local-command-stdout>blah</local-command-stdout>",
-        "ok",                                 # below MIN_LEN
+        "ok",  # below MIN_LEN
     ],
 )
 def test_noise_does_not_match(text):
@@ -409,9 +409,7 @@ def _import_server_with_extras():
     return server
 
 
-def test_recall_corrections_about_returns_documented_shape(
-    tmp_db_dir, fake_index_query
-):
+def test_recall_corrections_about_returns_documented_shape(tmp_db_dir, fake_index_query):
     _seed_corrections(tmp_db_dir / "index.db")
     server = _import_server_with_extras()
 
@@ -428,11 +426,17 @@ def test_recall_corrections_about_returns_documented_shape(
     assert len(hits) == 2
     for h in hits:
         # Documented shape:
-        assert {"correction", "rejected_approach", "preceding_uuid", "severity",
-                "session_id", "cwd", "ts"} <= h.keys()
-        assert (
-            "provider-y" in (h["correction"] or "")
-            or "provider-y" in (h["rejected_approach"] or "")
+        assert {
+            "correction",
+            "rejected_approach",
+            "preceding_uuid",
+            "severity",
+            "session_id",
+            "cwd",
+            "ts",
+        } <= h.keys()
+        assert "provider-y" in (h["correction"] or "") or "provider-y" in (
+            h["rejected_approach"] or ""
         )
 
     # Sort: severity DESC then ts DESC. Row 1 (sev 0.85) comes before row 2 (sev 0.70).

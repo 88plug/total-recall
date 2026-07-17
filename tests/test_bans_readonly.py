@@ -6,6 +6,7 @@ The MCP server opens the index `mode=ro`. Before the fix, `check_banned` and
 "not banned" / empty result returned. Read paths now use `_table_exists` and
 never write.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -102,9 +103,7 @@ def test_ensure_schema_still_creates_for_writers(tmp_path: Path) -> None:
         ensure_schema(conn)
         names = {
             r[0]
-            for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         assert "bans" in names
         assert "failed_attempts" in names

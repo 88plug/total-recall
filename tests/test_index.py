@@ -77,8 +77,18 @@ def _insert_message(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            session_id, cwd, git_branch, role, kind, ts,
-            parent_uuid, uuid, byte_offset, source_file, text, None,
+            session_id,
+            cwd,
+            git_branch,
+            role,
+            kind,
+            ts,
+            parent_uuid,
+            uuid,
+            byte_offset,
+            source_file,
+            text,
+            None,
             project_key(cwd),
         ),
     )
@@ -106,8 +116,16 @@ def _insert_extraction(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            kind, content, session_id, cwd, ts, source_uuid, score, scope,
-            json.dumps(context or {}), project_key(cwd),
+            kind,
+            content,
+            session_id,
+            cwd,
+            ts,
+            source_uuid,
+            score,
+            scope,
+            json.dumps(context or {}),
+            project_key(cwd),
         ),
     )
     return int(cur.lastrowid or 0)
@@ -124,7 +142,7 @@ def test_connect_creates_parent_dir_with_0700(tmp_path: Path) -> None:
     c = connect(db)
     c.close()
     assert db.exists()
-    mode = (db.parent.stat().st_mode & 0o777)
+    mode = db.parent.stat().st_mode & 0o777
     # On most filesystems chmod sticks; on weird ones we degrade gracefully.
     # Either we got exactly 0700, or at minimum no world-rwx.
     assert mode == 0o700 or (mode & 0o007) == 0
@@ -136,9 +154,7 @@ def test_apply_schema_is_idempotent(tmp_path: Path) -> None:
     apply_schema(c)
     apply_schema(c)
     # And the schema_version row exists exactly once.
-    rows = c.execute(
-        "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-    ).fetchall()
+    rows = c.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchall()
     assert len(rows) == 1
     assert rows[0]["value"] == "5"
     c.close()
@@ -168,20 +184,28 @@ def test_wal_mode_enabled(conn: sqlite3.Connection) -> None:
 def test_fts5_insert_trigger_syncs(conn: sqlite3.Connection) -> None:
     _insert_message(
         conn,
-        session_id="s1", cwd="/proj/a", role="assistant", kind="assistant",
-        ts=1000, text="The cat sat on the mat", uuid="u1",
+        session_id="s1",
+        cwd="/proj/a",
+        role="assistant",
+        kind="assistant",
+        ts=1000,
+        text="The cat sat on the mat",
+        uuid="u1",
     )
-    rows = conn.execute(
-        "SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'cat'"
-    ).fetchall()
+    rows = conn.execute("SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'cat'").fetchall()
     assert len(rows) == 1
 
 
 def test_fts5_delete_trigger_syncs(conn: sqlite3.Connection) -> None:
     _insert_message(
         conn,
-        session_id="s1", cwd="/proj/a", role="assistant", kind="assistant",
-        ts=1000, text="dolphins are smart", uuid="u1",
+        session_id="s1",
+        cwd="/proj/a",
+        role="assistant",
+        kind="assistant",
+        ts=1000,
+        text="dolphins are smart",
+        uuid="u1",
     )
     conn.execute("DELETE FROM messages WHERE message_uuid = ?", ("u1",))
     rows = conn.execute(
@@ -193,8 +217,13 @@ def test_fts5_delete_trigger_syncs(conn: sqlite3.Connection) -> None:
 def test_fts5_update_trigger_syncs(conn: sqlite3.Connection) -> None:
     _insert_message(
         conn,
-        session_id="s1", cwd="/proj/a", role="assistant", kind="assistant",
-        ts=1000, text="initial body", uuid="u1",
+        session_id="s1",
+        cwd="/proj/a",
+        role="assistant",
+        kind="assistant",
+        ts=1000,
+        text="initial body",
+        uuid="u1",
     )
     conn.execute(
         "UPDATE messages SET text = ? WHERE message_uuid = ?",
@@ -214,14 +243,18 @@ def test_fts5_update_trigger_syncs(conn: sqlite3.Connection) -> None:
 def test_extractions_fts_triggers(conn: sqlite3.Connection) -> None:
     _insert_extraction(
         conn,
-        kind="decision", content="use sqlite-vec for embeddings",
-        session_id="s1", cwd="/proj/a", ts=1000, source_uuid="u1",
+        kind="decision",
+        content="use sqlite-vec for embeddings",
+        session_id="s1",
+        cwd="/proj/a",
+        ts=1000,
+        source_uuid="u1",
     )
     # NB: bare `sqlite-vec` parses as the column-prefix operator in FTS5,
     # so quote the term to force literal matching (this is exactly what
     # `_fts_match_quote` does in the real query path).
     rows = conn.execute(
-        'SELECT rowid FROM extractions_fts WHERE extractions_fts MATCH \'"sqlite-vec"\''
+        "SELECT rowid FROM extractions_fts WHERE extractions_fts MATCH '\"sqlite-vec\"'"
     ).fetchall()
     assert len(rows) == 1
 
@@ -233,16 +266,34 @@ def test_extractions_fts_triggers(conn: sqlite3.Connection) -> None:
 
 def test_search_extractions_filters(conn: sqlite3.Connection) -> None:
     _insert_extraction(
-        conn, kind="decision", content="adopt FTS5", session_id="s1",
-        cwd="/proj/a", ts=1000, source_uuid="u1", score=0.9,
+        conn,
+        kind="decision",
+        content="adopt FTS5",
+        session_id="s1",
+        cwd="/proj/a",
+        ts=1000,
+        source_uuid="u1",
+        score=0.9,
     )
     _insert_extraction(
-        conn, kind="failure", content="json grep was too slow",
-        session_id="s1", cwd="/proj/a", ts=1100, source_uuid="u2", score=0.6,
+        conn,
+        kind="failure",
+        content="json grep was too slow",
+        session_id="s1",
+        cwd="/proj/a",
+        ts=1100,
+        source_uuid="u2",
+        score=0.6,
     )
     _insert_extraction(
-        conn, kind="decision", content="separate project", session_id="s2",
-        cwd="/proj/b", ts=1200, source_uuid="u3", score=0.5,
+        conn,
+        kind="decision",
+        content="separate project",
+        session_id="s2",
+        cwd="/proj/b",
+        ts=1200,
+        source_uuid="u3",
+        score=0.5,
     )
 
     hits = search_extractions(conn, cwd="/proj/a")
@@ -262,12 +313,22 @@ def test_search_extractions_filters(conn: sqlite3.Connection) -> None:
 
 def test_search_extractions_since_filter(conn: sqlite3.Connection) -> None:
     _insert_extraction(
-        conn, kind="decision", content="old fact", session_id="s1",
-        cwd="/proj/a", ts=1000, source_uuid="u1",
+        conn,
+        kind="decision",
+        content="old fact",
+        session_id="s1",
+        cwd="/proj/a",
+        ts=1000,
+        source_uuid="u1",
     )
     _insert_extraction(
-        conn, kind="decision", content="new fact", session_id="s1",
-        cwd="/proj/a", ts=2000, source_uuid="u2",
+        conn,
+        kind="decision",
+        content="new fact",
+        session_id="s1",
+        cwd="/proj/a",
+        ts=2000,
+        source_uuid="u2",
     )
     cutoff = datetime.fromtimestamp(1500, tz=timezone.utc)
     hits = search_extractions(conn, cwd="/proj/a", since=cutoff)
@@ -276,16 +337,34 @@ def test_search_extractions_since_filter(conn: sqlite3.Connection) -> None:
 
 def test_search_messages_filters_role_and_cwd(conn: sqlite3.Connection) -> None:
     _insert_message(
-        conn, session_id="s1", cwd="/proj/a", role="user", kind="user",
-        ts=1000, text="how do I configure WAL?", uuid="u1",
+        conn,
+        session_id="s1",
+        cwd="/proj/a",
+        role="user",
+        kind="user",
+        ts=1000,
+        text="how do I configure WAL?",
+        uuid="u1",
     )
     _insert_message(
-        conn, session_id="s1", cwd="/proj/a", role="assistant",
-        kind="assistant", ts=1001, text="set journal_mode to WAL", uuid="u2",
+        conn,
+        session_id="s1",
+        cwd="/proj/a",
+        role="assistant",
+        kind="assistant",
+        ts=1001,
+        text="set journal_mode to WAL",
+        uuid="u2",
     )
     _insert_message(
-        conn, session_id="s2", cwd="/proj/b", role="user", kind="user",
-        ts=1002, text="WAL is unrelated noise here", uuid="u3",
+        conn,
+        session_id="s2",
+        cwd="/proj/b",
+        role="user",
+        kind="user",
+        ts=1002,
+        text="WAL is unrelated noise here",
+        uuid="u3",
     )
 
     res = search_messages(conn, "WAL", cwd="/proj/a")
@@ -302,15 +381,19 @@ def test_search_messages_query_sanitization(conn: sqlite3.Connection) -> None:
     # each token, so `OR` (an operator) and `"anything"` (an unmatchable
     # literal) both get defanged into literal terms.
     _insert_message(
-        conn, session_id="s1", cwd="/proj/a", role="assistant",
-        kind="assistant", ts=1000,
+        conn,
+        session_id="s1",
+        cwd="/proj/a",
+        role="assistant",
+        kind="assistant",
+        ts=1000,
         text="we should adopt sqlite for the index OR something",
         uuid="u1",
     )
     # If the OR weren't quoted, FTS5 would interpret it as an operator and
     # match very differently. With quoting, "OR" is a literal token that
     # also appears in the row, so we still get a hit.
-    res = search_messages(conn, 'sqlite OR index')
+    res = search_messages(conn, "sqlite OR index")
     assert len(res) >= 1
     # And a query full of would-be operators is sanitized, not raised.
     res = search_messages(conn, 'NEAR( foo bar ) -baz "qux"')
@@ -320,16 +403,33 @@ def test_search_messages_query_sanitization(conn: sqlite3.Connection) -> None:
 
 def test_top_topics_for_cwd(conn: sqlite3.Connection) -> None:
     _insert_extraction(
-        conn, kind="decision", content="use FTS5", session_id="s1",
-        cwd="/proj/a", ts=1000, source_uuid="u1", score=0.9,
+        conn,
+        kind="decision",
+        content="use FTS5",
+        session_id="s1",
+        cwd="/proj/a",
+        ts=1000,
+        source_uuid="u1",
+        score=0.9,
     )
     _insert_extraction(
-        conn, kind="fact", content="python 3.12 required", session_id="s1",
-        cwd="/proj/a", ts=1100, source_uuid="u2", score=0.8,
+        conn,
+        kind="fact",
+        content="python 3.12 required",
+        session_id="s1",
+        cwd="/proj/a",
+        ts=1100,
+        source_uuid="u2",
+        score=0.8,
     )
     _insert_extraction(
-        conn, kind="fact", content="unrelated other project",
-        session_id="s9", cwd="/proj/b", ts=1200, source_uuid="u9",
+        conn,
+        kind="fact",
+        content="unrelated other project",
+        session_id="s9",
+        cwd="/proj/b",
+        ts=1200,
+        source_uuid="u9",
     )
     topics = top_topics_for_cwd(conn, cwd="/proj/a", limit=5)
     assert "use FTS5" in topics
@@ -339,16 +439,34 @@ def test_top_topics_for_cwd(conn: sqlite3.Connection) -> None:
 
 def test_session_count_and_list_for_cwd(conn: sqlite3.Connection) -> None:
     _insert_message(
-        conn, session_id="s1", cwd="/proj/a", role="user", kind="user",
-        ts=1000, text="hello", uuid="u1",
+        conn,
+        session_id="s1",
+        cwd="/proj/a",
+        role="user",
+        kind="user",
+        ts=1000,
+        text="hello",
+        uuid="u1",
     )
     _insert_message(
-        conn, session_id="s1", cwd="/proj/a", role="user", kind="ai-title",
-        ts=1001, text="WAL config session", uuid="u1b",
+        conn,
+        session_id="s1",
+        cwd="/proj/a",
+        role="user",
+        kind="ai-title",
+        ts=1001,
+        text="WAL config session",
+        uuid="u1b",
     )
     _insert_message(
-        conn, session_id="s2", cwd="/proj/a", role="user", kind="user",
-        ts=2000, text="next session", uuid="u2",
+        conn,
+        session_id="s2",
+        cwd="/proj/a",
+        role="user",
+        kind="user",
+        ts=2000,
+        text="next session",
+        uuid="u2",
     )
     assert session_count_for_cwd(conn, "/proj/a") == 2
 
@@ -401,17 +519,36 @@ def test_ingest_file_with_fake_walker(
     def fake_iter(path, start_offset=0):
         # Two records, both with distinct uuids and offsets.
         # Walker contract: yield (next_byte_offset, record) tuples.
-        yield 50, SimpleNamespace(
-            type="user", uuid="u1", parent_uuid=None,
-            session_id="s1", ts=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            cwd="/proj/a", git_branch="main", text="first", byte_offset=0,
-            tool_results=[], content="first",
+        yield (
+            50,
+            SimpleNamespace(
+                type="user",
+                uuid="u1",
+                parent_uuid=None,
+                session_id="s1",
+                ts=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                cwd="/proj/a",
+                git_branch="main",
+                text="first",
+                byte_offset=0,
+                tool_results=[],
+                content="first",
+            ),
         )
-        yield 110, SimpleNamespace(
-            type="assistant", uuid="u2", parent_uuid="u1",
-            session_id="s1", ts=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
-            cwd="/proj/a", git_branch="main", text=None, byte_offset=50,
-            content=[SimpleNamespace(type="text", text="second")],
+        yield (
+            110,
+            SimpleNamespace(
+                type="assistant",
+                uuid="u2",
+                parent_uuid="u1",
+                session_id="s1",
+                ts=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
+                cwd="/proj/a",
+                git_branch="main",
+                text=None,
+                byte_offset=50,
+                content=[SimpleNamespace(type="text", text="second")],
+            ),
         )
 
     monkeypatch.setattr(index_ingest, "_iter_records", fake_iter)
@@ -446,11 +583,21 @@ def test_ingest_file_handles_inode_rotation(
 
     def fake_iter(path, start_offset=0):
         yielded["v"] += 1
-        yield 50, SimpleNamespace(
-            type="user", uuid=f"u-{yielded['v']}", parent_uuid=None,
-            session_id="s1", ts=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            cwd="/proj/a", git_branch="main", text=f"body {yielded['v']}",
-            byte_offset=0, tool_results=[], content=f"body {yielded['v']}",
+        yield (
+            50,
+            SimpleNamespace(
+                type="user",
+                uuid=f"u-{yielded['v']}",
+                parent_uuid=None,
+                session_id="s1",
+                ts=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                cwd="/proj/a",
+                git_branch="main",
+                text=f"body {yielded['v']}",
+                byte_offset=0,
+                tool_results=[],
+                content=f"body {yielded['v']}",
+            ),
         )
 
     monkeypatch.setattr(index_ingest, "_iter_records", fake_iter)
@@ -485,7 +632,7 @@ def test_ingest_file_handles_inode_rotation(
     not Path("~/.claude/projects").expanduser().exists()
     or os.environ.get("TOTAL_RECALL_RUN_REAL_CORPUS_SMOKE", "0") != "1",
     reason="real-corpus smoke test takes ~3min on heavy corpora; "
-           "set TOTAL_RECALL_RUN_REAL_CORPUS_SMOKE=1 to enable",
+    "set TOTAL_RECALL_RUN_REAL_CORPUS_SMOKE=1 to enable",
 )
 def test_smoke_real_corpus(tmp_path: Path) -> None:
     """End-to-end smoke test against the real ~/.claude/projects/.
@@ -505,9 +652,8 @@ def test_smoke_real_corpus(tmp_path: Path) -> None:
     # Smoke test stays Claude-Code-only to keep wall time bounded.
     # jobs>1 trims a 776MB corpus from ~3min serial to ~10s parallel.
     import os
-    reports = index_ingest.ingest_all(
-        c, sources=["claude_code"], jobs=min(os.cpu_count() or 4, 8)
-    )
+
+    reports = index_ingest.ingest_all(c, sources=["claude_code"], jobs=min(os.cpu_count() or 4, 8))
     elapsed = time.monotonic() - t0
     # If we processed anything at all, sessions should be > 0 across cwds.
     if any(r.new_messages for r in reports):
@@ -527,12 +673,24 @@ def test_query_hit_has_extraction_id(conn: sqlite3.Connection) -> None:
     fusion layer in vec/rrf.py can dedupe FTS-vs-vec hits on the same
     extraction. Covers both the FTS-joined and the no-query paths."""
     eid1 = _insert_extraction(
-        conn, kind="decision", content="prefer FTS5 over LIKE",
-        session_id="s1", cwd="/proj/a", ts=1000, source_uuid="u1", score=0.9,
+        conn,
+        kind="decision",
+        content="prefer FTS5 over LIKE",
+        session_id="s1",
+        cwd="/proj/a",
+        ts=1000,
+        source_uuid="u1",
+        score=0.9,
     )
     eid2 = _insert_extraction(
-        conn, kind="fact", content="WAL mode is required",
-        session_id="s1", cwd="/proj/a", ts=2000, source_uuid="u2", score=0.5,
+        conn,
+        kind="fact",
+        content="WAL mode is required",
+        session_id="s1",
+        cwd="/proj/a",
+        ts=2000,
+        source_uuid="u2",
+        score=0.5,
     )
     assert eid1 > 0 and eid2 > 0
 
@@ -560,33 +718,72 @@ def test_get_session_meta_basic(conn: sqlite3.Connection) -> None:
     sid = "s-meta-1"
     cwd = "/proj/meta"
     _insert_message(
-        conn, session_id=sid, cwd=cwd, role="user", kind="user",
-        ts=1000, text="kick off", uuid="m1",
+        conn,
+        session_id=sid,
+        cwd=cwd,
+        role="user",
+        kind="user",
+        ts=1000,
+        text="kick off",
+        uuid="m1",
     )
     _insert_message(
-        conn, session_id=sid, cwd=cwd, role="assistant", kind="assistant",
-        ts=1010, text="ack", uuid="m2",
+        conn,
+        session_id=sid,
+        cwd=cwd,
+        role="assistant",
+        kind="assistant",
+        ts=1010,
+        text="ack",
+        uuid="m2",
     )
     _insert_message(
-        conn, session_id=sid, cwd=cwd, role="user", kind="ai-title",
-        ts=1020, text="WAL + FTS5 design session", uuid="m3",
+        conn,
+        session_id=sid,
+        cwd=cwd,
+        role="user",
+        kind="ai-title",
+        ts=1020,
+        text="WAL + FTS5 design session",
+        uuid="m3",
     )
     _insert_message(
-        conn, session_id=sid, cwd=cwd, role="user", kind="last-prompt",
-        ts=1030, text="now wire it up", uuid="m4",
+        conn,
+        session_id=sid,
+        cwd=cwd,
+        role="user",
+        kind="last-prompt",
+        ts=1030,
+        text="now wire it up",
+        uuid="m4",
     )
     # Mix of extraction kinds so top_extraction_kinds is exercised.
     _insert_extraction(
-        conn, kind="decision", content="use FTS5",
-        session_id=sid, cwd=cwd, ts=1005, source_uuid="m1",
+        conn,
+        kind="decision",
+        content="use FTS5",
+        session_id=sid,
+        cwd=cwd,
+        ts=1005,
+        source_uuid="m1",
     )
     _insert_extraction(
-        conn, kind="decision", content="WAL on",
-        session_id=sid, cwd=cwd, ts=1006, source_uuid="m2",
+        conn,
+        kind="decision",
+        content="WAL on",
+        session_id=sid,
+        cwd=cwd,
+        ts=1006,
+        source_uuid="m2",
     )
     _insert_extraction(
-        conn, kind="fact", content="python 3.12",
-        session_id=sid, cwd=cwd, ts=1007, source_uuid="m3",
+        conn,
+        kind="fact",
+        content="python 3.12",
+        session_id=sid,
+        cwd=cwd,
+        ts=1007,
+        source_uuid="m3",
     )
 
     meta = get_session_meta(conn, sid)
@@ -623,9 +820,7 @@ def test_schema_v2_creates_turns_compactions_ingest_runs(tmp_path: Path) -> None
     try:
         for tbl in ("turns", "compactions", "ingest_runs"):
             assert _table_exists(c, tbl), f"missing table: {tbl}"
-        ver = c.execute(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-        ).fetchone()
+        ver = c.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()
         assert ver is not None and ver["value"] == "5"
     finally:
         c.close()
@@ -639,12 +834,8 @@ def test_schema_migration_v1_to_v2(tmp_path: Path) -> None:
     # of the v2 tables. We deliberately bypass `connect()` so apply_schema
     # isn't invoked during setup.
     raw = sqlite3.connect(db_path)
-    raw.execute(
-        "CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-    )
-    raw.execute(
-        "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1')"
-    )
+    raw.execute("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    raw.execute("INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1')")
     raw.commit()
     # Sanity: v2 tables do not exist yet.
     for tbl in ("turns", "compactions", "ingest_runs"):
@@ -656,9 +847,7 @@ def test_schema_migration_v1_to_v2(tmp_path: Path) -> None:
     try:
         for tbl in ("turns", "compactions", "ingest_runs"):
             assert _table_exists(c, tbl), f"migration failed to create: {tbl}"
-        ver = c.execute(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-        ).fetchone()
+        ver = c.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()
         assert ver is not None and ver["value"] == "5"
     finally:
         c.close()
@@ -675,8 +864,18 @@ def test_turns_unique_message_uuid(conn: sqlite3.Connection) -> None:
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            "s1", "/proj/a", 1000, "claude-opus-4-7",
-            100, 0, 0, 200, 1500, "end_turn", "req-1", "msg-uuid-1",
+            "s1",
+            "/proj/a",
+            1000,
+            "claude-opus-4-7",
+            100,
+            0,
+            0,
+            200,
+            1500,
+            "end_turn",
+            "req-1",
+            "msg-uuid-1",
             "/tmp/x.jsonl",
         ),
     )
@@ -690,8 +889,18 @@ def test_turns_unique_message_uuid(conn: sqlite3.Connection) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "s1", "/proj/a", 1001, "claude-opus-4-7",
-                101, 0, 0, 201, 1501, "end_turn", "req-2", "msg-uuid-1",
+                "s1",
+                "/proj/a",
+                1001,
+                "claude-opus-4-7",
+                101,
+                0,
+                0,
+                201,
+                1501,
+                "end_turn",
+                "req-2",
+                "msg-uuid-1",
                 "/tmp/x.jsonl",
             ),
         )
@@ -735,9 +944,7 @@ def _fake_assistant_with_usage(uuid: str, session_id: str = "s1") -> object:
     )
 
 
-def _fake_compact_boundary(
-    uuid: str, session_id: str = "s1", trigger: str = "auto"
-) -> object:
+def _fake_compact_boundary(uuid: str, session_id: str = "s1", trigger: str = "auto") -> object:
     from types import SimpleNamespace
 
     payload = {
@@ -786,9 +993,7 @@ def test_ingest_extracts_turns_from_synthetic_jsonl(
     report = ingest_file(conn, fake)
     assert report.new_turns == 1
 
-    row = conn.execute(
-        "SELECT * FROM turns WHERE message_uuid = ?", ("u-asst-1",)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM turns WHERE message_uuid = ?", ("u-asst-1",)).fetchone()
     assert row is not None
     assert row["session_id"] == "s1"
     assert row["cwd"] == "/proj/a"
@@ -812,8 +1017,7 @@ def test_ingest_extracts_compactions_from_system_record(
     in `compactions` with `compactMetadata` fields mapped correctly."""
     fake = tmp_path / "sess.jsonl"
     fake.write_text(
-        json.dumps({"type": "system", "subtype": "compact_boundary", "uuid": "u-c1"})
-        + "\n",
+        json.dumps({"type": "system", "subtype": "compact_boundary", "uuid": "u-c1"}) + "\n",
         encoding="utf-8",
     )
 
@@ -826,9 +1030,7 @@ def test_ingest_extracts_compactions_from_system_record(
     report = ingest_file(conn, fake)
     assert report.new_compactions == 1
 
-    row = conn.execute(
-        "SELECT * FROM compactions WHERE message_uuid = ?", ("u-c1",)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM compactions WHERE message_uuid = ?", ("u-c1",)).fetchone()
     assert row is not None
     assert row["session_id"] == "s1"
     assert row["cwd"] == "/proj/a"
@@ -854,22 +1056,37 @@ def test_ingest_writes_ingest_runs_row(
     slug.mkdir(parents=True)
     sess_file = slug / "sess.jsonl"
     sess_file.write_text(
-        json.dumps({
-            "type": "user", "uuid": "uA", "sessionId": "s1",
-            "cwd": "/proj/a", "gitBranch": "main",
-            "timestamp": "2026-01-01T00:00:00Z",
-            "message": {"role": "user", "content": "hi"},
-        }) + "\n" + json.dumps({
-            "type": "assistant", "uuid": "uB", "parentUuid": "uA",
-            "sessionId": "s1", "cwd": "/proj/a", "gitBranch": "main",
-            "timestamp": "2026-01-01T00:00:01Z",
-            "message": {
-                "role": "assistant", "model": "claude-sonnet-4-6",
-                "content": [{"type": "text", "text": "hi back"}],
-                "usage": {"input_tokens": 10, "output_tokens": 5},
-                "stop_reason": "end_turn",
-            },
-        }) + "\n",
+        json.dumps(
+            {
+                "type": "user",
+                "uuid": "uA",
+                "sessionId": "s1",
+                "cwd": "/proj/a",
+                "gitBranch": "main",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "message": {"role": "user", "content": "hi"},
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "type": "assistant",
+                "uuid": "uB",
+                "parentUuid": "uA",
+                "sessionId": "s1",
+                "cwd": "/proj/a",
+                "gitBranch": "main",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-sonnet-4-6",
+                    "content": [{"type": "text", "text": "hi back"}],
+                    "usage": {"input_tokens": 10, "output_tokens": 5},
+                    "stop_reason": "end_turn",
+                },
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -880,7 +1097,9 @@ def test_ingest_writes_ingest_runs_row(
         # other installed CLIs' corpora; `projects_root=proj_root` is honored
         # by ClaudeCodeSource per the override in `ingest_all`.
         reports = index_ingest.ingest_all(
-            conn=c, projects_root=proj_root, trigger="stop_hook",
+            conn=c,
+            projects_root=proj_root,
+            trigger="stop_hook",
             sources=["claude_code"],
         )
         assert len(reports) == 1
@@ -889,8 +1108,7 @@ def test_ingest_writes_ingest_runs_row(
         row = rows[0]
         assert row["trigger"] == "stop_hook"
         assert row["files_seen"] == 1
-        assert row["new_messages"] >= 1, \
-            f"expected at least 1 message, got {row['new_messages']}"
+        assert row["new_messages"] >= 1, f"expected at least 1 message, got {row['new_messages']}"
     finally:
         c.close()
 
@@ -980,9 +1198,7 @@ def test_ingest_links_turn_duration_to_turns(
     assert report.new_turns == 1
     assert report.turn_durations_linked == 1
 
-    row = conn.execute(
-        "SELECT duration_ms FROM turns WHERE message_uuid = ?", ("a1",)
-    ).fetchone()
+    row = conn.execute("SELECT duration_ms FROM turns WHERE message_uuid = ?", ("a1",)).fetchone()
     assert row is not None
     assert row["duration_ms"] == 4500
 
@@ -1035,49 +1251,59 @@ def _write_synthetic_jsonl(path: Path, *, session_id: str, n_user: int = 3) -> N
     for i in range(n_user):
         u_uuid = str(_uuid.uuid4())
         lines.append(
-            json.dumps({
-                "type": "user",
-                "uuid": u_uuid,
-                "parentUuid": parent,
-                "sessionId": session_id,
-                "timestamp": datetime.fromtimestamp(
-                    base_ts + i * 2, tz=timezone.utc,
-                ).isoformat().replace("+00:00", "Z"),
-                "cwd": "/proj/parallel",
-                "gitBranch": "main",
-                "version": "2.1.150",
-                "message": {"role": "user", "content": f"hello {i} from {session_id}"},
-            })
+            json.dumps(
+                {
+                    "type": "user",
+                    "uuid": u_uuid,
+                    "parentUuid": parent,
+                    "sessionId": session_id,
+                    "timestamp": datetime.fromtimestamp(
+                        base_ts + i * 2,
+                        tz=timezone.utc,
+                    )
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                    "cwd": "/proj/parallel",
+                    "gitBranch": "main",
+                    "version": "2.1.150",
+                    "message": {"role": "user", "content": f"hello {i} from {session_id}"},
+                }
+            )
         )
         a_uuid = str(_uuid.uuid4())
         lines.append(
-            json.dumps({
-                "type": "assistant",
-                "uuid": a_uuid,
-                "parentUuid": u_uuid,
-                "sessionId": session_id,
-                "timestamp": datetime.fromtimestamp(
-                    base_ts + i * 2 + 1, tz=timezone.utc,
-                ).isoformat().replace("+00:00", "Z"),
-                "cwd": "/proj/parallel",
-                "gitBranch": "main",
-                "version": "2.1.150",
-                "message": {
-                    "role": "assistant",
-                    "model": "claude-opus-4-7",
-                    "content": [
-                        {"type": "text", "text": f"ack {i} for {session_id}"},
-                    ],
-                    "usage": {
-                        "input_tokens": 10,
-                        "cache_creation_input_tokens": 0,
-                        "cache_read_input_tokens": 0,
-                        "output_tokens": 20,
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "uuid": a_uuid,
+                    "parentUuid": u_uuid,
+                    "sessionId": session_id,
+                    "timestamp": datetime.fromtimestamp(
+                        base_ts + i * 2 + 1,
+                        tz=timezone.utc,
+                    )
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                    "cwd": "/proj/parallel",
+                    "gitBranch": "main",
+                    "version": "2.1.150",
+                    "message": {
+                        "role": "assistant",
+                        "model": "claude-opus-4-7",
+                        "content": [
+                            {"type": "text", "text": f"ack {i} for {session_id}"},
+                        ],
+                        "usage": {
+                            "input_tokens": 10,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
+                            "output_tokens": 20,
+                        },
+                        "stop_reason": "end_turn",
                     },
-                    "stop_reason": "end_turn",
-                },
-                "requestId": f"req-{a_uuid[:8]}",
-            })
+                    "requestId": f"req-{a_uuid[:8]}",
+                }
+            )
         )
         parent = a_uuid
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1119,6 +1345,7 @@ def test_parse_file_pure_is_serializable(tmp_path: Path) -> None:
     if not index_ingest._HAS_WALKER:
         pytest.skip("walker module not importable on this branch")
     import importlib
+
     # Use the multiprocessing-internal serializer instead of the top-level
     # module to keep the test free of hard-coded references to bytecode
     # serializer implementations (and to keep the static-analysis warnings
@@ -1135,6 +1362,7 @@ def test_parse_file_pure_is_serializable(tmp_path: Path) -> None:
     # ForkingPickler.dumps returns a memoryview-backed buffer in 3.8+; the
     # general loader is on the parent module.
     import pickle as _stdpkl  # noqa: S403 - intra-process trusted round trip
+
     restored = _stdpkl.loads(bytes(blob))
     assert restored.source_file == parsed.source_file
     assert restored.message_rows == parsed.message_rows
@@ -1158,17 +1386,16 @@ def test_ingest_all_jobs_parallel_matches_sequential(tmp_path: Path) -> None:
         c = connect(db_path)
         try:
             reports = index_ingest.ingest_all(
-                conn=c, projects_root=projects_root, jobs=jobs,
+                conn=c,
+                projects_root=projects_root,
+                jobs=jobs,
                 sources=["claude_code"],
             )
             messages = c.execute("SELECT COUNT(*) AS n FROM messages").fetchone()["n"]
             turns = c.execute("SELECT COUNT(*) AS n FROM turns").fetchone()["n"]
-            extractions = c.execute(
-                "SELECT COUNT(*) AS n FROM extractions"
-            ).fetchone()["n"]
+            extractions = c.execute("SELECT COUNT(*) AS n FROM extractions").fetchone()["n"]
             fts_hits = c.execute(
-                "SELECT COUNT(*) AS n FROM messages_fts "
-                "WHERE messages_fts MATCH 'hello'"
+                "SELECT COUNT(*) AS n FROM messages_fts WHERE messages_fts MATCH 'hello'"
             ).fetchone()["n"]
             return {
                 "reports": len(reports),
@@ -1211,15 +1438,15 @@ def test_ingest_all_jobs_parallel_handles_worker_exception(tmp_path: Path) -> No
     _write_synthetic_jsonl(slug / "ok-1.jsonl", session_id="ok-1", n_user=2)
     _write_synthetic_jsonl(slug / "ok-2.jsonl", session_id="ok-2", n_user=2)
     # Garbage: every line is invalid JSON. Walker will skip all lines.
-    (slug / "broken.jsonl").write_text(
-        "not json\n{also: not, json}\n<<<>>>\n", encoding="utf-8"
-    )
+    (slug / "broken.jsonl").write_text("not json\n{also: not, json}\n<<<>>>\n", encoding="utf-8")
 
     db = tmp_path / "mixed.db"
     c = connect(db)
     try:
         reports = index_ingest.ingest_all(
-            conn=c, projects_root=projects_root, jobs=4,
+            conn=c,
+            projects_root=projects_root,
+            jobs=4,
             sources=["claude_code"],  # post-v0.5: scope to synthetic fixture
         )
         # 3 reports, one per file — corrupt file simply contributes 0 messages.
@@ -1233,9 +1460,7 @@ def test_ingest_all_jobs_parallel_handles_worker_exception(tmp_path: Path) -> No
         assert n_turns == 4
 
         # All three files should have an ingest_state row so we don't re-scan.
-        n_state = c.execute(
-            "SELECT COUNT(*) AS n FROM ingest_state"
-        ).fetchone()["n"]
+        n_state = c.execute("SELECT COUNT(*) AS n FROM ingest_state").fetchone()["n"]
         assert n_state == 3
     finally:
         c.close()
@@ -1332,14 +1557,23 @@ def test_rerank_recent_correction_beats_keyworddense_stale_fact(
     correction first — raw-BM25 order would not. Fails if re-rank is not wired.
     """
     _insert_extraction(
-        conn, kind="domain_fact",
+        conn,
+        kind="domain_fact",
         content="psycopg2 psycopg2 psycopg2 psycopg2 old postgres driver",
-        session_id="s1", cwd="/proj/rr", ts=_recent_ts(220), source_uuid="old",
+        session_id="s1",
+        cwd="/proj/rr",
+        ts=_recent_ts(220),
+        source_uuid="old",
         score=0.5,
     )
     _insert_extraction(
-        conn, kind="correction", content="psycopg2 is banned, use asyncpg",
-        session_id="s2", cwd="/proj/rr", ts=_recent_ts(2), source_uuid="new",
+        conn,
+        kind="correction",
+        content="psycopg2 is banned, use asyncpg",
+        session_id="s2",
+        cwd="/proj/rr",
+        ts=_recent_ts(2),
+        source_uuid="new",
         score=0.5,
     )
     hits = search_extractions(conn, query="psycopg2", limit=1, cwd="/proj/rr")
@@ -1353,14 +1587,23 @@ def test_rerank_over_fetch_surfaces_correction_past_many_facts(
     """Over-fetch: a recent correction survives past several keyword-denser facts."""
     for i in range(6):
         _insert_extraction(
-            conn, kind="domain_fact",
+            conn,
+            kind="domain_fact",
             content=f"redis redis redis cache note {i} redis tuning",
-            session_id="s1", cwd="/proj/of", ts=_recent_ts(150 + i),
-            source_uuid=f"f{i}", score=0.5,
+            session_id="s1",
+            cwd="/proj/of",
+            ts=_recent_ts(150 + i),
+            source_uuid=f"f{i}",
+            score=0.5,
         )
     _insert_extraction(
-        conn, kind="correction", content="redis must use TLS now",
-        session_id="s2", cwd="/proj/of", ts=_recent_ts(2), source_uuid="corr",
+        conn,
+        kind="correction",
+        content="redis must use TLS now",
+        session_id="s2",
+        cwd="/proj/of",
+        ts=_recent_ts(2),
+        source_uuid="corr",
         score=0.5,
     )
     hits = search_extractions(conn, query="redis", limit=1, cwd="/proj/of")
@@ -1377,13 +1620,23 @@ def test_dedup_collapses_paraphrased_correction(conn: sqlite3.Connection) -> Non
     """The same correction stored across many sessions collapses to one hit."""
     for i in range(5):
         _insert_extraction(
-            conn, kind="correction", content="use uv, not pip",
-            session_id=f"s{i}", cwd="/proj/d", ts=_recent_ts(10 + i),
-            source_uuid=f"dup{i}", score=0.5,
+            conn,
+            kind="correction",
+            content="use uv, not pip",
+            session_id=f"s{i}",
+            cwd="/proj/d",
+            ts=_recent_ts(10 + i),
+            source_uuid=f"dup{i}",
+            score=0.5,
         )
     _insert_extraction(
-        conn, kind="correction", content="never use sudo with pip",
-        session_id="s9", cwd="/proj/d", ts=_recent_ts(3), source_uuid="distinct",
+        conn,
+        kind="correction",
+        content="never use sudo with pip",
+        session_id="s9",
+        cwd="/proj/d",
+        ts=_recent_ts(3),
+        source_uuid="distinct",
         score=0.5,
     )
     hits = search_extractions(conn, query="pip", limit=5, cwd="/proj/d")
@@ -1397,12 +1650,24 @@ def test_dedup_keeps_distinct_kinds_with_same_text(conn: sqlite3.Connection) -> 
     """Same text under different kinds is NOT merged (distinct memories)."""
     ts = _recent_ts(5)
     _insert_extraction(
-        conn, kind="ban", content="docker compose v1",
-        session_id="s1", cwd="/proj/k", ts=ts, source_uuid="b", score=0.5,
+        conn,
+        kind="ban",
+        content="docker compose v1",
+        session_id="s1",
+        cwd="/proj/k",
+        ts=ts,
+        source_uuid="b",
+        score=0.5,
     )
     _insert_extraction(
-        conn, kind="decision", content="docker compose v1",
-        session_id="s2", cwd="/proj/k", ts=ts, source_uuid="d", score=0.5,
+        conn,
+        kind="decision",
+        content="docker compose v1",
+        session_id="s2",
+        cwd="/proj/k",
+        ts=ts,
+        source_uuid="d",
+        score=0.5,
     )
     hits = search_extractions(conn, query="docker", limit=5, cwd="/proj/k")
     kinds = {h.kind for h in hits}
@@ -1412,12 +1677,24 @@ def test_dedup_keeps_distinct_kinds_with_same_text(conn: sqlite3.Connection) -> 
 def test_dedup_normalizes_whitespace_and_case(conn: sqlite3.Connection) -> None:
     """Whitespace/case variants of the same correction collapse."""
     _insert_extraction(
-        conn, kind="correction", content="Use   Edit  not Write",
-        session_id="s1", cwd="/proj/w", ts=_recent_ts(4), source_uuid="a", score=0.5,
+        conn,
+        kind="correction",
+        content="Use   Edit  not Write",
+        session_id="s1",
+        cwd="/proj/w",
+        ts=_recent_ts(4),
+        source_uuid="a",
+        score=0.5,
     )
     _insert_extraction(
-        conn, kind="correction", content="use edit not write",
-        session_id="s2", cwd="/proj/w", ts=_recent_ts(3), source_uuid="b", score=0.5,
+        conn,
+        kind="correction",
+        content="use edit not write",
+        session_id="s2",
+        cwd="/proj/w",
+        ts=_recent_ts(3),
+        source_uuid="b",
+        score=0.5,
     )
     hits = search_extractions(conn, query="edit", limit=5, cwd="/proj/w")
     assert len(hits) == 1, "whitespace/case variants should collapse to one"
@@ -1439,13 +1716,23 @@ def test_normalize_content_unit() -> None:
 def test_composite_score_field_populated_on_text_query(conn: sqlite3.Connection) -> None:
     """Text-query hits carry a populated composite_score; it drives the order."""
     _insert_extraction(
-        conn, kind="domain_fact", content="alpha alpha alpha old fact",
-        session_id="s1", cwd="/proj/cs", ts=_recent_ts(220), source_uuid="old",
+        conn,
+        kind="domain_fact",
+        content="alpha alpha alpha old fact",
+        session_id="s1",
+        cwd="/proj/cs",
+        ts=_recent_ts(220),
+        source_uuid="old",
         score=0.5,
     )
     _insert_extraction(
-        conn, kind="correction", content="alpha is now banned",
-        session_id="s2", cwd="/proj/cs", ts=_recent_ts(2), source_uuid="new",
+        conn,
+        kind="correction",
+        content="alpha is now banned",
+        session_id="s2",
+        cwd="/proj/cs",
+        ts=_recent_ts(2),
+        source_uuid="new",
         score=0.5,
     )
     hits = search_extractions(conn, query="alpha", limit=2, cwd="/proj/cs")

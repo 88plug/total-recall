@@ -63,9 +63,7 @@ from lib.sources.base import SOURCES, SessionFile, SessionSource
 
 #: Session boundary. Aider writes this header every time the CLI starts a
 #: new chat against this repo. Format is fixed.
-SESSION_HEADER = re.compile(
-    r"^# aider chat started at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*$"
-)
+SESSION_HEADER = re.compile(r"^# aider chat started at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*$")
 
 #: User line. ``#### `` (4 hashes + space) is the canonical prefix; a bare
 #: ``####`` denotes a blank user line (common between paragraphs).
@@ -202,13 +200,10 @@ class AiderSource(SessionSource):
                 continue
             seen_real.add(resolved)
 
-            for dirpath, dirnames, filenames in os.walk(
-                root, topdown=True, followlinks=False
-            ):
+            for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
                 # Prune in-place so os.walk doesn't descend.
                 dirnames[:] = [
-                    d for d in dirnames
-                    if d not in PRUNE_DIRS and not d.startswith(".aider")
+                    d for d in dirnames if d not in PRUNE_DIRS and not d.startswith(".aider")
                 ]
                 if HISTORY_FILENAME in filenames:
                     found.append(Path(dirpath) / HISTORY_FILENAME)

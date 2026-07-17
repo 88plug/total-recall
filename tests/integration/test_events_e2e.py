@@ -60,15 +60,11 @@ def test_events_round_trip(tmp_path: pathlib.Path):
 
     read = events.read_events(path=path)
     assert isinstance(read, list), f"read_events did not return a list: {type(read)}"
-    assert len(read) == len(payloads), (
-        f"emitted {len(payloads)} events but read {len(read)} back"
-    )
+    assert len(read) == len(payloads), f"emitted {len(payloads)} events but read {len(read)} back"
 
     # Chronological order — ts strings should be non-decreasing.
     ts_list = [r.get("ts", "") for r in read]
-    assert ts_list == sorted(ts_list), (
-        f"events not in chronological order: {ts_list}"
-    )
+    assert ts_list == sorted(ts_list), f"events not in chronological order: {ts_list}"
 
     # Event names round-trip (multiset equality, since within the same
     # microsecond the ordering of equal-ts events is implementation-defined).
@@ -171,16 +167,12 @@ def test_summarize_events_p95(tmp_path: pathlib.Path):
 
     summary = events.summarize_events(path=path)
     assert isinstance(summary, dict), f"summarize_events not a dict: {type(summary)}"
-    assert summary.get("total") == n, (
-        f"summary.total mismatch: got {summary.get('total')} want {n}"
-    )
+    assert summary.get("total") == n, f"summary.total mismatch: got {summary.get('total')} want {n}"
 
     by_event = summary.get("by_event") or {}
     bucket = by_event.get("perf.sample")
     assert bucket is not None, f"no 'perf.sample' bucket: {by_event}"
-    assert bucket.get("count") == n, (
-        f"per-event count mismatch: got {bucket.get('count')} want {n}"
-    )
+    assert bucket.get("count") == n, f"per-event count mismatch: got {bucket.get('count')} want {n}"
 
     p50 = float(bucket.get("p50_ms", -1))
     p95 = float(bucket.get("p95_ms", -1))

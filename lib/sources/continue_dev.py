@@ -456,9 +456,11 @@ class ContinueSource(SessionSource):
             if not isinstance(item, dict):
                 continue
             attach_usage: dict[str, Any] | None = None
-            role = (item.get("message") or {}).get("role") if isinstance(
-                item.get("message"), dict
-            ) else None
+            role = (
+                (item.get("message") or {}).get("role")
+                if isinstance(item.get("message"), dict)
+                else None
+            )
             if role == "assistant" and not first_assistant_seen and usage_dict is not None:
                 attach_usage = usage_dict
                 first_assistant_seen = True

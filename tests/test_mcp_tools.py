@@ -181,26 +181,67 @@ def _seed_corpus(db_path: Path) -> None:
     ts = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc).isoformat()
     rows = [
         # (id, kind, content, session, cwd, ts, src, score, context)
-        (1, "decision", "Use provider-x CPX21 for the relay nodes", "s1",
-         "/home/operator/proj-a", ts, "u1", 0.92, json.dumps({})),
-        (2, "correction", "no, provider-x is fine — stop suggesting provider-y", "s1",
-         "/home/operator/proj-a", ts, "u2", 0.88,
-         json.dumps({"rejected_approach": "Switch the relay to provider-y BHS"})),
-        (3, "progress", "provider-x relay git.example.com is up and serving traffic", "s2",
-         "/home/operator/proj-b", ts, "u3", 0.75, json.dumps({})),
-        (4, "domain_fact", "User prefers provider-x for cheap dedicated boxes", "s3",
-         "/home/operator/proj-b", ts, "u4", 0.60, json.dumps({})),
+        (
+            1,
+            "decision",
+            "Use provider-x CPX21 for the relay nodes",
+            "s1",
+            "/home/operator/proj-a",
+            ts,
+            "u1",
+            0.92,
+            json.dumps({}),
+        ),
+        (
+            2,
+            "correction",
+            "no, provider-x is fine — stop suggesting provider-y",
+            "s1",
+            "/home/operator/proj-a",
+            ts,
+            "u2",
+            0.88,
+            json.dumps({"rejected_approach": "Switch the relay to provider-y BHS"}),
+        ),
+        (
+            3,
+            "progress",
+            "provider-x relay git.example.com is up and serving traffic",
+            "s2",
+            "/home/operator/proj-b",
+            ts,
+            "u3",
+            0.75,
+            json.dumps({}),
+        ),
+        (
+            4,
+            "domain_fact",
+            "User prefers provider-x for cheap dedicated boxes",
+            "s3",
+            "/home/operator/proj-b",
+            ts,
+            "u4",
+            0.60,
+            json.dumps({}),
+        ),
         # Decoy: matches nothing
-        (5, "decision", "Use Stripe Checkout for billing", "s4",
-         "/home/operator/proj-c", ts, "u5", 0.99, json.dumps({})),
+        (
+            5,
+            "decision",
+            "Use Stripe Checkout for billing",
+            "s4",
+            "/home/operator/proj-c",
+            ts,
+            "u5",
+            0.99,
+            json.dumps({}),
+        ),
     ]
-    conn.executemany(
-        "INSERT INTO extractions VALUES (?,?,?,?,?,?,?,?,?)", rows
-    )
+    conn.executemany("INSERT INTO extractions VALUES (?,?,?,?,?,?,?,?,?)", rows)
     conn.execute(
         "INSERT INTO sessions VALUES (?,?,?,?,?,?)",
-        ("s1", "/home/operator/proj-a", "Set up relay fleet",
-         "deploy the relay", ts, 42),
+        ("s1", "/home/operator/proj-a", "Set up relay fleet", "deploy the relay", ts, 42),
     )
     conn.execute(
         "INSERT INTO messages VALUES (?,?,?,?,?,?)",
@@ -250,8 +291,13 @@ def test_recall_schema_enums(server_module):
     assert "kind" in props
     assert "scope" in props
     assert set(props["kind"]["enum"]) == {
-        "any", "correction", "decision", "self_correction",
-        "progress", "domain_fact", "away_summary",
+        "any",
+        "correction",
+        "decision",
+        "self_correction",
+        "progress",
+        "domain_fact",
+        "away_summary",
     }
     assert set(props["scope"]["enum"]) == {"this_cwd", "all_projects"}
 
@@ -270,9 +316,7 @@ def test_search_messages_role_enum(server_module):
 def test_recall_returns_error_when_db_missing(server_module):
     # No DB file has been created in tmp_db_dir.
     assert not server_module.DB_PATH.exists()
-    _, structured = asyncio.run(
-        server_module.mcp.call_tool("recall", {"topic": "anything"})
-    )
+    _, structured = asyncio.run(server_module.mcp.call_tool("recall", {"topic": "anything"}))
     out = structured["result"]
     assert isinstance(out, list)
     assert out and "error" in out[0]
@@ -280,9 +324,7 @@ def test_recall_returns_error_when_db_missing(server_module):
 
 
 def test_prior_sessions_returns_error_when_db_missing(server_module):
-    _, structured = asyncio.run(
-        server_module.mcp.call_tool("prior_sessions_for_cwd", {})
-    )
+    _, structured = asyncio.run(server_module.mcp.call_tool("prior_sessions_for_cwd", {}))
     out = structured["result"]
     assert out and "error" in out[0]
 
@@ -291,9 +333,7 @@ def test_get_session_digest_returns_error_when_db_missing(server_module):
     # `get_session_digest` returns `dict` (not `list[dict]`), so FastMCP
     # doesn't auto-derive a structured-output schema for it — we read the
     # unstructured text-content payload instead.
-    result = asyncio.run(
-        server_module.mcp.call_tool("get_session_digest", {"session_id": "x"})
-    )
+    result = asyncio.run(server_module.mcp.call_tool("get_session_digest", {"session_id": "x"}))
     content = result[0] if isinstance(result, (list, tuple)) else result
     out = json.loads(content.text) if hasattr(content, "text") else content
     assert isinstance(out, dict)
@@ -387,9 +427,7 @@ def test_prior_sessions_for_cwd_lists_sessions(tmp_db_dir, fake_index_query):
         sys.modules.pop(mod, None)
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
-        server.mcp.call_tool(
-            "prior_sessions_for_cwd", {"cwd": "/home/operator/proj-a"}
-        )
+        server.mcp.call_tool("prior_sessions_for_cwd", {"cwd": "/home/operator/proj-a"})
     )
     rows = structured["result"]
     assert len(rows) == 1
@@ -408,9 +446,7 @@ def test_prior_sessions_for_cwd_falls_back_when_cwd_unknown(
     for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
         sys.modules.pop(mod, None)
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool("prior_sessions_for_cwd", {})
-    )
+    _, structured = asyncio.run(server.mcp.call_tool("prior_sessions_for_cwd", {}))
     rows = structured["result"]
     # First row is the scope-fallback meta, body carries the proj-a session.
     assert rows and "_meta" in rows[0]
@@ -418,18 +454,14 @@ def test_prior_sessions_for_cwd_falls_back_when_cwd_unknown(
     assert any(r.get("session_id") == "s1" for r in rows[1:])
 
 
-def test_prior_sessions_for_cwd_explicit_cwd_no_fallback(
-    tmp_db_dir, fake_index_query, monkeypatch
-):
+def test_prior_sessions_for_cwd_explicit_cwd_no_fallback(tmp_db_dir, fake_index_query, monkeypatch):
     """An explicit unknown cwd returns empty — no all_projects fallback."""
     _seed_corpus(tmp_db_dir / "index.db")
     for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
         sys.modules.pop(mod, None)
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
-        server.mcp.call_tool(
-            "prior_sessions_for_cwd", {"cwd": "/home/operator/proj-not-in-index"}
-        )
+        server.mcp.call_tool("prior_sessions_for_cwd", {"cwd": "/home/operator/proj-not-in-index"})
     )
     rows = structured["result"]
     # Explicit cwd is honored verbatim: no rows, no _meta fallback marker.
@@ -457,9 +489,7 @@ def test_get_session_digest_assembles_digest(tmp_db_dir, fake_index_query):
     for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
         sys.modules.pop(mod, None)
     server = importlib.import_module("mcp_server.server")
-    result = asyncio.run(
-        server.mcp.call_tool("get_session_digest", {"session_id": "s1"})
-    )
+    result = asyncio.run(server.mcp.call_tool("get_session_digest", {"session_id": "s1"}))
     content = result[0] if isinstance(result, (list, tuple)) else result
     digest = json.loads(content.text) if hasattr(content, "text") else content
     assert isinstance(digest, dict)
@@ -490,9 +520,7 @@ def test_recall_falls_back_to_all_projects_when_this_cwd_empty(
     server = importlib.import_module("mcp_server.server")
 
     _, structured = asyncio.run(
-        server.mcp.call_tool(
-            "recall", {"topic": "provider-x", "scope": "this_cwd", "limit": 10}
-        )
+        server.mcp.call_tool("recall", {"topic": "provider-x", "scope": "this_cwd", "limit": 10})
     )
     hits = structured["result"]
     assert isinstance(hits, list)
@@ -508,9 +536,7 @@ def test_recall_falls_back_to_all_projects_when_this_cwd_empty(
     assert all("provider-x" in (h.get("content") or "").lower() for h in body)
 
 
-def test_recall_no_fallback_meta_when_this_cwd_has_hits(
-    tmp_db_dir, fake_index_query, monkeypatch
-):
+def test_recall_no_fallback_meta_when_this_cwd_has_hits(tmp_db_dir, fake_index_query, monkeypatch):
     """When `this_cwd` already yields hits we must NOT prepend the meta row
     — the model treats `_meta` as a 'fell back' signal."""
     _seed_corpus(tmp_db_dir / "index.db")
@@ -519,9 +545,7 @@ def test_recall_no_fallback_meta_when_this_cwd_has_hits(
         sys.modules.pop(mod, None)
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
-        server.mcp.call_tool(
-            "recall", {"topic": "provider-x", "scope": "this_cwd", "limit": 10}
-        )
+        server.mcp.call_tool("recall", {"topic": "provider-x", "scope": "this_cwd", "limit": 10})
     )
     hits = structured["result"]
     assert len(hits) == 2
@@ -529,17 +553,13 @@ def test_recall_no_fallback_meta_when_this_cwd_has_hits(
         assert "_meta" not in h
 
 
-def test_search_messages_falls_back_to_all_projects(
-    tmp_db_dir, fake_index_query, monkeypatch
-):
+def test_search_messages_falls_back_to_all_projects(tmp_db_dir, fake_index_query, monkeypatch):
     _seed_corpus(tmp_db_dir / "index.db")
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
     for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
         sys.modules.pop(mod, None)
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool("search_messages", {"query": "provider-x"})
-    )
+    _, structured = asyncio.run(server.mcp.call_tool("search_messages", {"query": "provider-x"}))
     rows = structured["result"]
     assert rows and "_meta" in rows[0]
     assert rows[0]["scope_used"] == "all_projects"
@@ -547,9 +567,7 @@ def test_search_messages_falls_back_to_all_projects(
     assert any(r.get("text") == "tell me about provider-x" for r in rows[1:])
 
 
-def test_find_failed_attempts_falls_back_when_cwd_empty(
-    tmp_db_dir, fake_index_query, monkeypatch
-):
+def test_find_failed_attempts_falls_back_when_cwd_empty(tmp_db_dir, fake_index_query, monkeypatch):
     _seed_corpus(tmp_db_dir / "index.db")
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
     for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
@@ -574,9 +592,7 @@ def test_find_user_preferences_falls_back_when_this_cwd_empty(
         sys.modules.pop(mod, None)
     server = importlib.import_module("mcp_server.server")
     _, structured = asyncio.run(
-        server.mcp.call_tool(
-            "find_user_preferences", {"scope": "this_cwd", "domain": "provider-x"}
-        )
+        server.mcp.call_tool("find_user_preferences", {"scope": "this_cwd", "domain": "provider-x"})
     )
     hits = structured["result"]
     assert hits and "_meta" in hits[0]
@@ -612,9 +628,7 @@ def test_session_digest_returns_populated_meta(tmp_db_dir, fake_index_query, mon
         sys.modules.pop(mod, None)
     server = importlib.import_module("mcp_server.server")
 
-    result = asyncio.run(
-        server.mcp.call_tool("get_session_digest", {"session_id": "s1"})
-    )
+    result = asyncio.run(server.mcp.call_tool("get_session_digest", {"session_id": "s1"}))
     content = result[0] if isinstance(result, (list, tuple)) else result
     digest = json.loads(content.text) if hasattr(content, "text") else content
     assert isinstance(digest, dict)
@@ -630,18 +644,14 @@ def test_session_digest_returns_populated_meta(tmp_db_dir, fake_index_query, mon
     assert "progress_markers" in digest
 
 
-def test_session_digest_returns_error_when_session_unknown(
-    tmp_db_dir, fake_index_query
-):
+def test_session_digest_returns_error_when_session_unknown(tmp_db_dir, fake_index_query):
     """No `sessions` row and no messages for the id → clear error payload."""
     _seed_corpus(tmp_db_dir / "index.db")
     for mod in ("mcp_server", "mcp_server.server", "mcp_server.tools", "mcp_server.resources"):
         sys.modules.pop(mod, None)
     server = importlib.import_module("mcp_server.server")
     result = asyncio.run(
-        server.mcp.call_tool(
-            "get_session_digest", {"session_id": "no-such-session-id"}
-        )
+        server.mcp.call_tool("get_session_digest", {"session_id": "no-such-session-id"})
     )
     content = result[0] if isinstance(result, (list, tuple)) else result
     digest = json.loads(content.text) if hasattr(content, "text") else content

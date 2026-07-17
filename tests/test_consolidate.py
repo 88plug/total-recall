@@ -224,9 +224,7 @@ def _snapshot(db: Path) -> dict[str, list[tuple]]:
 def test_consolidate_dry_run_no_writes(seeded_db: Path) -> None:
     before = _snapshot(seeded_db)
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--db", str(seeded_db), "consolidate", "--dry-run"]
-    )
+    result = runner.invoke(cli, ["--db", str(seeded_db), "consolidate", "--dry-run"])
     assert result.exit_code == 0, result.output
     after = _snapshot(seeded_db)
     assert before == after, "dry-run mutated the DB"
@@ -245,12 +243,8 @@ def test_consolidate_decay_orders_by_silence(seeded_db: Path) -> None:
 
     conn = sqlite3.connect(str(seeded_db))
     conn.row_factory = sqlite3.Row
-    row90 = conn.execute(
-        "SELECT confidence FROM operator_profile WHERE field='editor'"
-    ).fetchone()
-    row100 = conn.execute(
-        "SELECT confidence FROM operator_profile WHERE field='shell'"
-    ).fetchone()
+    row90 = conn.execute("SELECT confidence FROM operator_profile WHERE field='editor'").fetchone()
+    row100 = conn.execute("SELECT confidence FROM operator_profile WHERE field='shell'").fetchone()
     conn.close()
     assert row100["confidence"] < row90["confidence"], (
         f"100d ({row100['confidence']}) should decay below 90d ({row90['confidence']})"
@@ -282,12 +276,8 @@ def test_consolidate_vocab_tier0_to_1(seeded_db: Path) -> None:
     conn = sqlite3.connect(str(seeded_db))
     conn.row_factory = sqlite3.Row
     relay = conn.execute("SELECT * FROM vocabulary WHERE term='relay'").fetchone()
-    toosmall = conn.execute(
-        "SELECT * FROM vocabulary WHERE term='toosmall'"
-    ).fetchone()
-    acme_net = conn.execute(
-        "SELECT * FROM vocabulary WHERE term='acme-net'"
-    ).fetchone()
+    toosmall = conn.execute("SELECT * FROM vocabulary WHERE term='toosmall'").fetchone()
+    acme_net = conn.execute("SELECT * FROM vocabulary WHERE term='acme-net'").fetchone()
     conn.close()
 
     assert relay is not None, "tier-0 → 1 candidate should have graduated"
@@ -310,9 +300,9 @@ def test_consolidate_dream_deletes_superseded(seeded_db: Path) -> None:
     result = runner.invoke(cli, ["--db", str(seeded_db), "consolidate"])
     assert result.exit_code == 0, result.output
     conn = sqlite3.connect(str(seeded_db))
-    n = conn.execute(
-        "SELECT COUNT(*) FROM standing_decisions WHERE topic='dead_topic'"
-    ).fetchone()[0]
+    n = conn.execute("SELECT COUNT(*) FROM standing_decisions WHERE topic='dead_topic'").fetchone()[
+        0
+    ]
     conn.close()
     assert n == 0, "31-day-archived row should be deleted"
 
@@ -364,9 +354,7 @@ def test_consolidate_drops_expired_tentative(seeded_db: Path) -> None:
 
 def test_consolidate_json_valid(seeded_db: Path) -> None:
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--json", "--db", str(seeded_db), "consolidate", "--dry-run"]
-    )
+    result = runner.invoke(cli, ["--json", "--db", str(seeded_db), "consolidate", "--dry-run"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["dry_run"] is True
@@ -378,9 +366,7 @@ def test_consolidate_json_valid(seeded_db: Path) -> None:
 
 def test_consolidate_no_db_graceful(tmp_path: Path) -> None:
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--json", "--db", str(tmp_path / "missing.db"), "consolidate"]
-    )
+    result = runner.invoke(cli, ["--json", "--db", str(tmp_path / "missing.db"), "consolidate"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert "db-missing" in payload["skipped"]
@@ -443,9 +429,7 @@ def seeded_db_multi_source(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(db))
     # Build the base schema first, then add the source column.
     conn.executescript(_CONSOLIDATE_SCHEMA)
-    conn.execute(
-        "ALTER TABLE operator_profile ADD COLUMN source TEXT DEFAULT 'claude_code'"
-    )
+    conn.execute("ALTER TABLE operator_profile ADD COLUMN source TEXT DEFAULT 'claude_code'")
 
     now = int(time.time())
     day = 86400
@@ -489,20 +473,14 @@ def test_consolidate_multi_source_rows_processed(seeded_db_multi_source: Path) -
     non-claude_code entries.
     """
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["--db", str(seeded_db_multi_source), "consolidate"]
-    )
+    result = runner.invoke(cli, ["--db", str(seeded_db_multi_source), "consolidate"])
     assert result.exit_code == 0, result.output
 
     conn = sqlite3.connect(str(seeded_db_multi_source))
     conn.row_factory = sqlite3.Row
 
-    row_cc = conn.execute(
-        "SELECT confidence FROM operator_profile WHERE field='editor'"
-    ).fetchone()
-    row_oc = conn.execute(
-        "SELECT confidence FROM operator_profile WHERE field='shell'"
-    ).fetchone()
+    row_cc = conn.execute("SELECT confidence FROM operator_profile WHERE field='editor'").fetchone()
+    row_oc = conn.execute("SELECT confidence FROM operator_profile WHERE field='shell'").fetchone()
     row_dead = conn.execute(
         "SELECT archived FROM operator_profile WHERE field='dead_field'"
     ).fetchone()

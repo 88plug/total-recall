@@ -165,8 +165,7 @@ def test_reversal_patterns_set_is_reversed():
 
     ext = _extract(_assistant("abandoned stripe last quarter"))
     assert any(
-        e.context.get("pattern") == "abandoned" and e.context.get("is_reversed")
-        for e in ext
+        e.context.get("pattern") == "abandoned" and e.context.get("is_reversed") for e in ext
     )
 
 
@@ -180,9 +179,7 @@ def test_money_burn_pattern_parses_amount():
 
 
 def test_wins_because_pattern():
-    ext = _extract(
-        _assistant("Vultr wins because they don't ToS-ban privacy infra")
-    )
+    ext = _extract(_assistant("Vultr wins because they don't ToS-ban privacy infra"))
     hit = [e for e in ext if e.context.get("pattern") == "wins_because"]
     assert hit
     assert hit[0].context["chose"].lower() == "vultr"
@@ -242,9 +239,7 @@ def test_upsert_decision_increments_assertion_count_on_restatement():
     )
     assert rid_a == rid_b, "same UNIQUE key → same row id"
 
-    row = conn.execute(
-        "SELECT * FROM standing_decisions WHERE id=?", (rid_a,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM standing_decisions WHERE id=?", (rid_a,)).fetchone()
     assert row["assertion_count"] == 2
     assert row["first_asserted_ts"] == 1_700_000_000
     assert row["last_reasserted_ts"] == 1_700_000_500
@@ -294,9 +289,7 @@ def test_mark_reversed_flips_flag_and_accumulates_money_burn():
     assert row["money_burn_usd"] == pytest.approx(200.0)  # 50 + 150
 
     # mark_reversed on a non-existent row returns False and does not insert.
-    miss = mark_reversed(
-        conn, topic="cloud_provider", chose="nonexistent", scope="global"
-    )
+    miss = mark_reversed(conn, topic="cloud_provider", chose="nonexistent", scope="global")
     assert miss is False
 
 
@@ -340,9 +333,7 @@ def test_list_and_get_for_topic_prefer_scope_then_global():
     assert rows[0]["assertion_count"] == 4
 
     # get_for_topic with project scope: finds the project row exactly.
-    proj = get_for_topic(
-        conn, topic="billing_rail", scope="/home/operator/oneoff-project"
-    )
+    proj = get_for_topic(conn, topic="billing_rail", scope="/home/operator/oneoff-project")
     assert proj is not None and proj["chose"] == "lemonsqueezy"
 
     # get_for_topic with a different scope: falls back to the global row.

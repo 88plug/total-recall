@@ -31,11 +31,11 @@ def _index_missing_error() -> dict[str, Any]:
 
 @mcp.tool(title="Get Operator Profile", annotations=ToolAnnotations(readOnlyHint=True))
 def get_operator_profile() -> dict:
-    (
-        "Return the operator's identity profile (name, handles, machines, vendor preferences, "
-        "philosophy). Use at session start to know WHO is asking and what they prefer. Cheap, "
-        "reads cached profile from the index — does NOT re-mine the corpus."
-    )
+    """
+    Return the operator's identity profile (name, handles, machines, vendor preferences,
+    philosophy). Use at session start to know WHO is asking and what they prefer. Cheap,
+    reads cached profile from the index — does NOT re-mine the corpus.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()

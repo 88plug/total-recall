@@ -17,6 +17,7 @@ Run:
 The test module is skipped automatically if either the corpus or the
 ground-truth file is absent.
 """
+
 from __future__ import annotations
 
 import json
@@ -33,9 +34,7 @@ CORPUS_ROOT = Path(
 ).expanduser()
 GT_PATH = Path(os.environ.get("BT_GROUND_TRUTH", "tests/local/ground_truth.json"))
 
-GT: dict = (
-    json.loads(GT_PATH.read_text()) if GT_PATH.exists() and GT_PATH.is_file() else {}
-)
+GT: dict = json.loads(GT_PATH.read_text()) if GT_PATH.exists() and GT_PATH.is_file() else {}
 
 pytestmark = pytest.mark.skipif(
     not CORPUS_ROOT.exists() or not GT,
@@ -60,6 +59,7 @@ pytestmark = pytest.mark.skipif(
 # Helpers
 # --------------------------------------------------------------------------- #
 
+
 def _all_jsonl_paths() -> list[Path]:
     return sorted(CORPUS_ROOT.glob("*/*.jsonl"))
 
@@ -82,9 +82,11 @@ def _iter_records_for_voice(paths: list[Path]):
 # Layer 1 — operator_profile
 # --------------------------------------------------------------------------- #
 
+
 @pytest.fixture(scope="module")
 def profile():
     from extractors.operator_profile import extract_operator_profile
+
     t0 = time.time()
     p = extract_operator_profile(_all_jsonl_paths())
     elapsed = time.time() - t0
@@ -95,9 +97,7 @@ def profile():
 def test_profile_name_rediscovered(profile):
     candidates = set(GT["profile"]["name_candidates"])
     assert profile.name, "operator name is empty — data-driven extractor produced no signal"
-    assert profile.name in candidates, (
-        f"name not in top-{len(candidates)} ground-truth candidates"
-    )
+    assert profile.name in candidates, f"name not in top-{len(candidates)} ground-truth candidates"
 
 
 def test_profile_email_rediscovered(profile):
@@ -148,9 +148,11 @@ def test_profile_no_password_field(profile):
 # Layer 2 — ontology / vocabulary miner
 # --------------------------------------------------------------------------- #
 
+
 @pytest.fixture(scope="module")
 def discovered_vocab():
     from extractors.ontology import mine_vocabulary
+
     t0 = time.time()
     terms = mine_vocabulary(CORPUS_ROOT, min_sessions=2, min_freq=4)
     elapsed = time.time() - t0
@@ -186,9 +188,11 @@ def test_vocab_no_stopword_leakage(discovered_vocab):
 # Layer 3 — voice profile
 # --------------------------------------------------------------------------- #
 
+
 @pytest.fixture(scope="module")
 def voice():
     from extractors.voice_profile import measure_voice
+
     t0 = time.time()
     v = measure_voice(_iter_records_for_voice(_all_jsonl_paths()))
     elapsed = time.time() - t0
@@ -205,9 +209,7 @@ def voice():
 
 def test_voice_sample_size_sufficient(voice):
     min_n = int(GT["voice"]["min_sample_size"])
-    assert voice["sample_size"] >= min_n, (
-        f"sample_size {voice['sample_size']} below min {min_n}"
-    )
+    assert voice["sample_size"] >= min_n, f"sample_size {voice['sample_size']} below min {min_n}"
 
 
 def test_voice_lowercase_in_range(voice):
@@ -247,8 +249,10 @@ def test_voice_learned_typos_overlap_ground_truth(voice):
 # Layer 4 — scope_detect (no-DB basename fallback)
 # --------------------------------------------------------------------------- #
 
+
 def test_scope_detect_resolves_real_cwds():
     import sys
+
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "hooks" / "lib"))
     import scope_detect  # noqa: E402
 
@@ -258,9 +262,7 @@ def test_scope_detect_resolves_real_cwds():
         result = (scope_detect.infer_scope(cwd) or "").lower()
         if substr.lower() not in result:
             misses.append(cwd)
-    assert not misses, (
-        f"{len(misses)}/{len(mapping)} cwds failed scope-substring check"
-    )
+    assert not misses, f"{len(misses)}/{len(mapping)} cwds failed scope-substring check"
 
 
 # --------------------------------------------------------------------------- #
@@ -336,9 +338,7 @@ def test_incremental_handle_in_ground_truth(incremental_profile):
     high-frequency token from the corpus.
     """
     candidates = {h.lower() for h in GT["profile"]["github_handles"]}
-    resolved = (
-        incremental_profile.handle or incremental_profile.github_user or ""
-    ).lower()
+    resolved = (incremental_profile.handle or incremental_profile.github_user or "").lower()
 
     assert resolved, (
         "incremental path: handle/github_user both empty — "
@@ -376,9 +376,7 @@ def incremental_persisted_profile(tmp_path_factory):
 
     paths = _all_jsonl_paths()
     t0 = time.time()
-    merged = extract_incremental(
-        list(_stream_records(paths)), existing_profile=None
-    )
+    merged = extract_incremental(list(_stream_records(paths)), existing_profile=None)
     persist_incremental_profile(conn, merged)
     conn.commit()
     elapsed = time.time() - t0
@@ -412,9 +410,7 @@ def test_persisted_incremental_handle_in_ground_truth(incremental_persisted_prof
         or ""
     ).lower()
 
-    assert resolved, (
-        "persisted incremental profile: handle/github_user both missing or empty"
-    )
+    assert resolved, "persisted incremental profile: handle/github_user both missing or empty"
     assert resolved in candidates, (
         f"persisted incremental profile: handle not in "
         f"top-{len(candidates)} ground-truth candidates "

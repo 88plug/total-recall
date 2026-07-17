@@ -101,9 +101,7 @@ def _parse_ts(raw: Any) -> datetime | None:
     if not isinstance(raw, str):
         return None
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(
-            timezone.utc
-        )
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc)
     except (ValueError, TypeError):
         return None
 

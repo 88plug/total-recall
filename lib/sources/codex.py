@@ -167,9 +167,7 @@ def _parse_ts(raw: Any) -> datetime | None:
     if not isinstance(raw, str):
         return None
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(
-            timezone.utc
-        )
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc)
     except (ValueError, TypeError):
         return None
 
@@ -418,9 +416,7 @@ def _translate_function_call_output(
     is_error = False
     if isinstance(payload.get("output"), dict):
         is_error = bool(payload["output"].get("is_error", False))
-    tr = ToolResult(
-        tool_use_id=call_id, is_error=is_error, content=text, raw_content=raw_c
-    )
+    tr = ToolResult(tool_use_id=call_id, is_error=is_error, content=text, raw_content=raw_c)
     base = state.base(obj, byte_offset)
     return UserRecord(
         **base,
@@ -446,10 +442,7 @@ def _translate_reasoning(
     text = ""
     if isinstance(payload, dict):
         text = (
-            payload.get("text")
-            or payload.get("content")
-            or payload.get("encrypted_content")
-            or ""
+            payload.get("text") or payload.get("content") or payload.get("encrypted_content") or ""
         )
         if isinstance(text, list):
             # Reasoning sometimes ships as [{summary: "..."}] segments.
@@ -518,9 +511,7 @@ def _translate_response_item(
     # fall through to a generic SystemRecord so the byte_offset / cwd /
     # model context isn't lost. The full payload is in ``raw``.
     base = state.base(obj, byte_offset)
-    return SystemRecord(
-        **base, subtype=f"response_item:{inner_type}", payload=inner_body
-    )
+    return SystemRecord(**base, subtype=f"response_item:{inner_type}", payload=inner_body)
 
 
 def _translate_compacted(
@@ -631,9 +622,7 @@ class CodexSource(SessionSource):
         state = _ReplayState()
         # Seed session_id from the filename so the *very first* line (which
         # arrives before session_meta has been parsed) is still attributable.
-        state.session_id = (
-            _session_id_from_filename(session.path.name) or session.session_id
-        )
+        state.session_id = _session_id_from_filename(session.path.name) or session.session_id
         if session.cwd:
             state.cwd = session.cwd
 

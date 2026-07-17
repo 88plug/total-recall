@@ -9,6 +9,7 @@ Coverage:
 * tokens   — Gemini ``{input, output, cached, thoughts, tool, total}``
              → Anthropic-shaped ``{input_tokens, ..., extras}``
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -308,7 +309,12 @@ def test_iter_records_end_to_end(tmp_path: Path):
             "content": [{"text": "ok"}],
             "toolCalls": [{"id": "t1", "name": "shell", "status": "pending"}],
             "tokens": {
-                "input": 10, "output": 3, "cached": 0, "thoughts": 0, "tool": 1, "total": 14
+                "input": 10,
+                "output": 3,
+                "cached": 0,
+                "thoughts": 0,
+                "tool": 1,
+                "total": 14,
             },
         },
         {"id": "u2", "type": "user", "timestamp": "t3", "content": "second turn"},
@@ -318,11 +324,14 @@ def test_iter_records_end_to_end(tmp_path: Path):
             "type": "gemini",
             "timestamp": "t2",
             "content": [{"text": "ok"}],
-            "toolCalls": [
-                {"id": "t1", "name": "shell", "status": "completed", "result": "done"}
-            ],
+            "toolCalls": [{"id": "t1", "name": "shell", "status": "completed", "result": "done"}],
             "tokens": {
-                "input": 10, "output": 3, "cached": 0, "thoughts": 0, "tool": 1, "total": 14
+                "input": 10,
+                "output": 3,
+                "cached": 0,
+                "thoughts": 0,
+                "tool": 1,
+                "total": 14,
             },
         },
         {"$set": {"lastUpdated": "2026-05-25T12:09:00Z"}},

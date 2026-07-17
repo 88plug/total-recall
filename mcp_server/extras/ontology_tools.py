@@ -80,11 +80,11 @@ def _row_to_dict(row: Any) -> dict:
 
 @mcp.tool(title="Get Project Graph", annotations=ToolAnnotations(readOnlyHint=True))
 def get_project_graph() -> dict:
-    (
-        "Return the operator's project graph: cwd -> {purpose, primary_language, "
-        "related_projects, last_active}. Use to orient at session start — know what other "
-        "projects this one connects to."
-    )
+    """
+    Return the operator's project graph: cwd -> {purpose, primary_language,
+    related_projects, last_active}. Use to orient at session start — know what other
+    projects this one connects to.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()
@@ -108,6 +108,7 @@ def get_project_graph() -> dict:
                 related = d.get("related_projects") or "[]"
                 if isinstance(related, str):
                     import json as _json
+
                     try:
                         related = _json.loads(related)
                     except Exception:
@@ -142,11 +143,11 @@ def get_project_graph() -> dict:
 
 @mcp.tool(title="Get Machine Inventory", annotations=ToolAnnotations(readOnlyHint=True))
 def get_machine_inventory(name_pattern: str | None = None) -> list[dict]:
-    (
-        "Return the operator's machine inventory: hostname -> {role, lan_ip, tailscale_ip, "
-        "gpu}. Use when working on LAN/cluster tasks. Pattern is a regex applied to hostname; "
-        "pass None for all."
-    )
+    """
+    Return the operator's machine inventory: hostname -> {role, lan_ip, tailscale_ip, gpu}.
+    Use when working on LAN/cluster tasks. Pattern is a regex applied to hostname; pass None
+    for all.
+    """
     conn = get_conn()
     if conn is None:
         return [_index_missing_error()]
@@ -155,9 +156,7 @@ def get_machine_inventory(name_pattern: str | None = None) -> list[dict]:
     try:
         if ontology_mod is None:
             try:
-                rows = conn.execute(
-                    "SELECT * FROM machines ORDER BY hostname"
-                ).fetchall()
+                rows = conn.execute("SELECT * FROM machines ORDER BY hostname").fetchall()
             except sqlite3.OperationalError as e:
                 return [{"error": f"machines table missing: {e!r}"}]
             machines = [_row_to_dict(r) for r in rows]
@@ -195,11 +194,11 @@ def get_machine_inventory(name_pattern: str | None = None) -> list[dict]:
 
 @mcp.tool(title="Define Term", annotations=ToolAnnotations(readOnlyHint=True))
 def define_term(term: str) -> dict | None:
-    (
-        "Lookup operator-specific vocabulary. E.g. define_term('relay fleet') returns the "
-        "operator's own definition of that term. Use when encountering unfamiliar nouns in the "
-        "operator's prompts."
-    )
+    """
+    Lookup operator-specific vocabulary. E.g. define_term('relay fleet') returns the
+    operator's own definition of that term. Use when encountering unfamiliar nouns in the
+    operator's prompts.
+    """
     conn = get_conn()
     if conn is None:
         return _index_missing_error()

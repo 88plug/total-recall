@@ -104,9 +104,7 @@ def _build_user_prompt(
         lines.append(line)
 
     lines.append("")
-    lines.append(
-        'Return JSON: {"keep": [<tokens that are REAL hostnames from the list above>]}'
-    )
+    lines.append('Return JSON: {"keep": [<tokens that are REAL hostnames from the list above>]}')
     return "\n".join(lines)
 
 
@@ -186,6 +184,7 @@ def refine_machines(
     # Lazy import so the module is importable even before the client exists.
     if client is None:
         from extractors.llm.client import get_default_client
+
         client = get_default_client()
 
     if not client.available:
@@ -206,9 +205,7 @@ def refine_machines(
             for i in range(0, len(all_keys), _CHUNK_SIZE):
                 chunk_keys = all_keys[i : i + _CHUNK_SIZE]
                 chunk = {k: heuristic_machines[k] for k in chunk_keys}
-                kept_keys |= _call_llm_for_chunk(
-                    chunk, operator_email, sample_contexts, client
-                )
+                kept_keys |= _call_llm_for_chunk(chunk, operator_email, sample_contexts, client)
 
         # Preserve original schema; return only kept entries.
         return {k: heuristic_machines[k] for k in all_keys if k in kept_keys}

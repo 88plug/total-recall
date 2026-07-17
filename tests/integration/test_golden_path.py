@@ -26,6 +26,7 @@ Read-only on the corpus by design — the cold-start test copies real
 session files into ``tmp_path`` before ingesting so nothing is ever
 written back to ``~/.claude/projects``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -42,9 +43,7 @@ from collections.abc import Iterable
 import pytest
 
 CORPUS = pathlib.Path("~/.claude/projects").expanduser()
-pytestmark = pytest.mark.skipif(
-    not CORPUS.exists(), reason="no corpus on this machine"
-)
+pytestmark = pytest.mark.skipif(not CORPUS.exists(), reason="no corpus on this machine")
 
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 
@@ -78,9 +77,7 @@ def _smallest_real_sessions(root: pathlib.Path, n: int) -> list[pathlib.Path]:
     return [p for _, p in pool[:n]]
 
 
-def _build_fixture(
-    sessions: Iterable[pathlib.Path], fixture_root: pathlib.Path
-) -> pathlib.Path:
+def _build_fixture(sessions: Iterable[pathlib.Path], fixture_root: pathlib.Path) -> pathlib.Path:
     """Mirror a few real sessions into a fresh projects-root layout.
 
     We deliberately *copy* (rather than symlink) so the ingest is
@@ -133,9 +130,7 @@ def test_cold_start_ingests_real_sessions_under_30s(tmp_path: pathlib.Path):
         n_messages = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
         # `extractions` may not exist on bare branches; tolerate that.
         try:
-            n_extractions = conn.execute(
-                "SELECT COUNT(*) FROM extractions"
-            ).fetchone()[0]
+            n_extractions = conn.execute("SELECT COUNT(*) FROM extractions").fetchone()[0]
         except Exception:  # noqa: BLE001
             n_extractions = 0
     finally:

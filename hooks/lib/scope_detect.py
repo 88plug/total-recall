@@ -28,6 +28,7 @@ from pathlib import Path
 # DB access helpers — read-only, fast, never crash
 # ---------------------------------------------------------------------------
 
+
 def _db_path() -> Path | None:
     """Resolve the index DB path the same way index/db.py does."""
     base_env = os.environ.get("CLAUDE_PLUGIN_DATA")
@@ -86,6 +87,7 @@ def _vocab_for_cwd(conn: sqlite3.Connection, cwd: str, limit: int = 10) -> list[
 # ---------------------------------------------------------------------------
 # Scope keyword table — built dynamically from the index
 # ---------------------------------------------------------------------------
+
 
 def _build_scope_keywords() -> dict[str, list[str]]:
     """Construct keyword hints for every known project from live DB data.
@@ -160,6 +162,7 @@ SCOPE_KEYWORDS: dict[str, list[str]] = {}  # populated lazily
 # Pure-string fallback: derive scope from path basename
 # ---------------------------------------------------------------------------
 
+
 def _scope_from_cwd_string(cwd: str) -> str | None:
     """Generic scope from the last meaningful path segment.
 
@@ -180,6 +183,7 @@ def _scope_from_cwd_string(cwd: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Public: infer_scope
 # ---------------------------------------------------------------------------
+
 
 def infer_scope(cwd: str) -> str | None:
     """Map a cwd to a scope name.
@@ -236,10 +240,10 @@ PIVOT_REGEX = re.compile(
 
 @dataclass
 class ScopeShift:
-    reason: str                  # "cwd" | "keyword" | "keyword+pivot"
-    new: str                     # scope name
+    reason: str  # "cwd" | "keyword" | "keyword+pivot"
+    new: str  # scope name
     old: str | None
-    confidence: float            # 0..1
+    confidence: float  # 0..1
 
 
 def score_scopes(prompt: str) -> dict[str, int]:
@@ -254,8 +258,7 @@ def score_scopes(prompt: str) -> dict[str, int]:
     SCOPE_KEYWORDS = kws
 
     pl = prompt.lower()
-    return {scope: sum(1 for k in kw_list if k in pl)
-            for scope, kw_list in kws.items()}
+    return {scope: sum(1 for k in kw_list if k in pl) for scope, kw_list in kws.items()}
 
 
 def dominant_scope(prompts: list[str]) -> str | None:
@@ -274,7 +277,7 @@ def dominant_scope(prompts: list[str]) -> str | None:
 
 def detect_scope_shift(
     current_prompt: str,
-    recent_prompts: list[str],   # last 5 user prompts (excluding current)
+    recent_prompts: list[str],  # last 5 user prompts (excluding current)
     current_cwd: str,
     last_cwd: str | None,
 ) -> ScopeShift | None:

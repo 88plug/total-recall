@@ -41,9 +41,9 @@ ALL_EXTRACTORS: list[Extractor] = [
     ModelCorrections(),
     # I5 — provider-a > provider-b, billing-provider-a > billing-provider-b, etc.
     StandingDecisions(),
-    Bans(),                 # I6 — provider/tool/pattern bans + failed attempts
-    Goals(),                # I3 — per-project goal stack with status state machine
-    TruthRhetoric(),        # I9 — 7-category truth-assertion taxonomy
+    Bans(),  # I6 — provider/tool/pattern bans + failed attempts
+    Goals(),  # I3 — per-project goal stack with status state machine
+    TruthRhetoric(),  # I9 — 7-category truth-assertion taxonomy
 ]
 
 

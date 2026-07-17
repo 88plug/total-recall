@@ -212,6 +212,7 @@ class TestGenerateJsonCache:
     def _client_available_with_cache(self, tmp_path: Path, model: str = DEFAULT_MODEL) -> LLMClient:
         """Return an available client backed by a fresh tmp LLMCache."""
         from extractors.llm.cache import LLMCache as _LLMCache
+
         cache = _LLMCache(tmp_path / "llm_cache.db")
         client = LLMClient(provider="auto", model=model, cache=cache)
         client._available = True  # noqa: SLF001

@@ -140,8 +140,7 @@ def evaluate_pending(
         bad = bool(escalation_in_next_n_turns(session_id, start, end))
         outcome = "useless" if bad else "useful"
         conn.execute(
-            "UPDATE reinjection_outcomes "
-            "SET outcome = ?, evaluated_at = ? WHERE id = ?",
+            "UPDATE reinjection_outcomes SET outcome = ?, evaluated_at = ? WHERE id = ?",
             (outcome, now, row_id),
         )
         resolved += 1
@@ -160,8 +159,8 @@ class TriggerStats:
     trigger: str
     useful: int
     useless: int
-    precision: float           # Beta(useful+1, useless+1) posterior mean
-    n: int                     # useful + useless
+    precision: float  # Beta(useful+1, useless+1) posterior mean
+    n: int  # useful + useless
 
     @property
     def recommend(self) -> str:
@@ -174,9 +173,7 @@ class TriggerStats:
         return "keep"
 
 
-def trigger_precision(
-    conn: sqlite3.Connection, trigger_name: str
-) -> tuple[float, int, int]:
+def trigger_precision(conn: sqlite3.Connection, trigger_name: str) -> tuple[float, int, int]:
     """Beta(useful+1, useless+1) posterior mean for ``trigger_name``.
 
     Returns ``(precision, useful_count, useless_count)``. A trigger that
@@ -184,8 +181,7 @@ def trigger_precision(
     """
     ensure_schema(conn)
     rows = conn.execute(
-        "SELECT triggers, outcome FROM reinjection_outcomes "
-        "WHERE outcome IN ('useful', 'useless')"
+        "SELECT triggers, outcome FROM reinjection_outcomes WHERE outcome IN ('useful', 'useless')"
     ).fetchall()
     useful = 0
     useless = 0
@@ -206,8 +202,7 @@ def trigger_precision(
 
 def _all_triggers(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute(
-        "SELECT triggers FROM reinjection_outcomes "
-        "WHERE outcome IN ('useful', 'useless')"
+        "SELECT triggers FROM reinjection_outcomes WHERE outcome IN ('useful', 'useless')"
     ).fetchall()
     out: set[str] = set()
     for (triggers_json,) in rows:

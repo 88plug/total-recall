@@ -94,9 +94,9 @@ def _make_session(
         records.append(_set(_assistant_with_tools("edit")))
     for _ in range(n_write):
         records.append(_set(_assistant_with_tools("write")))
-    for cmd in (bash_cmds or []):
+    for cmd in bash_cmds or []:
         records.append(_set(_assistant_with_tools("bash", cmd=cmd)))
-    for txt in (user_texts or []):
+    for txt in user_texts or []:
         records.append(_set(_user_turn(txt, session_id=session_id, cwd=cwd)))
 
     return session_id, cwd, records
@@ -105,6 +105,7 @@ def _make_session(
 def _spread_timestamps(sessions: list[tuple], days: float = 14.0) -> list[tuple]:
     """Spread session timestamps across `days` so the stability check passes."""
     import time as _time
+
     spread = []
     now = _time.time()
     step = (days * 86400) / max(len(sessions), 1)
@@ -172,8 +173,7 @@ class TestEditStrategy:
 
     def test_no_edit_preference_when_balanced(self):
         sessions = [
-            _make_session(f"sess_{i}", f"/proj/{i % 3}", n_edit=3, n_write=3)
-            for i in range(8)
+            _make_session(f"sess_{i}", f"/proj/{i % 3}", n_edit=3, n_write=3) for i in range(8)
         ]
         sessions = _spread_timestamps(sessions)
         profile = extract_implicit_preferences(sessions)
@@ -203,9 +203,7 @@ class TestShellCommands:
         sessions = self._uv_sessions(PROMOTION_MIN_SESSIONS + 3)
         profile = extract_implicit_preferences(sessions)
         cats = {(p.category, p.value) for p in profile.preferences}
-        assert ("shell_command", "prefer_uv") in cats, (
-            f"Expected shell_command=prefer_uv in {cats}"
-        )
+        assert ("shell_command", "prefer_uv") in cats, f"Expected shell_command=prefer_uv in {cats}"
 
     def test_prefer_uv_not_promoted_below_threshold(self):
         sessions = self._uv_sessions(PROMOTION_MIN_SESSIONS - 1)
@@ -246,10 +244,7 @@ class TestEmptyCorpus:
         assert profile.sample_size == 0
 
     def test_sessions_with_no_tool_calls(self):
-        sessions = [
-            _make_session(f"s{i}", f"/proj/{i % 3}")
-            for i in range(6)
-        ]
+        sessions = [_make_session(f"s{i}", f"/proj/{i % 3}") for i in range(6)]
         sessions = _spread_timestamps(sessions)
         profile = extract_implicit_preferences(sessions)
         assert isinstance(profile, ImplicitPreferenceProfile)
@@ -466,6 +461,7 @@ class TestNoHardcodedValues:
         fake_cmd = "myspecialtool"
         # We need to ensure it's in a command group; add it dynamically for this test.
         from extractors.implicit_preferences import _CMD_TO_GROUP, _COMMAND_GROUPS
+
         # Inject a temporary group.
         fake_group = [fake_cmd]
         fake_gi = len(_COMMAND_GROUPS)

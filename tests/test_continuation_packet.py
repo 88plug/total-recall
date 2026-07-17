@@ -335,9 +335,7 @@ def test_index_fields_and_time_guard(tmp_path):
     recs = [_user("pre directive", "u1"), _boundary()]
     path = Path(_write_jsonl(tmp_path / "s.jsonl", recs))
 
-    pkt = build_continuation_packet(
-        path, SID, CWD, db_path=db, boundary_idx=1, max_chars=4000
-    )
+    pkt = build_continuation_packet(path, SID, CWD, db_path=db, boundary_idx=1, max_chars=4000)
     # goal from goal_stack
     assert pkt["active_goal"] == "ship the relay refactor"
     decisions = pkt["decisions_this_session"]

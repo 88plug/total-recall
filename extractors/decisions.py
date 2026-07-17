@@ -113,19 +113,14 @@ class Decisions(Extractor):
                     # `because` clause "follows" — same sentence or one of the
                     # following sentences within the snippet window.
                     follow_end = min(len(sentences), idx + 3)
-                    if any(
-                        _BECAUSE_RE.search(sentences[k])
-                        for k in range(idx, follow_end)
-                    ):
+                    if any(_BECAUSE_RE.search(sentences[k]) for k in range(idx, follow_end)):
                         score += _BECAUSE_BONUS
                     # +0.05 per sentence of surrounding context up to 3.
                     # `_surrounding_snippet` covers indices [idx-1, idx+2].
                     ctx_start = max(0, idx - 1)
                     ctx_end = min(len(sentences), idx + 3)
                     ctx_sents = max(0, (ctx_end - ctx_start) - 1)  # exclude hit
-                    score += _CONTEXT_BONUS_PER_SENT * min(
-                        ctx_sents, _CONTEXT_BONUS_CAP_SENTS
-                    )
+                    score += _CONTEXT_BONUS_PER_SENT * min(ctx_sents, _CONTEXT_BONUS_CAP_SENTS)
 
                     log.debug(
                         "decisions: hit session=%s uuid=%s chose=%r over=%r score=%.2f",
@@ -155,8 +150,10 @@ def _parse_decision(snippet: str) -> tuple[str | None, str | None, str | None]:
         chose = m.group("chose").strip(" ,.;:")
         rationale = m.group("rationale").strip(" ,.;:")
     if not chose or not over:
-        m2 = _INSTEAD_RE.search(snippet) or _RATHER_RE.search(snippet) or _USING_NOT_RE.search(
-            snippet
+        m2 = (
+            _INSTEAD_RE.search(snippet)
+            or _RATHER_RE.search(snippet)
+            or _USING_NOT_RE.search(snippet)
         )
         if m2:
             chose = chose or m2.group("chose").strip(" ,.;:")

@@ -215,9 +215,7 @@ class GrokSource(SessionSource):
                 session_dir = chat.parent
                 session_id = session_dir.name
                 is_sidechain = session_dir.parent.name == "subagents"
-                parent_session = (
-                    session_dir.parent.parent.name if is_sidechain else None
-                )
+                parent_session = session_dir.parent.parent.name if is_sidechain else None
 
                 summary = _read_summary(session_dir / SUMMARY)
                 cwd = summary.get("cwd") or fallback_cwd

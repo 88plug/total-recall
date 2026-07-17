@@ -414,9 +414,7 @@ def test_legacy_discover_and_iter(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_env_var_override(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_env_var_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = tmp_path / "opencode.db"
     _make_db(db, session_id="sess_env", cwd="/tmp/env")
     monkeypatch.setenv("OPENCODE_DATA_DIR", str(tmp_path))
@@ -428,9 +426,7 @@ def test_env_var_override(
     assert sessions[0].session_id == "sess_env"
 
 
-def test_env_var_multiple_paths(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_env_var_multiple_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     a = tmp_path / "a"
     b = tmp_path / "b"
     a.mkdir()
@@ -455,6 +451,4 @@ def test_registered_in_sources_list_if_base_present() -> None:
         from lib.sources.base import SOURCES  # type: ignore[import-not-found]
     except Exception:
         pytest.skip("lib.sources.base not yet built by XW1")
-    assert OpenCodeSource in SOURCES, (
-        "OpenCodeSource should register itself on import"
-    )
+    assert OpenCodeSource in SOURCES, "OpenCodeSource should register itself on import"
