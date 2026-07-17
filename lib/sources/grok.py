@@ -8,8 +8,8 @@ var). Sessions are keyed by working directory and session id::
 
 The directory immediately under ``sessions/`` is the **cwd**, percent-encoded
 with :func:`urllib.parse.quote` using ``safe=''`` — so every ``/`` becomes
-``%2F`` (e.g. ``/home/andrew/be-the-whole-bitch`` →
-``%2Fhome%2Fandrew%2Fbe-the-whole-bitch``). :func:`urllib.parse.unquote`
+``%2F`` (e.g. ``/home/operator/my-project`` →
+``%2Fhome%2Foperator%2Fmy-project``). :func:`urllib.parse.unquote`
 recovers the original path exactly (round-trips spaces, ``+``, and non-ASCII).
 Each child directory is a session UUID (ULID-shaped UUIDv7, e.g.
 ``019ef1be-99af-7df2-b8bf-45a9a80ddebc``) holding the dense transcript plus
@@ -90,8 +90,8 @@ PROMPT_HISTORY = "prompt_history.jsonl"
 def derive_cwd_from_dir(dir_name: str) -> str:
     """Decode a percent-encoded ``sessions/`` child dir back to its cwd.
 
-    Inverse of :func:`derive_dir_from_cwd`. ``%2Fhome%2Fandrew`` →
-    ``/home/andrew``.
+    Inverse of :func:`derive_dir_from_cwd`. ``%2Fhome%2Foperator`` →
+    ``/home/operator``.
     """
 
     return unquote(dir_name)

@@ -264,4 +264,4 @@ uv run mkdocs build --strict
 Free to use, copy, modify, and redistribute except Competing Use (offering this software
 or a substantially similar substitute as a commercial product or service). Each release
 converts to Apache 2.0 on its second anniversary. Commercial inquiries:
-claude@cryptoandcoffee.com.
+andrew@88plug.com.

@@ -88,7 +88,7 @@ def synthetic_projects_root(tmp_path: Path) -> Path:
                 "message": {
                     "role": "user",
                     "content": (
-                        "wire up acme-net-ctrl on host-alpha (192.168.50.42) "
+                        "wire up acme-net-ctrl on host-alpha (10.0.0.42) "
                         "and fan out via the relay fleet"
                     ),
                 },
@@ -188,7 +188,7 @@ def test_project_extraction_records_slug_and_language(
 
 def test_machine_regex_picks_up_host_alpha_relay_and_metadata() -> None:
     text = (
-        "ssh into host-alpha (192.168.50.42) — Tailscale 100.64.0.10 "
+        "ssh into host-alpha (10.0.0.42) — Tailscale 100.64.0.10 "
         "and we just got the RTX 3090 24GiB up. "
         "Separately, relay-fra-1 in paris is online. "
         "git.example.com is the Proxmox host."
@@ -198,7 +198,7 @@ def test_machine_regex_picks_up_host_alpha_relay_and_metadata() -> None:
 
     assert "host-alpha" in machines
     wb = machines["host-alpha"]
-    assert wb.lan_ip == "192.168.50.42"
+    assert wb.lan_ip == "10.0.0.42"
     assert wb.tailscale_ip == "100.64.0.10"
     assert "RTX 3090" in wb.gpu
     assert "24GiB" in wb.gpu or "24GB" in wb.gpu
@@ -507,23 +507,23 @@ def test_mine_vocabulary_drops_generic_english(tmp_path: Path) -> None:
     """Generic English words and the operator's username must NOT be promoted.
 
     Synthetic corpus: user turns in 3 sessions each repeat
-    ``home``, ``name``, ``state``, ``read``, and ``andrew`` 20 times.
+    ``home``, ``name``, ``state``, ``read``, and ``operator`` 20 times.
     None of these should appear in the promoted vocabulary.
     """
     root = tmp_path / "projects"
     root.mkdir()
-    proj = root / "-home-andrew-myproject"
+    proj = root / "-home-operator-myproject"
     proj.mkdir()
 
     # Three sessions, each with many occurrences of generic words.
-    generic_words = ["home", "name", "state", "read", "andrew"]
+    generic_words = ["home", "name", "state", "read", "operator"]
     content = " ".join(w for w in generic_words for _ in range(20))
 
     for i in range(3):
         sess_path = proj / f"{'a' * 31}{i}.jsonl"
         _write_session_file(
             sess_path,
-            [_make_user_record(f"s{i}", f"u{i}", content, "/home/andrew/myproject")],
+            [_make_user_record(f"s{i}", f"u{i}", content, "/home/operator/myproject")],
         )
 
     terms = mine_vocabulary(root, min_sessions=2, min_freq=4)
@@ -543,7 +543,7 @@ def test_mine_vocabulary_keeps_operator_specific(tmp_path: Path) -> None:
     - ``opnsense``      15× across 3 sessions  (bare alpha, not English, len>=5)
     - ``wireguard``      8× across 3 sessions  (bare alpha, not English, len>=5)
     - ``relay-eu-west``  6× across 2 sessions  (hyphenated compound — always kept)
-    - ``home``/``name``/``state``/``read``/``andrew`` 20× per session (generic)
+    - ``home``/``name``/``state``/``read``/``operator`` 20× per session (generic)
 
     Expect: opnsense, wireguard, relay-eu-west promoted; generics dropped.
     Note: we avoid ``sidecar`` here because it exists in /usr/share/dict/words
@@ -551,11 +551,11 @@ def test_mine_vocabulary_keeps_operator_specific(tmp_path: Path) -> None:
     """
     root = tmp_path / "projects"
     root.mkdir()
-    proj = root / "-home-andrew-infra"
+    proj = root / "-home-operator-infra"
     proj.mkdir()
 
     generic_blob = " ".join(
-        w for w in ["home", "name", "state", "read", "andrew"] for _ in range(20)
+        w for w in ["home", "name", "state", "read", "operator"] for _ in range(20)
     )
 
     # 3 sessions: all mention opnsense 5×, wireguard 3×, relay-eu-west 2× each.
@@ -569,7 +569,7 @@ def test_mine_vocabulary_keeps_operator_specific(tmp_path: Path) -> None:
         sess_path = proj / f"{'b' * 31}{i}.jsonl"
         _write_session_file(
             sess_path,
-            [_make_user_record(f"s{i}", f"u{i}", content, "/home/andrew/infra")],
+            [_make_user_record(f"s{i}", f"u{i}", content, "/home/operator/infra")],
         )
 
     terms = mine_vocabulary(root, min_sessions=2, min_freq=4)
@@ -587,7 +587,7 @@ def test_mine_vocabulary_keeps_operator_specific(tmp_path: Path) -> None:
     )
 
     # Generic words must not be present.
-    for word in ["home", "name", "state", "read", "andrew"]:
+    for word in ["home", "name", "state", "read", "operator"]:
         assert word not in promoted_names, (
             f"generic word {word!r} must not be promoted. Promoted: {sorted(promoted_names)}"
         )
@@ -675,7 +675,7 @@ def test_extract_ontology_from_records_machines() -> None:
     from extractors.ontology import OntologySnapshot
 
     text = (
-        "Configure host-alpha (192.168.50.10) — Tailscale 100.64.0.5. "
+        "Configure host-alpha (10.0.0.10) — Tailscale 100.64.0.5. "
         "relay-fra-1 is the paris node."
     )
     records = [_user_rec("sM1", text)]
@@ -685,7 +685,7 @@ def test_extract_ontology_from_records_machines() -> None:
     hostnames = {m.hostname for m in snap.machines}
     assert "host-alpha" in hostnames, f"host-alpha missing from {hostnames}"
     ha = next(m for m in snap.machines if m.hostname == "host-alpha")
-    assert ha.lan_ip == "192.168.50.10"
+    assert ha.lan_ip == "10.0.0.10"
     assert ha.tailscale_ip == "100.64.0.5"
 
 

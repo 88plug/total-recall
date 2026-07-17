@@ -153,11 +153,11 @@ def test_upsert_lists_and_dicts(fresh_conn):
     upsert_profile_field(
         fresh_conn,
         "machines",
-        {"host-alpha": {"role": "primary", "ip": "192.168.50.42"}},
+        {"host-alpha": {"role": "primary", "ip": "10.0.0.42"}},
     )
     profile = get_profile(fresh_conn)
     assert profile["banned_providers"] == ["provider-x", "aws"]
-    assert profile["machines"]["host-alpha"]["ip"] == "192.168.50.42"
+    assert profile["machines"]["host-alpha"]["ip"] == "10.0.0.42"
 
 
 def test_get_profile_field_missing_returns_none(fresh_conn):

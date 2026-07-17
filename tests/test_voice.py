@@ -126,7 +126,7 @@ def synth_corpus() -> list[dict]:
         # An attribute-access object — exercises that code path.
         _user_string_obj("alread done, move on"),
         # Should be skipped: assistant turn.
-        _assistant("On it — restarting unbound on 192.168.50.47."),
+        _assistant("On it — restarting unbound on 10.0.0.47."),
         # Should be skipped: list-content user record.
         _user_list("This came in as a structured list."),
         # Should be skipped: starts with "<" (system notification).

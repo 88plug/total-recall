@@ -11,7 +11,7 @@ license = "LicenseRef-FSL-1.1-ALv2"
 license-files = ["LICENSE.md"]
 requires-python = ">=3.10"
 authors = [
-    {name = "88plug", email = "claude@cryptoandcoffee.com"},
+    {name = "88plug", email = "andrew@88plug.com"},
 ]
 keywords = [
     "claude-code",

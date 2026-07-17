@@ -106,7 +106,7 @@ PY
 cat > "$SHIM_DIR/mcp_server/extras/operator_context_tools.py" <<'PY'
 def get_operator_context(cwd=None, max_chars=1800):
     return {
-        "identity": {"name": "Andrew", "email": "claude@cryptoandcoffee.com"},
+        "identity": {"name": "Andrew", "email": "andrew@example.com"},
         "active_goal": {"goal": "ship total-recall PreCompact survival"},
         "standing_decisions": [{"text": "ship-it bias on reversible work"}],
         "bans": [{"text": "no force-push to main"}],

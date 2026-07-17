@@ -109,14 +109,14 @@ def test_extract_incremental_append_supersede_preserves_strong_existing():
     can be re-evaluated when more evidence arrives.
     """
     existing = OperatorProfile()
-    existing.email_primary = "andrew@cryptoandcoffee.com"
+    existing.email_primary = "andrew@example.com"
     existing.confidence["email_primary"] = 0.9
 
     recs = [_user_with_email("try newaddr@example.com instead")]
     merged = extract_incremental(recs, existing_profile=existing)
 
     # The strong existing wins.
-    assert merged.email_primary == "andrew@cryptoandcoffee.com"
+    assert merged.email_primary == "andrew@example.com"
     # The weak candidate is stashed for later corroboration.
     tent = merged.sources.get("_tentative", [])
     assert any("email_primary=" in t for t in tent)

@@ -92,7 +92,7 @@ def _install_all_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
         return {
             "name": "Andrew",
             "handle": "88plug",
-            "primary_email": "claude@cryptoandcoffee.com",
+            "primary_email": "andrew@example.com",
             "_confidence": {},
             "_sources": {},
         }
@@ -302,7 +302,7 @@ def test_section_shapes(tmp_db_dir, monkeypatch):
 
     out = tool_mod.get_operator_context(cwd="/home/operator/proj-a", max_chars=4000)
     assert out["identity"]["name"] == "Andrew"
-    assert out["identity"]["email"] == "claude@cryptoandcoffee.com"
+    assert out["identity"]["email"] == "andrew@example.com"
 
     assert out["active_goal"]["goal"] == "ship I10 integration agent"
 
@@ -561,7 +561,7 @@ def test_signpost_v2_with_populated_db(tmp_path, monkeypatch):
 
     ensure_schema(conn)
     upsert_profile_field(conn, "name", "Andrew", confidence=0.95)
-    upsert_profile_field(conn, "primary_email", "claude@cryptoandcoffee.com", confidence=0.95)
+    upsert_profile_field(conn, "primary_email", "andrew@example.com", confidence=0.95)
     conn.commit()
     conn.close()
 

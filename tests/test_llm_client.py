@@ -388,7 +388,7 @@ class TestGetDefaultClient:
     def test_env_custom_model_and_url(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("TOTAL_RECALL_LLM_PROVIDER", "ollama")
         monkeypatch.setenv("TOTAL_RECALL_LLM_MODEL", "llama3:8b")
-        monkeypatch.setenv("TOTAL_RECALL_LLM_BASE_URL", "http://192.168.1.10:11434")
+        monkeypatch.setenv("TOTAL_RECALL_LLM_BASE_URL", "http://10.0.0.10:11434")
 
         tags_body = _tags_response(["llama3:8b"])
         with patch("urllib.request.urlopen", return_value=_make_urlopen_response(tags_body)):
@@ -398,7 +398,7 @@ class TestGetDefaultClient:
 
         assert client.provider == "ollama"
         assert client.model == "llama3:8b"
-        assert client.base_url == "http://192.168.1.10:11434"
+        assert client.base_url == "http://10.0.0.10:11434"
         assert available is True
 
     def test_env_provider_auto_with_running_daemon(self, monkeypatch: pytest.MonkeyPatch):
