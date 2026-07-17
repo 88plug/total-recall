@@ -81,27 +81,18 @@ class BackfillReport:
 # ----------------------------------------------------------------------------
 
 
-# Track connections that already have sqlite-vec loaded. WeakKeyDictionary
-# keys on the connection object itself so GC + id-reuse cannot leave a
-# stale "already loaded" entry that skips load on a fresh connection
-# (that bug produced `no such module: vec0` on GitHub ubuntu-latest/py3.10).
-_loaded: WeakKeyDictionary = WeakKeyDictionary()
-
-
 def _load_sqlite_vec(conn: sqlite3.Connection) -> None:
-    """Load the sqlite-vec extension into `conn` (idempotent).
+    """Load the sqlite-vec extension into `conn`.
 
-    Safe to call repeatedly: if `conn` has already been loaded, this is a
-    no-op. This lets every public entry point call it without worrying about
-    double-loading.
+    Always calls ``sqlite_vec.load`` — do not cache by ``id(conn)``. After GC,
+    CPython can reuse that integer for a new connection; a set-based cache then
+    skips load and later fails with ``no such module: vec0`` (GitHub
+    ubuntu-latest / Python 3.10). ``sqlite3.Connection`` is also not weakref-able.
 
     Raises `RuntimeError` with the install hint if the package is missing, and
     a `RuntimeError` if the sqlite build can't load extensions (e.g. some
     distro builds disable `enable_load_extension`).
     """
-    if conn in _loaded:
-        return
-
     try:
         import sqlite_vec  # type: ignore[import-not-found]
     except ImportError as exc:  # pragma: no cover - exercised only without extra
@@ -120,8 +111,6 @@ def _load_sqlite_vec(conn: sqlite3.Connection) -> None:
         # Re-disable; the extension stays loaded but we don't want stray loads.
         with contextlib.suppress(Exception):  # pragma: no cover - best-effort
             conn.enable_load_extension(False)
-
-    _loaded[conn] = True
 
 
 def _parse_ts(raw: object) -> datetime:
