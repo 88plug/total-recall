@@ -47,7 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip mkdocs mkdocs-material
-          mkdocs build --site-dir site
+          mkdocs build --strict --site-dir site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5.0.0

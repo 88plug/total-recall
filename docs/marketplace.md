@@ -2,47 +2,56 @@
 
 ## How to install (end users)
 
-```
+```text
 /plugin marketplace add 88plug/claude-code-plugins
 /plugin install total-recall@88plug
 ```
 
-The 88plug marketplace repo name is **`88plug/claude-code-plugins`**
-(canonical name from `~/.claude/plugins/marketplaces/88plug/.claude-plugin/marketplace.json`
-→ `"name": "88plug"`; the marketplace itself lives at that local path once cloned
-— remote URL is `https://github.com/88plug/claude-code-plugins`).
+The 88plug marketplace repo is **`88plug/claude-code-plugins`**
+(canonical name from the marketplace manifest → `"name": "88plug"`;
+remote URL `https://github.com/88plug/claude-code-plugins`).
 
 ## What happens on install
 
 1. Claude Code clones `github.com/88plug/total-recall` into
    `~/.claude/plugins/cache/88plug/total-recall/<sha>/`
-2. The plugin's hooks register automatically (SessionStart signpost,
-   UserPromptSubmit retrieval, PreCompact seed, PostCompact recovery,
+2. Hooks register automatically (SessionStart signpost + compact-restore,
+   UserPromptSubmit retrieval, PreCompact seed, PostCompact recovery + index,
    Stop indexer)
-3. The `.mcp.json` bundled in the plugin auto-registers the MCP server
-4. The 2 skills (recall, speak-like-operator) become available
-5. The 15 slash commands become available
+3. The bundled `.mcp.json` auto-registers the MCP server
+4. Three skills become available: `recall`, `speak-like-operator`, `llm-setup`
+5. Fifteen slash commands become available
 6. First Stop hook detects empty DB → detaches
-   `total-recall index --full --jobs $(nproc)` → user sees one-shot
+   `total-recall index --full --jobs $(nproc)` → one-shot
    "indexing in background" banner
 
 ## Updating the 88plug marketplace.json
 
-Append `marketplace-entry.json`'s contents to the `plugins` array in
-`~/.claude/plugins/marketplaces/88plug/.claude-plugin/marketplace.json`,
-then commit + push the marketplace repo.
+Append `marketplace-entry.json`'s contents to the `plugins` array in the
+marketplace repo's `.claude-plugin/marketplace.json`, then commit and push that
+repo.
 
 ## For multi-CLI users
 
-See `docs/install/` for per-CLI install instructions (OpenCode, Cursor,
-Gemini CLI, Codex, Continue, Cline). The 88plug marketplace path is the
-Claude-Code-only path — other CLIs install via their own MCP config.
+See [Install overview](install/README.md) for per-CLI instructions (OpenCode,
+Cursor, Gemini CLI, Codex, Continue, Cline, Aider, Goose, Grok). The 88plug
+marketplace path is Claude-Code-only — other CLIs install via their own MCP
+config.
 
 ---
 
-## Current plugin metadata (v0.9.0)
+## Current plugin metadata (v2.3.0)
 
-`.claude-plugin/plugin.json` ships with `displayName: "Total Recall"`, a description that
-reflects the current counts (26 MCP tools, 5 hooks, 15 slash commands, 2 skills + optional
-local-LLM refinement layer), and the appropriate keyword set. No outstanding gaps vs.
-the marketplace schema.
+`.claude-plugin/plugin.json` ships with `displayName: "Total Recall"` and counts
+that match the product:
+
+| Surface | Count |
+| --- | --- |
+| MCP tools | 26 |
+| Hooks | 6 (SessionStart ×2, UserPromptSubmit, Stop, PreCompact, PostCompact) |
+| Slash commands | 15 |
+| Skills | 3 (`recall`, `speak-like-operator`, `llm-setup`) |
+| Session sources | 10 CLI clients |
+
+Optional local-LLM refinement (ollama, auto-provisioned; disable with
+`TOTAL_RECALL_LLM_PROVIDER=none`). See [Local-LLM refinement](llm-refinement.md).

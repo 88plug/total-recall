@@ -2,37 +2,54 @@
 
 ## Status
 - MCP support: yes
-- Hook support: yes (UserPromptSubmit, SessionStart, PreToolUse, Stop, ...)
+- Hook support: yes (SessionStart, UserPromptSubmit, Stop, PreCompact, PostCompact)
 - Session storage: `~/.claude/projects/<slug>/<session-uuid>.jsonl`
 - Adapter complexity: ~100 LOC (thin wrapper over `lib.jsonl_walker`)
 
-## Install the MCP server
+## Install (recommended)
 
-total-recall is shipped as a plugin: the MCP server lives inside the
-plugin directory and runs via `uv` so no manual venv work is required.
+Marketplace path — hooks, MCP, skills, and commands register automatically:
 
-1. Install the plugin (or pin the dev checkout) so `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` resolve in your Claude Code config.
-2. Drop this into `~/.claude/claude_desktop_config.json` (or the equivalent project-level config):
+```text
+/plugin marketplace add 88plug/claude-code-plugins
+/plugin install total-recall@88plug
+```
 
-   ```json
-   {
-     "mcpServers": {
-       "total-recall": {
-         "command": "uv",
-         "args": ["run", "--directory", "${CLAUDE_PLUGIN_ROOT}", "python", "-m", "mcp_server"],
-         "env": {"TOTAL_RECALL_DB_DIR": "${CLAUDE_PLUGIN_DATA}/total-recall"}
-       }
-     }
-   }
-   ```
+Dev checkout:
 
-3. Restart Claude Code (or reload via `/mcp`).
-4. Verify: `/mcp` should list `total-recall` and its 26 tools.
+```bash
+git clone https://github.com/88plug/total-recall.git
+cd total-recall
+uv sync
+claude --plugin-dir "$PWD"
+```
+
+## Manual MCP server (optional)
+
+The plugin ships `.mcp.json` so you usually do not need this. For a bare MCP host
+or custom wiring, run via `uv`:
+
+```json
+{
+  "mcpServers": {
+    "total-recall": {
+      "command": "uv",
+      "args": ["run", "--directory", "${CLAUDE_PLUGIN_ROOT}", "python", "-m", "mcp_server"],
+      "env": {"TOTAL_RECALL_DB_DIR": "${CLAUDE_PLUGIN_DATA}/total-recall"}
+    }
+  }
+}
+```
+
+Restart Claude Code (or reload via `/mcp`). Verify: `/mcp` should list
+`total-recall` and its 26 tools.
 
 ## What you get
-- 26 MCP tools (recall, get_operator_context, check_banned, get_voice, get_decisions, ...).
-- Full hook integration: hooks under `hooks/` fire on UserPromptSubmit, SessionStart, PreToolUse, Stop, etc. — see `hooks/README.md` in the plugin.
-- Real-time session ingest: the live `.jsonl` is tailed, so recall reflects the current conversation within seconds.
+- 26 MCP tools (`recall`, `get_operator_context`, `check_banned`, `get_voice_profile`, …).
+- Full hook integration via `hooks/hooks.json` (SessionStart signpost + compact-restore,
+  UserPromptSubmit retrieval, Stop/PostCompact re-index, PreCompact continuity seed).
+- Real-time session ingest: the live `.jsonl` is tailed, so recall reflects the current
+  conversation within seconds.
 
 ## Session ingest
 

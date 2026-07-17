@@ -29,7 +29,7 @@ Local checkout (for development):
 ```bash
 git clone https://github.com/88plug/total-recall.git
 cd total-recall
-pip install -e .[vec]
+uv sync                 # or: pip install -e ".[dev]"
 claude --plugin-dir "$PWD"
 ```
 
@@ -196,7 +196,7 @@ For the human operator.
 
 ### Cross-CLI sources
 
-One index spans 8 supported clients: Claude Code, OpenCode, Codex CLI, Gemini CLI, Cursor, Continue, Cline, and Aider. Cross-source dedup keeps the highest-priority copy of duplicated turns.
+One index spans 10 supported clients: Claude Code, OpenCode, Codex CLI, Gemini CLI, Cursor, Continue, Cline, Aider, Goose, and Grok. Cross-source dedup keeps the highest-priority copy of duplicated turns.
 
 ## Metrics
 
@@ -262,13 +262,14 @@ To disable everything, set `TOTAL_RECALL_LLM_PROVIDER=none` before the plugin st
 ## Contributing
 
 ```bash
-pip install -e .[dev,vec]
-ruff check .
-mypy total_recall
-pytest
+uv sync --all-groups    # or: pip install -e ".[dev]"
+uv run ruff check .
+uv run pytest
+uv run mkdocs build --strict
 ```
 
-The architecture is a flat 4-layer pipeline; see [`docs/architecture.md`](docs/architecture.md).
+Docs site: [https://88plug.github.io/total-recall/](https://88plug.github.io/total-recall/).
+Architecture: [`docs/architecture.md`](docs/architecture.md).
 
 ## License
 

@@ -31,6 +31,8 @@ keywords = [
     "continue",
     "cline",
     "aider",
+    "goose",
+    "grok",
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -64,11 +66,27 @@ dev = [
     "mypy>=2",
     "build>=1.5",
     "twine>=6",
+    "mkdocs-material>=9.5",
+]
+
+[dependency-groups]
+docs = [
+    "mkdocs-material>=9.5",
+]
+dev = [
+    { include-group = "docs" },
+    "tomli; python_version < '3.11'",
+    "pytest>=9",
+    "pytest-cov>=7",
+    "ruff>=0.15",
+    "mypy>=2",
+    "build>=1.5",
+    "twine>=6",
 ]
 
 [project.urls]
 Homepage = "https://github.com/88plug/total-recall"
-Documentation = "https://github.com/88plug/total-recall#readme"
+Documentation = "https://88plug.github.io/total-recall/"
 Repository = "https://github.com/88plug/total-recall"
 Issues = "https://github.com/88plug/total-recall/issues"
 Changelog = "https://github.com/88plug/total-recall/blob/main/CHANGELOG.md"

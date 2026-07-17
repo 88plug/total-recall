@@ -36,7 +36,7 @@ extractors, extractors feed an index, the index feeds delivery surfaces.
             |  (d) Delivery     hooks/  mcp_server/         |
             |                   skills/ commands/           |
             |      SessionStart v2 signpost, 26 MCP tools,  |
-            |      2 skills, 15 slash commands              |
+            |      3 skills, 15 slash commands              |
             +-----------------------------------------------+
 ```
 
@@ -82,7 +82,13 @@ and writes them directly via `index/`):
 - `implicit_preferences.py` (v0.8) — behavior-derived preferences (Edit vs Write, shell-command dominance, absence patterns, format prefs, recurring vocab) → `implicit_preferences`.
 - `satisfaction.py` (v0.8) — bidirectional praise/frustration × prior-assistant-turn shape → `satisfaction_profile` (+ `satisfaction_meta`).
 
-**Optional refinement lane** (v0.9, `extractors/llm/`). Off by default. When `TOTAL_RECALL_LLM_PROVIDER=auto` AND a local ollama daemon is reachable AND the configured model is pulled, `cmd_rebuild` invokes refinement passes AFTER heuristic consolidation: machines NER filter, vocabulary definitions, project narratives. Local-only via ollama (cloud APIs deliberately excluded — would break the no-reupload-transcripts privacy guarantee). Heuristic baseline always wins on disagreement.
+**Optional refinement lane** (v0.9+, `extractors/llm/`). Auto-provisioned on first install
+when `TOTAL_RECALL_LLM_PROVIDER=auto` (default). Bootstrap can fetch a local ollama binary
+and pull `qwen3.5:2b`. When a daemon is reachable and the model is pulled, `cmd_rebuild`
+invokes refinement AFTER heuristic consolidation: machines NER filter, vocabulary
+definitions, project narratives. Local-only via ollama (cloud APIs deliberately excluded —
+would break the no-reupload-transcripts privacy guarantee). Heuristic baseline always wins
+on disagreement; set `TOTAL_RECALL_LLM_PROVIDER=none` to disable.
 
 **Universal scrubber.** `secrets.py` runs over every emitted row's `content` plus every string
 field in `context` (recursive). It is invoked from the orchestrator, not the extractors, so a
@@ -118,9 +124,12 @@ the delivery layer is portable across index implementations.
 **Responsibility.** Put recalled facts in front of the model with the lowest token cost per
 session. Four surfaces, each optional:
 
-- `hooks/` — `session-start-signpost.sh` (passive context inject, 5s budget),
-  `user-prompt-retrieve.sh` (async mid-prompt augmentation, 8s budget), and
-  `stop-index.sh` + `post-compact-index.sh` (async reindex). Configured in `hooks/hooks.json`.
+- `hooks/` — `session-start-signpost.sh` (startup/clear brief),
+  `session-start-compact-restore.sh` (post-compaction continuity),
+  `user-prompt-retrieve.sh` (async mid-prompt augmentation),
+  `pre-compact-seed.sh` (coding-continuity packet),
+  `post-compact-recovery.sh` + `post-compact-index.sh` (restore + async reindex),
+  and `stop-index.sh` (async reindex). Configured in `hooks/hooks.json`.
   All bash hooks share `hooks/lib/common.sh`; database reads route through `hooks/lib/query.py`,
   which is the only shim between hook code and the index.
 - `mcp_server/` — 26 MCP tools total. **Core v0.1 (6, in `mcp_server/tools.py`):** `recall`,
@@ -133,8 +142,9 @@ session. Four surfaces, each optional:
   `get_operator_context`, `assess_escalation_risk`, `recall_targeted`. **v0.8 behavioral (3, also
   in `mcp_server/extras/*_tools.py`):** `get_workflow_profile`, `get_satisfaction_profile`,
   `list_implicit_preferences`.
-- `skills/` — `recall/` (orientation guidance for using the MCP surface on demand) and
-  `speak-like-operator/` (operator voice-matching skill, runtime-populated from `get_voice_profile()`).
+- `skills/` — `recall/` (orientation guidance for the MCP surface),
+  `speak-like-operator/` (voice-matching, runtime-populated from `get_voice_profile()`),
+  and `llm-setup/` (manual fallback for local-LLM provisioning).
 - `commands/` — 15 slash commands for the human operator: `/recall`, `/recall-status`,
   `/recall-inspect`, `/recall-rebuild`, `/recall-promote`, `/recall-metrics`, `/recall-cost`,
   `/recall-topics`, `/recall-health`, `/recall-check-banned`, `/recall-corrections`,

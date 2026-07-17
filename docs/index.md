@@ -1,12 +1,24 @@
 # Total Recall
 
-Cross-session, cross-CLI memory for Claude Code and other AI coding assistants — it mines your own session transcripts so a new session already knows your decisions, corrections, bans, and goals.
+Cross-session, cross-CLI memory for AI coding assistants. Mines your own session
+transcripts so a new session already knows your decisions, corrections, bans, and goals.
 
 [![plugin-validate](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml/badge.svg)](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml)
 [![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat)](https://github.com/88plug/total-recall/blob/main/LICENSE.md)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2?style=flat)](https://github.com/88plug/claude-code-plugins)
+[![PyPI](https://img.shields.io/badge/pypi-total--recall-blue?style=flat)](https://pypi.org/project/total-recall/)
 
-Every session you run is already on disk as append-only JSONL: every decision, every "no, do it this way", every dead end. Total Recall reads that history locally and feeds the high-signal parts back to new sessions in a low-token form, so the model stops re-asking what you already told it.
+Every session is already on disk as append-only JSONL. Total Recall reads that history
+locally and feeds the high-signal parts back in a low-token form. The model stops
+re-asking what you already told it.
+
+| Surface | What you get |
+| --- | --- |
+| MCP (26 tools) | Live queries mid-conversation |
+| Hooks (6) | SessionStart brief, retrieval, re-index, compact continuity |
+| Slash commands (15) | Operator controls for status, rebuild, goals, bans |
+| Skills (3) | `/recall`, `/speak-like-operator`, `/total-recall:llm-setup` |
+| Sources (10) | One index across Claude Code, OpenCode, Codex, Gemini, Cursor, Continue, Cline, Aider, Goose, Grok |
 
 ## Install
 
@@ -17,254 +29,239 @@ Marketplace (recommended):
 /plugin install total-recall@88plug
 ```
 
-Local checkout (for development):
+Local checkout with [uv](https://docs.astral.sh/uv/) (development):
 
 ```bash
 git clone https://github.com/88plug/total-recall.git
 cd total-recall
-pip install -e .[vec]
+uv sync
+uv run total-recall --help
+claude --plugin-dir "$PWD"
+```
+
+Or editable install with pip:
+
+```bash
+pip install -e ".[dev]"
 claude --plugin-dir "$PWD"
 ```
 
 !!! note
-    Requirements are `bash` + `curl` + internet. The plugin bootstraps everything else (`uv`, Python, deps) into its own data dir on first hook fire. No system-wide `pip install` and no system Python required.
+    Requirements are `bash` + `curl` + internet. The plugin bootstraps `uv`, Python,
+    and deps into its own data dir on first hook fire. No system-wide Python required.
+
+Per-client MCP wiring (OpenCode, Cursor, Gemini, …): see [Install overview](install/README.md).
 
 ## Quickstart
 
-First run backfills your existing transcripts in the background (detached, so it survives the spawning session exiting; progress goes to `logs/bootstrap.log`). After that, every new session gets a short SessionStart brief about what is relevant to the current directory.
-
-Check what was indexed:
+First run backfills transcripts in the background (detached; progress in
+`logs/bootstrap.log`). Every new session then gets a short SessionStart brief for
+the current directory.
 
 ```text
 /recall-status
-```
-
-Ask the model to use its memory at any time:
-
-```text
 /recall what did we decide about the deploy pipeline?
 ```
 
-For a manual full reindex:
+Manual full reindex:
 
 ```bash
 total-recall index --rebuild --jobs 4
+# or, from a uv checkout:
+uv run total-recall index --rebuild --jobs 4
 ```
 
-A typical corpus drops from about 22s single-threaded to about 9s at `--jobs 4`.
+Typical corpus: ~22s single-threaded → ~9s at `--jobs 4`.
 
-## Why this exists
+## MCP tools (26)
 
-Claude Code has three kinds of memory today, and none of them mine the transcript history: `amnesia` (88plug) keeps one session alive across compaction but ignores other sessions; auto-memory (`~/.claude/projects/<proj-slug>/memory/`) is hand-curated; `CLAUDE.md` is static and hand-edited.
+The model calls these mid-conversation. Prefer the narrowest tool that fits.
 
-The operator is the source of truth. Models change and projects come and go; the human running the sessions is the one constant. Total Recall makes that explicit: an operator profile and voice profile are first-class extracted artifacts, queryable in one MCP call at session start.
+**One-call SessionStart pattern:** `get_operator_context` — operator profile, voice,
+active goal, recent corrections, and standing decisions in one payload.
+
+### Core recall
+
+| Tool | Use when |
+| --- | --- |
+| `recall` | Fuzzy topic lookup across extractions |
+| `recall_targeted` | Before a default/recommendation — routes by intent |
+| `prior_sessions_for_cwd` | Cheap session list for this directory |
+| `get_session_digest` | Full structured digest of one session |
+| `search_messages` | Exact phrase search in raw transcript lines |
+| `find_failed_attempts` / `list_failed_attempts` | Past abandoned approaches |
+| `find_user_preferences` | Stable prefs before suggesting a default |
+
+### Operator-aware
+
+| Tool | Use when |
+| --- | --- |
+| `get_operator_context` | Session start bundle (preferred) |
+| `get_operator_profile` / `get_voice_profile` | Identity and register |
+| `check_banned` | Pre-suggestion ban check |
+| `get_active_goal` / `list_goals` | Goal stack for a cwd |
+| `list_standing_decisions` / `get_decision_for_topic` | Durable choices |
+| `recall_corrections_about` / `get_recent_corrections` | Past pushback |
+| `get_past_truth_assertions` | Operator truth-assertion taxonomy |
+| `assess_escalation_risk` | Pre-send risk check after friction |
+| `get_project_graph` / `get_machine_inventory` / `define_term` | Ontology |
+
+### Workflow and satisfaction
+
+| Tool | Use when |
+| --- | --- |
+| `get_workflow_profile` | How the operator works (autonomy, fan-out, peak hours) |
+| `get_satisfaction_profile` | Praise/frustration × assistant-turn shape |
+| `list_implicit_preferences` | Behavior-derived prefs past promotion threshold |
+
+Skill guidance for when to call what: `skills/recall/` (loaded as `/recall`).
+
+## Slash commands (15)
+
+| Command | Purpose |
+| --- | --- |
+| `/recall` | Query your memory |
+| `/recall-status` | Index and ingest status |
+| `/recall-inspect` | Inspect extracted records |
+| `/recall-rebuild` | Full reindex |
+| `/recall-promote` | Promote a signal to a standing decision |
+| `/recall-operator-context` | Show bundled operator context |
+| `/recall-corrections` | List corrections |
+| `/recall-decisions` | List decisions |
+| `/recall-goal` | Active goal |
+| `/recall-check-banned` | Check banned actions |
+| `/recall-escalation` | Escalation-risk assessment |
+| `/recall-metrics` | Usage metrics summary |
+| `/recall-cost` | Per-model token and cost breakdown |
+| `/recall-topics` | Most-extracted topics |
+| `/recall-health` | Ingest age, hook fire rate, latency, errors |
+
+## Skills (3)
+
+| Skill | Purpose |
+| --- | --- |
+| `/recall` | Orientation protocol for mining past sessions via MCP |
+| `/speak-like-operator` | Voice-matching from `get_voice_profile()` |
+| `/total-recall:llm-setup` | Manual fallback for local-LLM provisioning |
 
 ## What it captures
 
-17 extractors total. 11 run inline over each session's record stream; 6 are operator-level aggregators that run out-of-band against the full corpus.
+17 extractors: 11 per-session, 6 operator-level aggregators.
 
 <details>
 <summary>Per-session extractors (11)</summary>
 
-- `corrections` — turns where you redirected the model.
-- `decisions` — "we're going with X because Y" moments.
-- `self_corrections` — places the model corrected itself ("actually, scratch that").
-- `progress` — how far a line of work actually got; anchors "we already did X".
-- `domain_facts` — durable signals about the codebase or environment (versions, paths, conventions).
-- `away_summaries` — recap text you wrote after returning to a stale session.
-- `model_corrections` — corrections specifically about model behavior or output format.
-- `standing_decisions` — decisions you marked as durable across sessions.
-- `bans` — explicit "never do X" instructions.
-- `goals` — what you said you are trying to achieve in a session.
-- `truth_rhetoric` — assertions you made about objective state, kept so a later session can check whether they still hold.
+- `corrections` — turns where you redirected the model
+- `decisions` — "we're going with X because Y"
+- `self_corrections` — model walked back its own claim
+- `progress` — how far a line of work actually got
+- `domain_facts` — durable codebase/environment signals
+- `away_summaries` — recaps after returning to a stale session
+- `model_corrections` — pushback paired with the rejected approach
+- `standing_decisions` — durable across sessions
+- `bans` — explicit "never do X"
+- `goals` — what you said you are trying to achieve
+- `truth_rhetoric` — objective-state assertions for later checking
 
 </details>
 
 <details>
 <summary>Operator-level extractors (6)</summary>
 
-- `operator_profile` — durable signals about the human: who they are, how they work, preferences across projects.
-- `voice_profile` — how you write: tone, phrasing patterns, verbal tics, so a model can match register without being told.
-- `ontology` — vocabulary you use for your own systems (project, machine, and service names) plus a cross-project co-mention graph.
-- `workflow` — how you work: fan-out vocabulary, autonomy score, mid-flight interrupt rate, planning idiom, preferred work window, subagent adoption.
-- `implicit_preferences` — preferences expressed by behavior rather than as a ban or decision (tool-call ratios, shell-command dominance, format preferences). Promoted only past a multi-axis threshold.
-- `satisfaction` — bidirectional praise/frustration profile paired with the preceding assistant-turn shape.
+- `operator_profile` — who you are, how you work across projects
+- `voice_profile` — tone, phrasing, verbal tics
+- `ontology` — project/machine/service vocabulary + co-mention graph
+- `workflow` — fan-out, autonomy, interrupt rate, peak hours
+- `implicit_preferences` — prefs expressed by behavior (multi-axis threshold)
+- `satisfaction` — praise/frustration × prior assistant-turn shape
 
 </details>
 
-## Reference
+## Cross-CLI sources
 
-### MCP tools (26)
+One index spans **10** clients. Cross-source dedup keeps the highest-priority copy of
+duplicated turns.
 
-Live queries the model can call mid-conversation.
+| Client | MCP | Hooks | Ingest |
+| --- | --- | --- | --- |
+| [Claude Code](install/claude_code.md) | yes | yes | yes |
+| [OpenCode](install/opencode.md) | yes | no | yes |
+| [Gemini CLI](install/gemini_cli.md) | yes | no | yes |
+| [Codex CLI](install/codex.md) | yes | no | yes |
+| [Cursor](install/cursor.md) | yes | no | yes |
+| [Continue](install/continue.md) | yes | no | yes |
+| [Cline](install/cline.md) | yes | no | yes |
+| [Aider](install/aider.md) | no | no | yes |
+| [Goose](install/goose.md) | yes | no | yes |
+| [Grok](install/grok.md) | yes | no | yes |
 
-<details>
-<summary>Full tool list</summary>
-
-Core recall:
-
-- `recall`
-- `recall_targeted`
-- `prior_sessions_for_cwd`
-- `get_session_digest`
-- `search_messages`
-- `find_failed_attempts`
-- `list_failed_attempts`
-- `find_user_preferences`
-
-Operator-aware:
-
-- `get_operator_context`
-- `get_operator_profile`
-- `get_voice_profile`
-- `recall_corrections_about`
-- `get_recent_corrections`
-- `list_standing_decisions`
-- `get_decision_for_topic`
-- `check_banned`
-- `get_active_goal`
-- `list_goals`
-- `get_past_truth_assertions`
-- `assess_escalation_risk`
-- `get_project_graph`
-- `get_machine_inventory`
-- `define_term`
-
-Workflow, satisfaction, implicit prefs:
-
-- `get_workflow_profile`
-- `get_satisfaction_profile`
-- `list_implicit_preferences`
-
-The recommended one-call pattern is `get_operator_context`, which bundles the operator profile, voice profile, active goal, recent corrections, and standing decisions.
-
-</details>
-
-### Hooks
-
-Each hook is registered in `hooks/hooks.json` and is independently disable-able.
-
-<details>
-<summary>Hook list</summary>
-
-- SessionStart (startup/clear) — `session-start-signpost.sh`: emits a tiny, budget-aware signpost pointing at prior sessions for this directory.
-- SessionStart (compact) — `session-start-compact-restore.sh`: restores continuity after a compaction-triggered start.
-- UserPromptSubmit (async) — `user-prompt-retrieve.sh`: fetches highly relevant memories on demand.
-- Stop (async) — `stop-index.sh`: re-indexes new turns.
-- PreCompact — `pre-compact-seed.sh`: seeds a coding-continuity packet before compaction.
-- PostCompact — `post-compact-recovery.sh` and `post-compact-index.sh` (async): recover continuity and re-index after compaction.
-
-</details>
-
-### Slash commands (15)
-
-For the human operator.
-
-<details>
-<summary>Command list</summary>
-
-- `/recall` — query your own memory.
-- `/recall-status` — index and ingest status.
-- `/recall-inspect` — inspect extracted records.
-- `/recall-rebuild` — full reindex.
-- `/recall-promote` — promote a signal to a standing decision.
-- `/recall-operator-context` — show the bundled operator context.
-- `/recall-corrections` — list corrections.
-- `/recall-decisions` — list decisions.
-- `/recall-goal` — show the active goal.
-- `/recall-check-banned` — check banned actions.
-- `/recall-escalation` — escalation-risk assessment.
-- `/recall-metrics` — usage metrics summary.
-- `/recall-cost` — per-model token and cost breakdown.
-- `/recall-topics` — most-extracted topics.
-- `/recall-health` — ingest age, hook fire rate, latency, errors.
-
-</details>
-
-### Skills (3)
-
-- `/recall` — orientation-style guidance the model loads on demand for deeper dives.
-- `/speak-like-operator` — voice-matching skill, runtime-populated from `get_voice_profile()`.
-- `/total-recall:llm-setup` — manual fallback for local-LLM provisioning.
-
-### Cross-CLI sources
-
-One index spans 8 supported clients: Claude Code, OpenCode, Codex CLI, Gemini CLI, Cursor, Continue, Cline, and Aider. Cross-source dedup keeps the highest-priority copy of duplicated turns.
+```bash
+total-recall sources list
+total-recall sources detect
+```
 
 ## Metrics
 
-After the index is built, `total-recall metrics` gives you visibility into your own usage — tokens spent, slowest sessions, most-corrected topics, compaction frequency — all from the local SQLite index. No external collector, no telemetry, no SaaS.
+Local SQLite only — no external collector, no telemetry.
 
-<details>
-<summary>Metrics subcommands</summary>
-
-- `total-recall metrics summary [--since 7d] [--project PATH]` — sessions, tokens (with cache-read %), wall vs active hours, estimated cost, top corrections, busiest project, longest session.
-- `total-recall metrics cost [--rate model=in/out] [--since 30d]` — per-model token and cost breakdown using bundled default rates or your overrides.
-- `total-recall metrics sessions [--top 10] [--by tokens|duration|corrections]` — rank sessions on a column.
-- `total-recall metrics topics [--since 30d] [--limit 10]` — most-extracted topics across corrections and decisions.
-- `total-recall metrics health` — last ingest age, hook fire rate, p95 latency, error count.
+```bash
+total-recall metrics summary [--since 7d] [--project PATH]
+total-recall metrics cost [--since 30d]
+total-recall metrics sessions [--top 10] [--by tokens|duration|corrections]
+total-recall metrics topics [--limit 10]
+total-recall metrics health
+```
 
 All subcommands support `--json`.
 
-</details>
-
 ## Storage and privacy
 
-Everything stays under `${CLAUDE_PLUGIN_DATA}/total-recall/` (env-resolved by Claude Code; do not hardcode the path). It holds the SQLite index (`index.db`, FTS5 for keyword recall), optional `vec.db` embeddings (only with the `[vec]` extra), `state.json` offsets, and rotating logs. The session JSONLs themselves are never written to.
+Everything stays under `${CLAUDE_PLUGIN_DATA}/total-recall/` (env-resolved by Claude Code).
+SQLite index (`index.db` + FTS5), optional embeddings, `state.json`, rotating logs.
+Transcripts are never rewritten or re-uploaded.
 
 !!! note
-    Read-only on `~/.claude/projects/*.jsonl`, local-only, and no re-uploading. Transcripts contain secrets, internal URLs, and private code, so they never leave the machine. Embeddings, if enabled, run in-process via `fastembed`.
+    Read-only on session JSONL. Embeddings (if enabled) run in-process via `fastembed`.
 
 ## Optional local-LLM refinement
 
-On first install, Total Recall sets up a small local model (`qwen3.5:2b`) in the background — nothing for you to do. Bootstrap fetches the ollama binary (about 38 MB, no `sudo`, into the plugin data dir) and pulls the default model (about 2.7 GB). A one-time banner announces setup is in progress.
+On first install, Total Recall can provision a small local model (`qwen3.5:2b` via
+ollama) in the background. Refinement runs only on rebuild. Heuristics remain the
+fallback if ollama is not ready.
 
-Everything stays on your machine: the model runs on-device via ollama, and transcripts are never uploaded. Cloud APIs are deliberately not supported, since they would break the no-reupload guarantee. Refinement runs on the cold path only (during `rebuild`); if ollama is not ready, the heuristic baseline runs instead and nothing breaks.
-
-<details>
-<summary>What refinement improves</summary>
-
-| What gets refined | Heuristic baseline | With qwen3.5:2b |
-|---|---|---|
-| Machine-name extraction | Pattern-based NER | Precision 1.0, recall 1.0 |
-| Vocabulary definitions | Absent | About 60% coverage |
-| Project narratives | None | Short, accurate summaries |
-
-</details>
-
-### Configuration
-
-<details>
-<summary>Environment variables</summary>
-
-| Env var | Default | Description |
-|---|---|---|
-| `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `none` disables the entire LLM layer. `ollama` forces the ollama path. |
-| `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Override the model; larger models give higher coverage at more RAM and slower runs. |
-| `TOTAL_RECALL_LLM_REFINE_TEXT` | `1` | Set to `0` to disable text-gen refinement while keeping machine-name extraction. |
-| `TOTAL_RECALL_LLM_BASE_URL` | `http://localhost:11434` | Ollama API endpoint. |
-
-</details>
-
-To disable everything, set `TOTAL_RECALL_LLM_PROVIDER=none` before the plugin starts. The `/total-recall:llm-setup` command is a manual fallback if auto-provisioning fails. See [`llm-refinement.md`](llm-refinement.md) for troubleshooting.
+See [Local-LLM refinement](llm-refinement.md) for env vars and troubleshooting.
+Disable with `TOTAL_RECALL_LLM_PROVIDER=none`.
 
 ## Relation to amnesia
 
-`amnesia` and `total-recall` are complements, not competitors. `amnesia` owns the current working state within one session across compaction; `total-recall` owns the historical record across sessions and projects. If `amnesia` is installed, `total-recall` reads its `memory/` snapshots as a high-signal extra source without duplicating or overwriting them.
+`amnesia` owns continuity **within** one session across compaction.
+`total-recall` owns history **across** sessions and projects.
+If both are installed, total-recall can read amnesia `memory/` snapshots as a
+high-signal extra source without overwriting them.
+
+## Next
+
+| Page | Contents |
+| --- | --- |
+| [Architecture](architecture.md) | 4-layer pipeline (walker → extractors → index → delivery) |
+| [Install overview](install/README.md) | Per-CLI MCP + ingest setup |
+| [Marketplace](marketplace.md) | 88plug install path and plugin metadata |
+| [CI/CD](ci.md) | Test matrix and release workflow |
 
 ## Contributing
 
 ```bash
-pip install -e .[dev,vec]
-ruff check .
-mypy total_recall
-pytest
+uv sync --all-groups   # or: pip install -e ".[dev]"
+uv run ruff check .
+uv run pytest
+uv run mkdocs build --strict
 ```
-
-The architecture is a flat 4-layer pipeline; see [`architecture.md`](architecture.md).
 
 ## License
 
 [Functional Source License, Version 1.1, ALv2 Future License](https://github.com/88plug/total-recall/blob/main/LICENSE.md) (`FSL-1.1-ALv2`).
 
-In plain English: free to use, copy, modify, and redistribute for any purpose except a Competing Use — offering this software (or a substantially similar substitute) as a commercial product or service. Each released version converts to the Apache License 2.0 on the second anniversary of its release date. For commercial-use inquiries outside the Permitted Purpose: claude@cryptoandcoffee.com.
+Free to use, copy, modify, and redistribute except Competing Use (offering this software
+or a substantially similar substitute as a commercial product or service). Each release
+converts to Apache 2.0 on its second anniversary. Commercial inquiries:
+claude@cryptoandcoffee.com.

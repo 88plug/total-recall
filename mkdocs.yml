@@ -1,21 +1,43 @@
 site_name: Total Recall
-site_description: Cross-session, cross-CLI memory for Claude Code and other AI coding assistants — mines your session transcripts so new sessions know your decisions, corrections, bans, and goals.
+site_description: >-
+  Cross-session, cross-CLI memory for Claude Code and other AI coding assistants —
+  mines your session transcripts so new sessions know your decisions, corrections,
+  bans, and goals.
 site_url: https://88plug.github.io/total-recall/
 repo_url: https://github.com/88plug/total-recall
 repo_name: 88plug/total-recall
 edit_uri: edit/main/docs/
 use_directory_urls: true
+strict: true
+
+nav:
+  - Home: index.md
+  - Install:
+    - Overview: install/README.md
+    - Claude Code: install/claude_code.md
+    - OpenCode: install/opencode.md
+    - Gemini CLI: install/gemini_cli.md
+    - Codex CLI: install/codex.md
+    - Cursor: install/cursor.md
+    - Continue: install/continue.md
+    - Cline: install/cline.md
+    - Aider: install/aider.md
+    - Goose: install/goose.md
+    - Grok: install/grok.md
+  - Architecture: architecture.md
+  - Local-LLM refinement: llm-refinement.md
+  - Marketplace: marketplace.md
+  - CI/CD: ci.md
 
 theme:
   name: material
   features:
-    - navigation.sections   # group nav by section, uses width well
-    - navigation.top        # back-to-top button
-    - navigation.instant    # SPA-style fast page loads
-    - content.code.copy     # copy button on code blocks (needs superfences below)
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - content.code.copy
     - search.suggest
   palette:
-    # Light/dark toggle that follows the OS preference by default.
     - media: "(prefers-color-scheme: light)"
       scheme: default
       toggle:
@@ -34,8 +56,11 @@ markdown_extensions:
   - def_list
   - footnotes
   - tables
-  - pymdownx.highlight     # code highlighting (ships with mkdocs-material)
-  - pymdownx.superfences   # required for content.code.copy + nested fences
-  - pymdownx.details       # collapsible <details> admonitions
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.details
   - toc:
       permalink: true
+
+plugins:
+  - search
