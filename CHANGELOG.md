@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2026.7.17
+
+- Index Workflow-tool subagent transcripts (`subagents/workflows/wf_*/agent-*.jsonl`)
+  in session discovery + sidechain inspect; journal.jsonl still excluded.
+- Isolate integration golden-path hook runs to `tmp_path` so tests cannot leak
+  reingest into the real plugin data dir.
+
 ## [2.3.0] - 2026-06-26
 
 ### Fixed
