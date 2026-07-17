@@ -33,7 +33,6 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
-from weakref import WeakKeyDictionary
 
 from index.paths import project_key
 
