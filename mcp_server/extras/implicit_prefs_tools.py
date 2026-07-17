@@ -64,11 +64,11 @@ def list_implicit_preferences(
 ) -> list[dict]:
     """Return operator preferences inferred from behavioral patterns.
 
-    These are derived from *what the operator consistently does* across
-    sessions — not from explicit statements. Examples: always using Edit
-    over Write, always invoking ``uv`` rather than ``pip``, never using
-    emoji. Only patterns that have been observed across ≥5 sessions and
-    ≥3 projects over ≥7 days are surfaced.
+    Use when choosing tools/commands/format defaults that should match
+    observed operator habits (not just explicit statements). Derived from
+    *what the operator consistently does* across sessions — e.g. always
+    Edit over Write, always ``uv`` rather than ``pip``, never emoji. Only
+    patterns observed across ≥5 sessions and ≥3 projects over ≥7 days.
 
     Args:
         min_confidence: Minimum confidence threshold (0.0–1.0). Default 0.6.

@@ -115,8 +115,9 @@ def recall_corrections_about(
     (
         "Return past operator corrections matching a topic. Includes the rejected approach "
         "(what the model previously did that the operator pushed back on) so the current turn "
-        "can avoid repeating it. HIGH-PRIORITY: call before suggesting any default provider, "
-        "library, pattern, or approach the user might have previously rejected."
+        "can avoid repeating it. Use before suggesting any default provider, library, pattern, "
+        "or approach the user might have previously rejected. Returns ranked corrections with "
+        "rejected approach, context, severity, and ts."
     )
     conn = get_conn()
     if conn is None:
@@ -177,7 +178,7 @@ def get_recent_corrections(
     limit: int = 5,
 ) -> list[dict]:
     (
-        "Return recent operator corrections, useful at session start to know what the model has "
+        "Return recent operator corrections. Use at session start to know what the model has "
         "been doing wrong lately. Pulls from the corrections index (kind='model_correction'). "
         "Params: cwd scopes to a project (None = all projects); since_days bounds how far back to "
         "look (default 30); limit caps how many are returned (default 5, most recent first). "

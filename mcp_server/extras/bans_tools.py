@@ -54,10 +54,10 @@ def _index_missing_error() -> dict:
 def check_banned(thing: str) -> dict:
     (
         "Check if a thing (provider, tool, library, framework, pattern) is banned by the "
-        "operator. Returns {\"banned\": bool, \"strength\": ..., "
-        "\"verbatim_quote\": ..., \"context\": "
-        "...}. Call BEFORE suggesting any default. Examples: check_banned(\"some-provider\") → "
-        "banned=absolute. check_banned(\"another-provider\") → banned=context (only publicly)."
+        "operator. Use BEFORE suggesting any default. Returns {\"banned\": bool, "
+        "\"strength\": ..., \"verbatim_quote\": ..., \"context\": ...}. "
+        "Examples: check_banned(\"some-provider\") → banned=absolute; "
+        "check_banned(\"another-provider\") → banned=context (only publicly)."
     )
     if not isinstance(thing, str) or not thing.strip():
         return {"banned": False, "error": "thing must be a non-empty string"}

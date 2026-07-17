@@ -108,11 +108,12 @@ def list_goals(
     limit: int = 10,
 ) -> list[dict]:
     (
-        "List goals by project + status. Useful for 'show me what I've been working on'. "
-        "``status`` is one of active|paused|blocked|done|abandoned|any. ``cwd`` defaults to the "
-        "current Claude Code cwd; pass an empty string to list across ALL projects. Returns up "
-        "to ``limit`` rows {project, goal_text, declared_ts, last_progress_ts, status, ...} "
-        "ordered by most-recently-progressed first."
+        "List goals by project + status. Use when the operator asks what they've been working "
+        "on or when surveying the goal stack. ``status`` is one of "
+        "active|paused|blocked|done|abandoned|any. ``cwd`` defaults to the current Claude Code "
+        "cwd; pass an empty string to list across ALL projects. Returns up to ``limit`` rows "
+        "{project, goal_text, declared_ts, last_progress_ts, status, ...} ordered by "
+        "most-recently-progressed first."
     )
     conn = get_conn()
     if conn is None:

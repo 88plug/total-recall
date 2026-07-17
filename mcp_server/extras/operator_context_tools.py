@@ -324,12 +324,12 @@ def _current_cwd(cwd: str | None) -> str | None:
 def get_operator_context(cwd: str | None = None, max_chars: int = 1800) -> dict:
     """Return a unified operator-context payload for the current session.
 
-    HIGH-PRIORITY at session start: a single call that pulls identity,
-    active goal for this cwd, top standing decisions, top bans, voice
-    cheat sheet, recent model corrections, and the machine inventory.
-    Total response is capped at ~``max_chars`` so it fits in the
-    SessionStart ``additionalContext`` envelope without bloating the
-    context window.
+    Use at session start (or when re-orienting) for one-shot identity +
+    preferences: active goal for this cwd, top standing decisions, top
+    bans, voice cheat sheet, recent model corrections, and machine
+    inventory. Total response is capped at ~``max_chars`` so it fits in
+    the SessionStart ``additionalContext`` envelope without bloating the
+    context window. Returns a structured dict of those sections.
     """
     conn = get_conn()
     if conn is None:

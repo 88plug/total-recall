@@ -414,7 +414,8 @@ def find_user_preferences(
     (
         "Find recurring user preferences and standing rules extracted across past sessions. "
         "Examples: provider preferences, formatting preferences, banned tools, repeated "
-        "corrections. Use when picking defaults that might conflict with user habits. If "
+        "corrections. Use when picking defaults that might conflict with user habits. "
+        "Returns ranked preference hits {content, session_id, cwd, ts, kind, score}. If "
         "`scope=\"this_cwd\"` yields 0 hits the tool automatically retries with "
         "`scope=\"all_projects\"` and prepends a `_meta` row indicating the broader scope was "
         "used."
@@ -608,7 +609,8 @@ def search_messages(
         "Raw FTS5 search over past message text (not extracted memories). Use as fallback when "
         "`recall` doesn't surface what you want. When `cwd` is omitted the tool searches the "
         "current cwd first; if that yields 0 hits it automatically retries across all projects "
-        "and prepends a `_meta` row."
+        "and prepends a `_meta` row. Returns message hits with role, text snippet, session_id, "
+        "cwd, and ts."
     )
     conn = get_conn()
     if conn is None:
