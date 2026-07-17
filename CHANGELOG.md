@@ -1219,13 +1219,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   offering total-recall (or a substantially similar substitute) as a commercial
   product or service — is no longer a Permitted Purpose. Each released version
   automatically converts to the Apache License 2.0 on the second anniversary of
-  its release date. See [`LICENSE.md`](LICENSE.md) for the full terms.
-- `LICENSE` (MIT) removed in favor of `LICENSE.md` (FSL-1.1-ALv2).
+  its release date. See [`LICENSE`](LICENSE) for the full terms.
+- `LICENSE` (MIT) removed in favor of `LICENSE` (FSL-1.1-ALv2).
 - `pyproject.toml` license expression updated to `LicenseRef-FSL-1.1-ALv2`
   (PEP 639); `build-system.requires` bumped to `setuptools>=77` for PEP 639
-  support; `license-files = ["LICENSE.md"]` declared explicitly.
+  support; `license-files = ["LICENSE"]` declared explicitly.
 - `.claude-plugin/plugin.json` license updated to `FSL-1.1-ALv2`.
-- `MANIFEST.in` updated to include `LICENSE.md`.
+- `MANIFEST.in` updated to include `LICENSE`.
 
 ### Rationale
 

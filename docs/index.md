@@ -4,7 +4,7 @@ Cross-session, cross-CLI memory for AI coding assistants. Mines your own session
 transcripts so a new session already knows your decisions, corrections, bans, and goals.
 
 [![plugin-validate](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml/badge.svg)](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml)
-[![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat)](https://github.com/88plug/total-recall/blob/main/LICENSE.md)
+[![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat)](https://github.com/88plug/total-recall/blob/main/LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2?style=flat)](https://github.com/88plug/claude-code-plugins)
 [![PyPI](https://img.shields.io/badge/pypi-total--recall-blue?style=flat)](https://pypi.org/project/total-recall/)
 
@@ -259,7 +259,7 @@ uv run mkdocs build --strict
 
 ## License
 
-[Functional Source License, Version 1.1, ALv2 Future License](https://github.com/88plug/total-recall/blob/main/LICENSE.md) (`FSL-1.1-ALv2`).
+[Functional Source License, Version 1.1, ALv2 Future License](https://github.com/88plug/total-recall/blob/main/LICENSE) (`FSL-1.1-ALv2`).
 
 Free to use, copy, modify, and redistribute except Competing Use (offering this software
 or a substantially similar substitute as a commercial product or service). Each release
