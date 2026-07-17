@@ -1,27 +1,16 @@
-"""Optional vector-embedding layer for total-recall.
+"""Dense-retrieval companion for total-recall.
 
-This package extends WT-4's SQLite FTS5 index with a dense-retrieval companion
-backed by `fastembed` (embedding model) and `sqlite-vec` (vector store). The
-two retrievers are combined at query time via Reciprocal Rank Fusion (RRF).
+Embeddings via **local ollama** (default ``qwen3-embedding:0.6b``). Vectors
+stored with ``sqlite-vec``. Combined with FTS5 at query time via RRF.
 
-The package is **optional**. The baseline FTS5 index works without it. The
-heavy deps (`fastembed`, `sqlite_vec`, `numpy`, model downloads) are imported
-*inside* the functions that need them so:
-
-  * `import vec` is cheap and never fails on a stock install.
-  * `pip install total-recall` works without pulling ML wheels.
-  * `pip install 'total-recall[vec]'` enables the dense path.
-
-If a caller invokes a function that needs the optional deps without having
-installed them, we raise a single clear `RuntimeError` with the install hint.
+FTS5 works without dense. Dense requires a running ollama daemon with an
+embedding-capable model pulled. ``import vec`` stays cheap (lazy sqlite-vec).
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-# TYPE_CHECKING imports make symbols present for pyright/__all__; runtime stays
-# lazy via __getattr__ so `import vec` does not pull fastembed/sqlite_vec.
 if TYPE_CHECKING:
     from .embed import Embedder, chunk_for_embedding
     from .rrf import hybrid_search, reciprocal_rank_fusion
@@ -38,34 +27,34 @@ __all__ = [
     "Embedder",
     "chunk_for_embedding",
     "apply_vec_schema",
-    "upsert_extraction_embedding",
     "backfill_all",
+    "upsert_extraction_embedding",
     "vec_search",
-    "VecHit",
-    "BackfillReport",
-    "reciprocal_rank_fusion",
     "hybrid_search",
+    "reciprocal_rank_fusion",
+    "BackfillReport",
+    "VecHit",
 ]
 
 
-def __getattr__(name: str):  # pragma: no cover - thin lazy re-export
+def __getattr__(name: str):
     if name in {"Embedder", "chunk_for_embedding"}:
         from . import embed as _embed
 
         return getattr(_embed, name)
+    if name in {"hybrid_search", "reciprocal_rank_fusion"}:
+        from . import rrf as _rrf
+
+        return getattr(_rrf, name)
     if name in {
-        "apply_vec_schema",
-        "upsert_extraction_embedding",
-        "backfill_all",
-        "vec_search",
-        "VecHit",
         "BackfillReport",
+        "VecHit",
+        "apply_vec_schema",
+        "backfill_all",
+        "upsert_extraction_embedding",
+        "vec_search",
     }:
         from . import store as _store
 
         return getattr(_store, name)
-    if name in {"reciprocal_rank_fusion", "hybrid_search"}:
-        from . import rrf as _rrf
-
-        return getattr(_rrf, name)
-    raise AttributeError(f"module 'vec' has no attribute {name!r}")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

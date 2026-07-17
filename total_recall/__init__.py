@@ -5,7 +5,7 @@ surface that is also called from the plugin hooks (e.g. WT-7's
 ``stop-index.sh`` invokes ``python3 -m total_recall index
 --since-last-tick``).
 
-Heavy imports (sqlite, fastembed, the extractor modules) live inside each
+Heavy imports (sqlite, ollama HTTP embeds, the extractor modules) live inside each
 command function so ``total-recall --help`` stays fast and works even when
 optional dependencies are missing.
 """

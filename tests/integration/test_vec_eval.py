@@ -1,19 +1,10 @@
 """Vec hybrid vs FTS5-only recall quality eval (v1.6.0).
 
-This is the go/no-go measurement for the v2.0 vec-by-default decision the PM
-council deferred: does dense hybrid retrieval (RRF of FTS5 + sqlite-vec/fastembed)
-actually beat FTS5-only on *paraphrase* queries — the case where the query and
-the stored extraction share meaning but few exact tokens?
+This is the go/no-go measurement for dense hybrid retrieval (RRF of FTS5 +
+sqlite-vec + ollama embeddings) vs FTS5-only on *paraphrase* queries.
 
-It builds a small labeled corpus where each query is phrased DIFFERENTLY from
-its target extraction (so exact-term FTS5 is challenged), embeds the corpus,
-then measures precision@5 (target in top-5) for both retrievers.
-
-Auto-SKIPS when fastembed / sqlite-vec are absent, so the default suite stays
-green. The assertion is intentionally weak — hybrid must NOT be *worse* than
-FTS5 on this set (>= FTS5 P@k). The strong ">= +5pp" promotion gate is recorded
-in the printed scorecard for the human v2.0 decision, not enforced here (a
-20-pair synthetic set is too small to hard-gate a release on).
+Auto-SKIPS when sqlite-vec is absent or ollama has no embedding model.
+Requires a live ollama with qwen3-embedding:0.6b (or TOTAL_RECALL_EMBED_MODEL).
 
 Run with output:  TOTAL_RECALL_VEC_EVAL=1 pytest tests/integration/test_vec_eval.py -s
 """
@@ -21,12 +12,31 @@ Run with output:  TOTAL_RECALL_VEC_EVAL=1 pytest tests/integration/test_vec_eval
 from __future__ import annotations
 
 import sqlite3
+import urllib.request
 
 import pytest
 
-# Skip the whole module unless both vec deps import.
-fastembed = pytest.importorskip("fastembed", reason="vec extra not installed")
-sqlite_vec = pytest.importorskip("sqlite_vec", reason="vec extra not installed")
+sqlite_vec = pytest.importorskip("sqlite_vec", reason="sqlite-vec not installed")
+
+
+def _ollama_has_embed() -> bool:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=3) as resp:
+            import json
+
+            data = json.loads(resp.read())
+        for m in data.get("models") or []:
+            if "embedding" in (m.get("capabilities") or []):
+                return True
+    except Exception:
+        return False
+    return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _ollama_has_embed(),
+    reason="ollama with embedding-capable model required",
+)
 
 from index.db import connect  # noqa: E402
 
@@ -93,8 +103,10 @@ def test_hybrid_not_worse_than_fts5_on_paraphrases(tmp_path, capsys) -> None:
     conn = connect(db)
     try:
         _build_corpus(conn)
-        apply_vec_schema(conn)
-        embedder = Embedder()  # loads fastembed CPU model on first embed
+        embedder = Embedder()  # ollama qwen3-embedding:0.6b (or EMBED_MODEL)
+        apply_vec_schema(
+            conn, dim=embedder.dim(), model=embedder.model, backend=embedder.backend
+        )
         report = backfill_all(conn, embedder=embedder, only_kinds=None)
         assert report.extractions_embedded > 0, "nothing got embedded"
 

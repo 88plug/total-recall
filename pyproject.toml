@@ -51,8 +51,8 @@ classifiers = [
 dependencies = [
     "mcp>=1.28.0",
     "click>=8",
-    "fastembed>=0.4",
     "sqlite-vec>=0.1.6",
+    # Dense embeds: local ollama daemon only (no fastembed / ONNX).
 ]
 
 [project.optional-dependencies]

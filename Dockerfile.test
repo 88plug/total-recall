@@ -8,8 +8,9 @@ COPY README.md /plugin/
 # Pre-warm deps before mounting the source (better layer caching)
 RUN pip install --no-cache-dir \
         mcp click pytest pytest-cov ruff mypy \
-        fastembed sqlite-vec \
+        sqlite-vec \
     || echo "WARN: optional deps may not all install in slim image; tests should skip cleanly"
+# Dense embeds require host ollama (qwen3-embedding:0.6b) — not installed in this image.
 # Source comes in via -v mount at run time so each agent sees current code.
 ENV PYTHONUNBUFFERED=1
 ENV CLAUDE_PLUGIN_DATA=/plugin/data

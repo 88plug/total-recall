@@ -18,7 +18,7 @@ Schema (added by `apply_vec_schema`):
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
   );
-  -- format v2 (ollama-default): keys format, model, backend, dim.
+  -- format v2 (ollama-only): keys format, model, backend, dim.
   -- Old indexes without format=2 must rebuild.
 
 All optional deps (`sqlite_vec`, the embedding model) are imported inside
@@ -41,8 +41,8 @@ if TYPE_CHECKING:  # pragma: no cover
 
 log = logging.getLogger(__name__)
 
-# Format v2: ollama-default dense index. Pre-v2 (fastembed-only, dim-only meta)
-# must rebuild — mixed embedding spaces are never silently reused.
+# Format v2: ollama-only dense index. Pre-v2 indexes must rebuild —
+# mixed embedding spaces are never silently reused.
 VEC_FORMAT = "2"
 _REBUILD_HINT = (
     "Run `total-recall rebuild --yes` or `python -m vec.cli rebuild` then "
@@ -226,7 +226,7 @@ def _write_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 
 def _assert_format_v2_or_raise(conn: sqlite3.Connection) -> None:
-    """Old (pre-ollama-default) indexes must rebuild — no silent reuse."""
+    """Old (pre-ollama-only) indexes must rebuild — no silent reuse."""
     # Empty index (no chunks yet) can be upgraded in place.
     try:
         n = conn.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()
@@ -245,7 +245,7 @@ def _assert_format_v2_or_raise(conn: sqlite3.Connection) -> None:
         return
     raise RuntimeError(
         f"Dense vector index is format {fmt!r} (need format {VEC_FORMAT!r} — "
-        f"ollama-default embeddings). Old fastembed-only indexes are not reused. "
+        f"ollama-only embeddings). Old indexes are not reused. "
         f"{_REBUILD_HINT}"
     )
 
@@ -415,7 +415,7 @@ def backfill_all(
     for i in range(0, len(rows), batch_size):
         batch = rows[i : i + batch_size]
         # Build a flat list of (extraction_id, chunk_text) so we embed in one
-        # call — fastembed is much happier with bigger batches.
+        # call — one HTTP batch to ollama is much happier with bigger batches.
         flat: list[tuple[int, str]] = []
         skip_ids: set[int] = set()
         for ext_id, content in batch:

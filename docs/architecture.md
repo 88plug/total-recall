@@ -109,7 +109,7 @@ the walker or the index.
 
 - `index/` owns `index.db`: SQLite with FTS5 virtual tables for keyword recall plus relational
   tables for sessions, cwds, and extracted rows.
-- `vec/` owns dense vectors in the shared index: `sqlite-vec` + **ollama embeddings by default** (format v2); `fastembed` is an explicit escape hatch only
+- `vec/` owns dense vectors in the shared index: `sqlite-vec` + **ollama embeddings only** (format v2, default `qwen3-embedding:0.6b`)
   enabled only when the `[vec]` extra is installed. Vector recall is a query-time augmentation,
   not a replacement, for FTS5.
 
@@ -178,7 +178,7 @@ The pipeline is exercised in two complementary ways:
    on machines without a corpus so the same suite runs in CI containers and
    on the author's laptop.
 2. **Docker validation harness** (`Dockerfile.test`) — a Python 3.11-slim
-   image with `jq`, `bash`, `sqlite3`, `mcp`, `click`, `fastembed`, and
+   image with `jq`, `bash`, `sqlite3`, `mcp`, `click`, and
    `sqlite-vec` pre-installed. Agents mount the source at `/plugin` via
    `-v` and run the full test matrix inside the container, so we catch
    environment-shape bugs that pure-pytest misses (missing

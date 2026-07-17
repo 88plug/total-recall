@@ -96,7 +96,7 @@ def _build_corpus(tmp_path: Path) -> Path:
 
 def _run_rebuild(corpus: Path, db: Path, monkeypatch) -> None:
     # Consolidation asserts on FTS/profile only. Dense backfill loads
-    # fastembed/onnx and can hang unit CI for minutes — disable it here.
+    # ollama dense backfill is out of unit CI scope — disable it here.
     monkeypatch.setenv("TOTAL_RECALL_VEC", "0")
     runner = CliRunner()
     res = runner.invoke(

@@ -1,7 +1,7 @@
 """Regression: cmd_rebuild._backfill_vectors wires the embedder's dim/instance.
 
 Pure-unit: lazily-imported symbols (index.db.connect, vec.store.apply_vec_schema /
-backfill_all, vec.embed.Embedder) are monkeypatched, so no fastembed, sqlite_vec,
+backfill_all, vec.embed.Embedder) are monkeypatched, so no ollama/sqlite_vec,
 or model download is needed.
 """
 
@@ -19,23 +19,29 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 class FakeEmbedder:
-    model = "fake"
+    model = "qwen3-embedding:0.6b"
+    backend = "ollama"
 
     def __init__(self, *a, **k) -> None:
         pass
 
     def dim(self) -> int:
-        return 768
+        return 1024
 
-    def embed(self, texts):
-        return [[0.0] * 768 for _ in texts]
+    def identity(self) -> str:
+        return f"{self.backend}:{self.model}"
+
+    def embed(self, texts, as_query: bool = False):
+        return [[0.0] * 1024 for _ in texts]
 
 
 def test_backfill_vectors_passes_embedder_dim(monkeypatch) -> None:
     captured: dict = {}
 
-    def fake_apply(conn, *, dim):
+    def fake_apply(conn, *, dim, model=None, backend=None):
         captured["dim"] = dim
+        captured["model"] = model
+        captured["backend"] = backend
 
     def fake_backfill(conn, embedder=None, **k):
         captured["embedder"] = embedder
@@ -51,14 +57,16 @@ def test_backfill_vectors_passes_embedder_dim(monkeypatch) -> None:
 
     _backfill_vectors(":memory:", verbose=False)
 
-    assert captured["dim"] == 768
+    assert captured["dim"] == 1024
+    assert captured["model"] == "qwen3-embedding:0.6b"
+    assert captured["backend"] == "ollama"
     assert isinstance(captured["embedder"], FakeEmbedder)
 
 
 def test_backfill_vectors_skipped_when_disabled(monkeypatch) -> None:
     captured: dict = {}
 
-    def fake_apply(conn, *, dim):
+    def fake_apply(conn, *, dim, model=None, backend=None):
         captured["dim"] = dim
 
     monkeypatch.setattr("vec.store.apply_vec_schema", fake_apply)

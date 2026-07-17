@@ -47,7 +47,7 @@ def _parse_since(value: str | None) -> int | None:
     "use_vec",
     default=False,
     show_default=True,
-    help="Use vector (semantic) search when sqlite-vec + fastembed are installed.",
+    help="Use vector (semantic) search when sqlite-vec + ollama embed model are available.",
 )
 @click.pass_context
 def query_cmd(

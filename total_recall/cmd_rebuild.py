@@ -32,9 +32,9 @@ def _text_refine_enabled(env_value: str | None) -> bool:
 def _vec_refine_enabled(env_value: str | None) -> bool:
     """Whether to run the dense-vector backfill at the end of a rebuild.
 
-    Default-on. Dense path uses **ollama embeddings** by default (format v2).
-    Set ``TOTAL_RECALL_VEC=0`` to skip. If ollama has no embed model, backfill
-    fails soft and recall stays FTS5-only until the user pulls a model.
+    Default-on. Dense path is **ollama-only** (format v2, default
+    ``qwen3-embedding:0.6b``). Set ``TOTAL_RECALL_VEC=0`` to skip. If ollama
+    has no embed model, backfill fails soft and recall stays FTS5-only.
 
     Unset / "1" / "true" / "yes" / "on" → enabled.
     "0" / "false" / "no" / "off" → disabled.
@@ -45,11 +45,11 @@ def _vec_refine_enabled(env_value: str | None) -> bool:
 
 
 def _backfill_vectors(db_path: str | Path, verbose: bool) -> None:
-    """Dense-vector backfill (format v2 / ollama-default) — cold path only.
+    """Dense-vector backfill (format v2 / ollama-only) — cold path only.
 
     Runs once at the end of a full rebuild, NOT on every Stop/PostCompact tick.
-    Default embedder is ollama; set TOTAL_RECALL_EMBED_PROVIDER=fastembed only
-    as an escape hatch. Never fatal — a backfill failure must not fail rebuild.
+    Requires a local ollama embedding model (default qwen3-embedding:0.6b).
+    Never fatal — a backfill failure must not fail rebuild.
 
     Set ``TOTAL_RECALL_VEC=0`` to skip.
     """

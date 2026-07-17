@@ -412,7 +412,6 @@ def test_vec_cli_search_clean_error_without_extras(tmp_path: pathlib.Path):
     hint. Locks in F3's "no traceback, just tell the user to install vec".
     """
     try:
-        import fastembed  # noqa: F401
         import sqlite_vec  # noqa: F401
 
         have_vec = True

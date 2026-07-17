@@ -16,7 +16,7 @@ These tests exercise the FastMCP server in three modes:
    mixed extractions, and verify that ``recall("provider-x", scope="all_projects")``
    returns them in score-descending order with the expected fields.
 
-The tests avoid importing the optional vector layer (`fastembed`,
+The tests avoid importing the optional vector layer (`sqlite-vec` /
 `sqlite-vec`) — they're not needed and the dense path is exercised separately
 in the WT-5 test suite.
 """
@@ -54,7 +54,7 @@ def _clear_mcp_modules() -> None:
 def tmp_db_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point the server at a temp DB dir before it's imported."""
     monkeypatch.setenv("TOTAL_RECALL_DB_DIR", str(tmp_path))
-    # Keep unit tests off the onnx / fastembed path even if [vec] is installed.
+    # Keep unit tests off dense ollama backfill (TOTAL_RECALL_VEC=0).
     monkeypatch.setenv("TOTAL_RECALL_VEC", "0")
     _clear_mcp_modules()
     return tmp_path

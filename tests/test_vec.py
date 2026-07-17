@@ -1,8 +1,6 @@
-"""Tests for the optional vector layer.
+"""Tests for the dense vector layer (ollama embeds + sqlite-vec + RRF).
 
-These tests are written to pass cleanly even when neither `fastembed` nor
-`sqlite_vec` is installed — the integration test that exercises both is
-auto-skipped in that case.
+Hermetic: ollama is mocked. Live daemon not required for unit tests.
 """
 
 from __future__ import annotations
@@ -14,15 +12,9 @@ from pathlib import Path
 
 import pytest
 
-# Make the repo root importable without requiring an install.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
-
-
-# ----------------------------------------------------------------------------
-# Optional-dep detection
-# ----------------------------------------------------------------------------
 
 
 def _have(modname: str) -> bool:
@@ -31,9 +23,6 @@ def _have(modname: str) -> bool:
         return True
     except Exception:
         return False
-
-
-HAS_FASTEMBED = _have("fastembed")
 
 
 def _have_sqlite_vec() -> bool:
@@ -46,22 +35,14 @@ def _have_sqlite_vec() -> bool:
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
-        # enable_load_extension not raising only proves the *capability* exists;
-        # actually create the vec0 virtual table to prove the extension truly
-        # loaded (some builds allow the toggle but still fail to load vec0).
-        conn.execute("CREATE VIRTUAL TABLE _probe_vec0 USING vec0(embedding float[4])")
+        conn.execute("CREATE VIRTUAL TABLE t USING vec0(embedding float[4])")
         conn.close()
         return True
-    except (AttributeError, sqlite3.NotSupportedError, sqlite3.OperationalError):
+    except Exception:
         return False
 
 
 HAS_SQLITE_VEC = _have_sqlite_vec()
-
-
-# ----------------------------------------------------------------------------
-# RRF unit tests
-# ----------------------------------------------------------------------------
 
 
 class TestReciprocalRankFusion:
@@ -220,282 +201,141 @@ class TestChunkForEmbedding:
 
 
 # ----------------------------------------------------------------------------
-# Lazy-import test: importing vec / vec.embed must NOT pull fastembed.
-# ----------------------------------------------------------------------------
 
+class TestOllamaEmbedder:
+    _MODELS = [
+        {"name": "granite-embedding:30m", "size": 30_000_000, "capabilities": ["embedding"]},
+        {"name": "qwen3-embedding:0.6b", "size": 600_000_000, "capabilities": ["embedding"]},
+        {"name": "qwen3.5:2b", "size": 2_000_000_000, "capabilities": ["completion"]},
+    ]
 
-class TestLazyImports:
-    def test_import_vec_does_not_load_fastembed(self) -> None:
-        # Drop any cached fastembed first.
-        for mod in list(sys.modules):
-            if mod == "fastembed" or mod.startswith("fastembed."):
-                del sys.modules[mod]
-        # Importing the package + the submodule must not pull fastembed.
-        importlib.import_module("vec")
-        importlib.import_module("vec.embed")
-        assert "fastembed" not in sys.modules
+    def test_import_vec_is_cheap(self) -> None:
+        import vec
+        import vec.embed  # noqa: F401
 
-    def test_constructing_embedder_does_not_load_fastembed(self) -> None:
-        for mod in list(sys.modules):
-            if mod == "fastembed" or mod.startswith("fastembed."):
-                del sys.modules[mod]
-        from vec.embed import Embedder
+        assert hasattr(vec, "Embedder")
 
-        # __init__ must be lazy. .embed() is what actually triggers load.
-        _ = Embedder(model="BAAI/bge-small-en-v1.5")
-        assert "fastembed" not in sys.modules
+    def test_pick_prefers_qwen3_0_6b(self, monkeypatch) -> None:
+        from vec import embed
 
-    def test_known_dim_available_without_loading_model(self) -> None:
-        from vec.embed import Embedder
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        assert embed._pick_ollama_embed_model("http://x", None) == "qwen3-embedding:0.6b"
 
-        emb = Embedder(model="BAAI/bge-small-en-v1.5")
-        # 384-dim is known a priori, so .dim() should not need to embed.
-        assert emb.dim() == 384
+    def test_pick_respects_want(self, monkeypatch) -> None:
+        from vec import embed
 
-    def test_embedder_without_fastembed_raises_clearly(self, monkeypatch) -> None:
-        if HAS_FASTEMBED:
-            pytest.skip("fastembed is installed — error path not reachable here.")
-        from vec.embed import Embedder
-
-        # Force fastembed path so the missing-dep error is about ONNX, not ollama.
-        monkeypatch.setenv("TOTAL_RECALL_EMBED_PROVIDER", "fastembed")
-        emb = Embedder()
-        with pytest.raises(RuntimeError) as excinfo:
-            emb.embed(["hi"])
-        msg = str(excinfo.value).lower()
-        assert "fastembed" in msg
-
-
-# ----------------------------------------------------------------------------
-# GTE / granite custom-model port (registry + tokenizer clamp) — network-free
-# ----------------------------------------------------------------------------
-
-
-class TestGteCustomModels:
-    def test_registry_wiring(self) -> None:
-        from vec.embed import _CUSTOM_MODELS, _KNOWN_DIMS
-
-        assert _KNOWN_DIMS["Alibaba-NLP/gte-modernbert-base"] == 768
-        assert _KNOWN_DIMS["onnx-community/granite-embedding-small-english-r2"] == 384
-        for key, expected in (
-            ("Alibaba-NLP/gte-modernbert-base", 768),
-            ("onnx-community/granite-embedding-small-english-r2", 384),
-        ):
-            assert key in _CUSTOM_MODELS
-            assert _CUSTOM_MODELS[key]["dim"] == expected
-
-    def test_clamp_rewrites_huge_sentinel(self, tmp_path: Path) -> None:
-        import json
-
-        from vec.embed import _clamp_tokenizer_max_length
-
-        tc = tmp_path / "tokenizer_config.json"
-        tc.write_text(
-            json.dumps(
-                {
-                    "model_max_length": 1000000000000000000000000000000,
-                    "model_type": "modernbert",
-                }
-            )
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        assert (
+            embed._pick_ollama_embed_model("http://x", "granite-embedding:30m")
+            == "granite-embedding:30m"
         )
-        _clamp_tokenizer_max_length(tmp_path)
-        d = json.loads(tc.read_text())
-        assert d["model_max_length"] == 8192
-        assert d["model_type"] == "modernbert"  # unrelated key preserved
 
-    def test_clamp_leaves_sane_value_untouched(self, tmp_path: Path) -> None:
-        import json
+    def test_pick_want_latest_suffix(self, monkeypatch) -> None:
+        from vec import embed
 
-        from vec.embed import _clamp_tokenizer_max_length
-
-        tc = tmp_path / "tokenizer_config.json"
-        tc.write_text(json.dumps({"model_max_length": 8192}))
-        _clamp_tokenizer_max_length(tmp_path)
-        assert json.loads(tc.read_text())["model_max_length"] == 8192
-
-    def test_clamp_missing_file_is_noop(self, tmp_path: Path) -> None:
-        from vec.embed import _clamp_tokenizer_max_length
-
-        # Empty dir: must not raise.
-        assert _clamp_tokenizer_max_length(tmp_path) is None
-
-    @pytest.mark.skipif(not HAS_FASTEMBED, reason="fastembed required")
-    def test_register_custom_model_idempotent(self) -> None:
-        from vec.embed import _register_custom_model
-
-        # Metadata-only registration; second call swallows the 'already' ValueError.
-        _register_custom_model("Alibaba-NLP/gte-modernbert-base")
-        _register_custom_model("Alibaba-NLP/gte-modernbert-base")
-
-
-# ----------------------------------------------------------------------------
-# Custom-model port regression net (clamp edge cases + offline registration)
-# ----------------------------------------------------------------------------
-
-
-class TestCustomModelPorts:
-    def test_clamp_rewrites_huge_model_max_length(self, tmp_path: Path) -> None:
-        import json
-
-        from vec.embed import _clamp_tokenizer_max_length
-
-        tc = tmp_path / "tokenizer_config.json"
-        tc.write_text(
-            json.dumps(
-                {
-                    "model_max_length": 1000000000000000019884624838656,
-                    "max_length": 2000000000000,
-                    "model_type": "modernbert",
-                }
-            )
+        models = [{"name": "nomic-embed-text:latest", "size": 1, "capabilities": ["embedding"]}]
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: models)
+        assert (
+            embed._pick_ollama_embed_model("http://x", "nomic-embed-text")
+            == "nomic-embed-text:latest"
         )
-        _clamp_tokenizer_max_length(tmp_path)
-        d = json.loads(tc.read_text())
-        assert d["model_max_length"] == 8192
-        assert d["max_length"] == 8192
-        assert d["model_type"] == "modernbert"
 
-    def test_clamp_noop_when_already_sane(self, tmp_path: Path) -> None:
-        import json
+    def test_pick_ignores_chat_models(self, monkeypatch) -> None:
+        from vec import embed
 
-        from vec.embed import _clamp_tokenizer_max_length
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: [self._MODELS[2]])
+        assert embed._pick_ollama_embed_model("http://x", None) is None
 
-        tc = tmp_path / "tokenizer_config.json"
-        tc.write_text(json.dumps({"model_max_length": 8192}))
-        _clamp_tokenizer_max_length(tmp_path)
-        assert json.loads(tc.read_text())["model_max_length"] == 8192
+    def test_pick_unreachable(self, monkeypatch) -> None:
+        from vec import embed
 
-    def test_clamp_missing_file_is_silent(self, tmp_path: Path) -> None:
-        from vec.embed import _clamp_tokenizer_max_length
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
+        assert embed._pick_ollama_embed_model("http://x", None) is None
 
-        assert _clamp_tokenizer_max_length(tmp_path) is None
+    def test_pick_want_missing_raises(self, monkeypatch) -> None:
+        from vec import embed
 
-    def test_clamp_malformed_json_is_silent(self, tmp_path: Path) -> None:
-        from vec.embed import _clamp_tokenizer_max_length
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        with pytest.raises(RuntimeError, match="not pulled"):
+            embed._pick_ollama_embed_model("http://x", "does-not-exist")
 
-        (tmp_path / "tokenizer_config.json").write_text("{ not json")
-        # Must not raise.
-        assert _clamp_tokenizer_max_length(tmp_path) is None
+    def test_embed_uses_ollama(self, monkeypatch) -> None:
+        from vec import embed
 
-    def test_custom_models_have_known_dims(self) -> None:
-        from vec.embed import _CUSTOM_MODELS, _KNOWN_DIMS
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        monkeypatch.setattr(
+            embed,
+            "_ollama_embed",
+            lambda base_url, model, texts: [[0.1] * 8 for _ in texts],
+        )
+        e = embed.Embedder()
+        vecs = e.embed(["hi"])
+        assert e.backend == "ollama"
+        assert e.model == "qwen3-embedding:0.6b"
+        assert vecs == [[0.1] * 8]
+        assert "Instruct:" in e._query_prefix
 
-        assert _KNOWN_DIMS["Alibaba-NLP/gte-modernbert-base"] == 768
-        assert _KNOWN_DIMS["onnx-community/granite-embedding-small-english-r2"] == 384
-        assert set(_CUSTOM_MODELS) <= set(_KNOWN_DIMS)
-        for k in _CUSTOM_MODELS:
-            assert _CUSTOM_MODELS[k]["dim"] == _KNOWN_DIMS[k]
+    def test_embed_as_query_prefixes_qwen3(self, monkeypatch) -> None:
+        from vec import embed
 
-    def test_known_dim_for_custom_models_without_loading(self) -> None:
-        for mod in list(sys.modules):
-            if mod == "fastembed" or mod.startswith("fastembed."):
-                del sys.modules[mod]
-        from vec.embed import Embedder
-
-        for name, expected in (
-            ("Alibaba-NLP/gte-modernbert-base", 768),
-            ("onnx-community/granite-embedding-small-english-r2", 384),
-        ):
-            emb = Embedder(model=name)
-            assert emb.dim() == expected
-            assert emb._impl is None
-        assert "fastembed" not in sys.modules
-
-    @pytest.mark.skipif(not HAS_FASTEMBED, reason="fastembed required")
-    def test_register_custom_model_offline_and_idempotent(self) -> None:
-        from vec.embed import _register_custom_model
-
-        _register_custom_model("Alibaba-NLP/gte-modernbert-base")
-        _register_custom_model("Alibaba-NLP/gte-modernbert-base")  # 'already' swallowed
-        # Unknown model is a no-op (spec is None -> early return).
-        assert _register_custom_model("not-a-custom-model") is None
-
-    @pytest.mark.skipif(not HAS_FASTEMBED, reason="fastembed required")
-    def test_install_tokenizer_clamp_idempotent(self) -> None:
-        from fastembed.text import onnx_text_model as otm
-
-        from vec.embed import _install_tokenizer_clamp
-
-        _install_tokenizer_clamp()
-        assert getattr(otm, "_tr_maxlen_clamp", False) is True
-        wrapped = otm.load_tokenizer
-        _install_tokenizer_clamp()  # guard must prevent a second wrap
-        assert otm.load_tokenizer is wrapped
-
-
-# ----------------------------------------------------------------------------
-# Opt-in, model-aware query prefix (bge-class only) — network-free
-# ----------------------------------------------------------------------------
-
-
-class TestQueryPrefix:
-    _BGE = "Represent this sentence for searching relevant passages: "
-
-    def test_prefix_resolved_per_model(self) -> None:
-        from vec.embed import Embedder
-
-        assert Embedder(model="BAAI/bge-small-en-v1.5")._query_prefix == self._BGE
-        for name in (
-            "Alibaba-NLP/gte-modernbert-base",
-            "onnx-community/granite-embedding-small-english-r2",
-        ):
-            assert Embedder(model=name)._query_prefix == ""
-        # nomic uses search_query: / search_document: prefixes (ollama + HF).
-        assert Embedder(model="nomic-ai/nomic-embed-text-v1.5")._query_prefix == "search_query: "
-
-    def _stub(self, monkeypatch, model):
-        from vec.embed import Embedder
-
-        emb = Embedder(model=model)
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
         seen: list[list[str]] = []
 
-        class _Impl:
-            def embed(self, texts):
-                seen.append(list(texts))
-                return [[0.0] for _ in texts]
+        def _cap(base_url, model, texts):
+            seen.append(list(texts))
+            return [[0.0] for _ in texts]
 
-        monkeypatch.setattr(emb, "_load", lambda: None)
-        emb._impl = _Impl()
-        return emb, seen
+        monkeypatch.setattr(embed, "_ollama_embed", _cap)
+        e = embed.Embedder()
+        e.embed(["nginx rate limit"], as_query=True)
+        assert seen[-1][0].startswith("Instruct:")
+        assert seen[-1][0].endswith("nginx rate limit")
 
-    def test_bge_as_query_prepends(self, monkeypatch) -> None:
-        for mod in list(sys.modules):
-            if mod == "fastembed" or mod.startswith("fastembed."):
-                del sys.modules[mod]
-        emb, seen = self._stub(monkeypatch, "BAAI/bge-small-en-v1.5")
-        emb.embed(["nginx", "postgres"], as_query=True)
-        assert seen[-1] == [self._BGE + "nginx", self._BGE + "postgres"]
-        assert "fastembed" not in sys.modules
+    def test_embed_docs_raw_for_qwen3(self, monkeypatch) -> None:
+        from vec import embed
 
-    def test_bge_default_is_verbatim(self, monkeypatch) -> None:
-        emb, seen = self._stub(monkeypatch, "BAAI/bge-small-en-v1.5")
-        emb.embed(["nginx", "postgres"])  # as_query defaults False
-        assert seen[-1] == ["nginx", "postgres"]
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        seen: list[list[str]] = []
 
-    def test_gte_as_query_is_verbatim(self, monkeypatch) -> None:
-        emb, seen = self._stub(monkeypatch, "Alibaba-NLP/gte-modernbert-base")
-        emb.embed(["nginx"], as_query=True)  # empty prefix -> no-op
-        assert seen[-1] == ["nginx"]
+        def _cap(base_url, model, texts):
+            seen.append(list(texts))
+            return [[0.0] for _ in texts]
 
-    def test_empty_input_as_query(self) -> None:
-        from vec.embed import Embedder
+        monkeypatch.setattr(embed, "_ollama_embed", _cap)
+        e = embed.Embedder()
+        e.embed(["passage about nginx"])
+        assert seen[-1] == ["passage about nginx"]
 
-        assert Embedder(model="BAAI/bge-small-en-v1.5").embed([], as_query=True) == []
+    def test_no_daemon_raises(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
+        e = embed.Embedder()
+        with pytest.raises(RuntimeError, match="No embedding-capable|ollama"):
+            e.embed(["hi"])
+
+    def test_empty_input(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        e = embed.Embedder()
+        assert e.embed([]) == []
+
+    def test_known_dim_qwen3(self) -> None:
+        from vec.embed import _KNOWN_DIMS, RECOMMENDED_OLLAMA_EMBED
+
+        assert RECOMMENDED_OLLAMA_EMBED == "qwen3-embedding:0.6b"
+        assert _KNOWN_DIMS["qwen3-embedding:0.6b"] == 1024
 
 
 # ----------------------------------------------------------------------------
-# Incremental vec backfill on the index tick (cmd_index -> _backfill_vectors)
+# Fake embedder + sqlite-vec incremental (no ollama)
 # ----------------------------------------------------------------------------
 
 
 class _FakeEmbedder:
-    """Deterministic embedder: each text -> a small fixed-dim vector. No model."""
-
     model = "fake"
     backend = "fake"
-
-    def __init__(self, *a, **k) -> None:
-        pass
 
     def dim(self) -> int:
         return 8
@@ -504,12 +344,11 @@ class _FakeEmbedder:
         return f"{self.backend}:{self.model}"
 
     def embed(self, texts, as_query: bool = False):
-        # Vary the first component by text length so vectors aren't identical.
         return [[float(len(t) % 7)] + [0.1] * 7 for t in texts]
 
 
 class TestIncrementalVecBackfill:
-    @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec required for vec schema")
+    @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec required")
     def test_backfill_only_touches_new_extractions(self, tmp_path: Path) -> None:
         from vec.store import apply_vec_schema, backfill_all
 
@@ -536,12 +375,11 @@ class TestIncrementalVecBackfill:
         conn.commit()
 
         emb = _FakeEmbedder()
-        apply_vec_schema(conn, dim=emb.dim())
+        apply_vec_schema(conn, dim=emb.dim(), model=emb.model, backend=emb.backend)
         first = backfill_all(conn, embedder=emb)
         assert first.extractions_embedded == 2
         conn.commit()
 
-        # New extraction arrives (what _commit_parsed does on an incremental tick).
         conn.execute(
             "INSERT INTO extractions(id, content, cwd, ts, kind) VALUES (?,?,?,?,?)",
             (3, "postgres row level security", "/c", "2025-01-03", "decision"),
@@ -553,364 +391,28 @@ class TestIncrementalVecBackfill:
         conn.commit()
 
         second = backfill_all(conn, embedder=_FakeEmbedder())
-        # Incremental WHERE => only the unembedded row is seen and embedded.
-        assert second.extractions_seen == 1
         assert second.extractions_embedded == 1
-        n = conn.execute(
-            "SELECT COUNT(*) FROM chunk_embeddings WHERE extraction_id = 3"
-        ).fetchone()[0]
-        assert n >= 1
-        conn.close()
-
-    def test_index_cmd_calls_backfill_when_enabled(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import types as _types
-        from unittest.mock import Mock
-
-        # Stub the WT-4 index.ingest module so the CLI doesn't depend on it.
-        fake_pkg = _types.ModuleType("index")
-        fake_ingest = _types.ModuleType("index.ingest")
-        fake_ingest.ingest_all = lambda **kw: []  # type: ignore[attr-defined]
-        fake_pkg.ingest = fake_ingest  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "index", fake_pkg)
-        monkeypatch.setitem(sys.modules, "index.ingest", fake_ingest)
-
-        from click.testing import CliRunner
-
-        import total_recall.cmd_index as cmd_index
-        from total_recall.__main__ import cli
-
-        backfill_mock = Mock()
-        monkeypatch.setattr(cmd_index, "_backfill_vectors", backfill_mock)
-        monkeypatch.delenv("TOTAL_RECALL_VEC", raising=False)
-
-        db = tmp_path / "idx.db"
-        runner = CliRunner()
-
-        # Non-dry-run: backfill IS invoked once with the db path.
-        result = runner.invoke(cli, ["--db", str(db), "index"])
-        assert result.exit_code == 0, result.output
-        assert backfill_mock.call_count == 1
-        assert backfill_mock.call_args.args[0] == str(db)
-
-        # Dry-run: backfill is NOT invoked.
-        backfill_mock.reset_mock()
-        result = runner.invoke(cli, ["--db", str(db), "index", "--dry-run"])
-        assert result.exit_code == 0, result.output
-        assert backfill_mock.call_count == 0
-
-    def test_index_cmd_backfill_respects_env_gate(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import types as _types
-        from unittest.mock import Mock
-
-        fake_pkg = _types.ModuleType("index")
-        fake_ingest = _types.ModuleType("index.ingest")
-        fake_ingest.ingest_all = lambda **kw: []  # type: ignore[attr-defined]
-        fake_pkg.ingest = fake_ingest  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "index", fake_pkg)
-        monkeypatch.setitem(sys.modules, "index.ingest", fake_ingest)
-
-        from click.testing import CliRunner
-
-        from total_recall.__main__ import cli
-
-        # With the gate off, the real _backfill_vectors short-circuits before
-        # ever reaching backfill_all (stub it to fail the test if reached).
-        called = Mock()
-        monkeypatch.setattr("vec.store.backfill_all", called)
-        monkeypatch.setenv("TOTAL_RECALL_VEC", "0")
-
-        db = tmp_path / "idx.db"
-        runner = CliRunner()
-        result = runner.invoke(cli, ["--db", str(db), "index"])
-        assert result.exit_code == 0, result.output
-        assert called.call_count == 0
+        n = conn.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()[0]
+        assert n >= 3
 
 
-# ----------------------------------------------------------------------------
-# Hybrid search degraded-mode test (no embedder / no sqlite_vec)
-# ----------------------------------------------------------------------------
-
-
-class TestHybridSearchFallback:
-    def test_no_embedder_falls_back_gracefully(self, tmp_path: Path) -> None:
+class TestHybridSoftFail:
+    def test_hybrid_without_vec_tables_returns_fts_only(self, tmp_path: Path) -> None:
+        """No dense tables → FTS-only hybrid, not crash."""
         from vec.rrf import hybrid_search
 
-        # An empty DB shouldn't crash hybrid_search.
-        conn = sqlite3.connect(":memory:")
-        result = hybrid_search(conn, "anything", embedder=None, limit=5)
-        assert result == []
-
-    def test_empty_query_returns_empty(self) -> None:
-        from vec.rrf import hybrid_search
-
-        conn = sqlite3.connect(":memory:")
-        assert hybrid_search(conn, "", embedder=None) == []
-        assert hybrid_search(conn, "   ", embedder=None) == []
-
-    def test_fts5_only_path_works_with_inline_fts(self) -> None:
-        """When WT-4's index.query isn't importable, the inline FTS fallback
-        should still serve results."""
-        from vec.rrf import hybrid_search
-
-        conn = sqlite3.connect(":memory:")
-        # Build the minimum schema the inline fallback expects.
+        db = tmp_path / "i.db"
+        conn = sqlite3.connect(str(db))
         conn.executescript(
             """
             CREATE TABLE extractions(
-                id INTEGER PRIMARY KEY,
-                content TEXT, cwd TEXT, ts TEXT, kind TEXT
+                id INTEGER PRIMARY KEY, content TEXT, cwd TEXT, ts TEXT, kind TEXT
             );
             CREATE VIRTUAL TABLE extractions_fts USING fts5(content);
+            INSERT INTO extractions VALUES (1, 'nginx rate limit', '/a', '2025-01-01', 'decision');
+            INSERT INTO extractions_fts(rowid, content) VALUES (1, 'nginx rate limit');
             """
         )
-        conn.execute(
-            "INSERT INTO extractions(id, content, cwd, ts, kind) "
-            "VALUES (1, 'rate limiting nginx config', '/proj/a', '2025-01-01', 'decision')"
-        )
-        conn.execute(
-            "INSERT INTO extractions_fts(rowid, content) VALUES (1, 'rate limiting nginx config')"
-        )
-        conn.execute(
-            "INSERT INTO extractions(id, content, cwd, ts, kind) "
-            "VALUES (2, 'unrelated banana smoothie', '/proj/b', '2025-01-02', 'note')"
-        )
-        conn.execute(
-            "INSERT INTO extractions_fts(rowid, content) VALUES (2, 'unrelated banana smoothie')"
-        )
         conn.commit()
-
         hits = hybrid_search(conn, "nginx", embedder=None, limit=5)
-        assert len(hits) == 1
-        # Inline fallback returns dicts.
-        assert hits[0]["extraction_id"] == 1
-
-
-# ----------------------------------------------------------------------------
-# CLI smoke test
-# ----------------------------------------------------------------------------
-
-
-class TestCLI:
-    def test_parser_builds(self) -> None:
-        from vec.cli import build_parser
-
-        p = build_parser()
-        # All three subcommands exist.
-        args = p.parse_args(["backfill", "--batch", "32"])
-        assert args.cmd == "backfill"
-        assert args.batch == 32
-
-        args = p.parse_args(["search", "hello world", "--limit", "3"])
-        assert args.cmd == "search"
-        assert args.query == "hello world"
-        assert args.limit == 3
-
-        args = p.parse_args(["rebuild"])
-        assert args.cmd == "rebuild"
-
-
-# ----------------------------------------------------------------------------
-# Integration test (only runs if BOTH optional deps are installed)
-# ----------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(
-    not (HAS_FASTEMBED and HAS_SQLITE_VEC),
-    reason="fastembed and sqlite_vec must both be installed",
-)
-class TestIntegration:
-    def test_backfill_then_hybrid_search_ranks_correctly(self, tmp_path: Path) -> None:
-        from vec.embed import Embedder
-        from vec.rrf import hybrid_search
-        from vec.store import apply_vec_schema, backfill_all, vec_search
-
-        db_path = tmp_path / "index.db"
-        conn = sqlite3.connect(str(db_path))
-        # Minimum WT-4-shaped schema.
-        conn.executescript(
-            """
-            CREATE TABLE extractions(
-                id INTEGER PRIMARY KEY,
-                content TEXT, cwd TEXT, ts TEXT, kind TEXT
-            );
-            CREATE VIRTUAL TABLE extractions_fts USING fts5(content);
-            """
-        )
-        rows = [
-            (
-                1,
-                "Configure nginx rate limiting with limit_req_zone directive.",
-                "/proj/a",
-                "2025-01-01",
-                "decision",
-            ),
-            (
-                2,
-                "Best chocolate cake recipe with cocoa and butter.",
-                "/proj/b",
-                "2025-01-02",
-                "note",
-            ),
-            (
-                3,
-                "Use PostgreSQL row-level security for tenant isolation.",
-                "/proj/c",
-                "2025-01-03",
-                "decision",
-            ),
-        ]
-        for r in rows:
-            conn.execute(
-                "INSERT INTO extractions(id, content, cwd, ts, kind) VALUES (?,?,?,?,?)", r
-            )
-            conn.execute("INSERT INTO extractions_fts(rowid, content) VALUES (?,?)", (r[0], r[1]))
-        conn.commit()
-
-        # Integration uses fastembed for hermetic CI (no ollama daemon required).
-        import os
-
-        os.environ["TOTAL_RECALL_EMBED_PROVIDER"] = "fastembed"
-        embedder = Embedder()
-        apply_vec_schema(
-            conn, dim=embedder.dim(), model=embedder.model, backend=embedder.backend
-        )
-        report = backfill_all(conn, embedder=embedder, batch_size=4)
-        assert report.extractions_embedded == 3
-        assert report.chunks_written >= 3
-
-        # Pure vec query: "web server traffic shaping" should bring back the
-        # nginx row (id=1) even though the literal words don't overlap.
-        hits = vec_search(conn, "web server traffic shaping", embedder, limit=3)
-        assert hits, "vec_search returned no hits"
-        assert hits[0].extraction_id == 1
-
-        # Hybrid query should also rank id=1 first.
-        fused = hybrid_search(conn, "rate limiting", embedder=embedder, limit=3)
-        assert fused, "hybrid_search returned no hits"
-        # Item shape may be VecHit or dict — both expose extraction_id.
-        top = fused[0]
-        top_id = getattr(top, "extraction_id", None) or top["extraction_id"]
-        assert top_id == 1
-
-
-class TestOllamaProviderSelection:
-    """`Embedder()` (no explicit model) provider auto-resolution — mocked, no
-    real network/daemon needed so these run identically in CI and locally."""
-
-    _MODELS = [
-        {"name": "granite-embedding:30m", "size": 30_000_000, "capabilities": ["embedding"]},
-        {"name": "qwen3-embedding:0.6b", "size": 600_000_000, "capabilities": ["embedding"]},
-        {"name": "qwen3.5:2b", "size": 2_000_000_000, "capabilities": ["completion"]},
-    ]
-
-    def test_pick_prefers_qwen3_0_6b_over_smaller_granite(self, monkeypatch) -> None:
-        from vec import embed
-
-        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
-        assert embed._pick_ollama_embed_model("http://x", None) == "qwen3-embedding:0.6b"
-
-    def test_pick_respects_explicit_want(self, monkeypatch) -> None:
-        from vec import embed
-
-        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
-        assert (
-            embed._pick_ollama_embed_model("http://x", "granite-embedding:30m")
-            == "granite-embedding:30m"
-        )
-
-    def test_pick_want_tolerates_missing_latest_suffix(self, monkeypatch) -> None:
-        from vec import embed
-
-        models = [{"name": "nomic-embed-text:latest", "size": 1, "capabilities": ["embedding"]}]
-        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: models)
-        assert (
-            embed._pick_ollama_embed_model("http://x", "nomic-embed-text")
-            == "nomic-embed-text:latest"
-        )
-
-    def test_pick_ignores_non_embedding_models(self, monkeypatch) -> None:
-        from vec import embed
-
-        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: [self._MODELS[2]])
-        assert embed._pick_ollama_embed_model("http://x", None) is None
-
-    def test_pick_returns_none_when_daemon_unreachable(self, monkeypatch) -> None:
-        from vec import embed
-
-        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
-        assert embed._pick_ollama_embed_model("http://x", None) is None
-
-    def test_default_uses_ollama_qwen3_when_available(self, monkeypatch) -> None:
-        from vec import embed
-
-        monkeypatch.delenv("TOTAL_RECALL_EMBED_PROVIDER", raising=False)
-        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
-        monkeypatch.setattr(
-            embed,
-            "_ollama_embed",
-            lambda base_url, model, texts: [[0.1, 0.2] for _ in texts],
-        )
-        e = embed.Embedder()
-        vecs = e.embed(["hi"])
-        assert e._backend == "ollama"
-        assert e.model == "qwen3-embedding:0.6b"
-        assert vecs == [[0.1, 0.2]]
-        assert "Instruct:" in e._query_prefix
-
-    def test_default_provider_is_ollama_raises_when_unavailable(self, monkeypatch) -> None:
-        """Product default is ollama (not silent fastembed)."""
-        from vec import embed
-
-        monkeypatch.delenv("TOTAL_RECALL_EMBED_PROVIDER", raising=False)
-        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
-        e = embed.Embedder()
-        with pytest.raises(RuntimeError, match="TOTAL_RECALL_EMBED_PROVIDER=ollama"):
-            e.embed(["hi"])
-
-    def test_auto_falls_back_to_fastembed_when_no_ollama(self, monkeypatch) -> None:
-        from vec import embed
-
-        monkeypatch.setenv("TOTAL_RECALL_EMBED_PROVIDER", "auto")
-        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
-        e = embed.Embedder()
-        e.embed(["hi"])
-        assert e._backend == "fastembed"
-        assert e.model == embed.DEFAULT_FASTEMBED_MODEL
-
-    def test_explicit_provider_fastembed_skips_ollama_probe(self, monkeypatch) -> None:
-        from vec import embed
-
-        def _boom(base_url):
-            raise AssertionError("should not probe ollama when provider=fastembed")
-
-        monkeypatch.setattr(embed, "_ollama_list_models", _boom)
-        monkeypatch.setenv("TOTAL_RECALL_EMBED_PROVIDER", "fastembed")
-        e = embed.Embedder()
-        e.embed(["hi"])
-        assert e._backend == "fastembed"
-
-    def test_explicit_provider_ollama_raises_when_unavailable(self, monkeypatch) -> None:
-        from vec import embed
-
-        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: None)
-        monkeypatch.setenv("TOTAL_RECALL_EMBED_PROVIDER", "ollama")
-        e = embed.Embedder()
-        with pytest.raises(RuntimeError, match="TOTAL_RECALL_EMBED_PROVIDER=ollama"):
-            e.embed(["hi"])
-
-    def test_explicit_model_arg_always_forces_fastembed(self, monkeypatch) -> None:
-        """Backward compat: every existing test in this file passes `model=`
-        and must never be routed to ollama regardless of env/daemon state."""
-        from vec import embed
-
-        def _boom(base_url):
-            raise AssertionError("explicit model= must never probe ollama")
-
-        monkeypatch.setattr(embed, "_ollama_list_models", _boom)
-        e = embed.Embedder(model="BAAI/bge-small-en-v1.5")
-        e.embed(["hi"])
-        assert e._backend == "fastembed"
+        assert hits

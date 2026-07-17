@@ -122,7 +122,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
 
 
 def _cmd_rebuild(args: argparse.Namespace) -> int:
-    """Drop vec tables — required when moving to format v2 (ollama-default) or model/dim change."""
+    """Drop vec tables — required when moving to format v2 (ollama-only) or model/dim change."""
     conn = _open_db(args.db)
     cur = conn.cursor()
     cur.execute("DROP TABLE IF EXISTS vec_chunks")
