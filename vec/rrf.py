@@ -22,6 +22,7 @@ def reciprocal_rank_fusion(
     rankings: list[list[Any]],
     k: int = 60,
     key: Callable[[Any], Any] = lambda x: x,
+    weights: list[float] | None = None,
 ) -> list[tuple[Any, float]]:
     """Combine multiple rankings into a single fused ranking.
 
@@ -35,6 +36,9 @@ def reciprocal_rank_fusion(
             from different rankings with the same `key(...)` are treated as the
             same result. The first occurrence (highest-ranked across all input
             lists) wins for the returned "item" payload.
+        weights: Optional per-ranking multipliers (same length as ``rankings``).
+            Default equal weight 1.0. Dense-primary hybrid uses a higher dense
+            weight so weak FTS matches cannot steal top-1.
 
     Returns:
         A list of `(item, score)` tuples sorted by descending score.
@@ -48,28 +52,91 @@ def reciprocal_rank_fusion(
         return []
 
     k = max(0, k)
+    if weights is None:
+        weights = [1.0] * len(rankings)
+    elif len(weights) != len(rankings):
+        raise ValueError("weights length must match rankings length")
 
     scores: dict[Any, float] = {}
-    # Track the canonical item to return for each identity. We keep the item
-    # that appeared *earliest* in the *highest-ranked* position across all
-    # input lists — i.e. the best-ranked observation.
+    # Track the canonical item to return for each identity. Prefer the item
+    # from the highest-weight ranking at its best rank (dense payload over FTS
+    # dict when both match the same extraction_id).
     best_item: dict[Any, Any] = {}
     best_rank: dict[Any, int] = {}
+    best_weight: dict[Any, float] = {}
 
-    for ranking in rankings:
-        if not ranking:
+    for ranking, weight in zip(rankings, weights, strict=True):
+        if not ranking or weight <= 0:
             continue
+        w = float(weight)
         for rank, item in enumerate(ranking):
             ident = key(item)
-            scores[ident] = scores.get(ident, 0.0) + 1.0 / (k + rank + 1)
+            scores[ident] = scores.get(ident, 0.0) + w / (k + rank + 1)
             prior = best_rank.get(ident)
-            if prior is None or rank < prior:
+            prior_w = best_weight.get(ident, 0.0)
+            # Prefer lower rank; on rank ties prefer higher-weight ranking's item.
+            if prior is None or rank < prior or (rank == prior and w > prior_w):
                 best_rank[ident] = rank
                 best_item[ident] = item
+                best_weight[ident] = w
 
     fused = [(best_item[ident], score) for ident, score in scores.items()]
     fused.sort(key=lambda pair: pair[1], reverse=True)
     return fused
+
+
+def _hybrid_mode() -> str:
+    """dense_primary | weighted_rrf | rrf — see hybrid_search docstring."""
+    import os
+
+    raw = (os.environ.get("TOTAL_RECALL_HYBRID_MODE") or "dense_primary").strip().lower()
+    if raw in ("dense_primary", "dense-first", "dense_first"):
+        return "dense_primary"
+    if raw in ("weighted_rrf", "weighted", "wrrf"):
+        return "weighted_rrf"
+    return "rrf"
+
+
+def _hybrid_weights() -> tuple[float, float]:
+    """(fts_weight, dense_weight) for weighted_rrf mode."""
+    import os
+
+    try:
+        fts_w = float(os.environ.get("TOTAL_RECALL_HYBRID_FTS_WEIGHT") or "1.0")
+    except ValueError:
+        fts_w = 1.0
+    try:
+        dense_w = float(os.environ.get("TOTAL_RECALL_HYBRID_DENSE_WEIGHT") or "3.0")
+    except ValueError:
+        dense_w = 3.0
+    return max(0.0, fts_w), max(0.0, dense_w)
+
+
+def _dense_primary_merge(vec_hits: list[Any], fts_hits: list[Any], limit: int) -> list[Any]:
+    """Dense rank order first; FTS only appends novel exact-keyword hits.
+
+    Preserves pure-dense P@1/P@5 on paraphrase queries (where FTS is noisy)
+    while still surfacing keyword-only rows dense missed.
+    """
+    out: list[Any] = []
+    seen: set[int] = set()
+    for item in vec_hits:
+        ident = _extraction_id(item)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        out.append(item)
+        if len(out) >= limit:
+            return out
+    for item in fts_hits:
+        ident = _extraction_id(item)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def hybrid_search(
@@ -80,21 +147,18 @@ def hybrid_search(
     cwd: str | None = None,
     kind: str | None = None,
 ) -> list[Any]:
-    """FTS5 + dense vector search, fused via RRF on `extraction_id`.
+    """FTS5 + dense vector search fused on ``extraction_id``.
 
     Behaviour:
-      * If `embedder is None` OR `sqlite_vec` is not installed OR the vec
-        tables don't exist yet → falls back to FTS5-only (still returns
-        results, just without the dense leg).
-      * Otherwise runs both retrievers, fuses, and returns the top `limit`
-        items. The returned items are whatever WT-4's `search_extractions`
-        returns (we re-use its row shape so callers get a single API).
+      * If ``embedder is None`` OR vec unavailable → FTS5-only.
+      * Default fusion mode ``dense_primary`` (env ``TOTAL_RECALL_HYBRID_MODE``):
+        keep dense rank order, then append FTS hits dense missed. Stops weak
+        FTS token matches from stealing top-1 from strong semantic hits.
+      * ``weighted_rrf``: classic RRF with dense weight default 3× FTS.
+      * ``rrf``: equal-weight RRF (legacy).
 
     The fusion key is `extraction_id`: a vec hit and an FTS5 hit that point to
     the same row are deduped.
-
-    Defensive imports: WT-4's `index.query` may not exist yet on this branch.
-    If it's missing we raise a clear error instead of an ImportError surprise.
     """
     if not query or not query.strip():
         return []
@@ -126,8 +190,27 @@ def hybrid_search(
     if kind is not None:
         vec_hits = [h for h in vec_hits if h.kind == kind]
 
+    if not vec_hits:
+        return list(fts_hits[:limit])
+    if not fts_hits:
+        return list(vec_hits[:limit])
+
+    mode = _hybrid_mode()
+    if mode == "dense_primary":
+        return _dense_primary_merge(list(vec_hits), list(fts_hits), limit)
+
+    if mode == "weighted_rrf":
+        fts_w, dense_w = _hybrid_weights()
+        fused = reciprocal_rank_fusion(
+            [list(fts_hits), list(vec_hits)],
+            k=60,
+            key=_extraction_id,
+            weights=[fts_w, dense_w],
+        )
+        return [item for item, _score in fused[:limit]]
+
     fused = reciprocal_rank_fusion(
-        [fts_hits, vec_hits],
+        [list(fts_hits), list(vec_hits)],
         k=60,
         key=_extraction_id,
     )

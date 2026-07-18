@@ -403,6 +403,32 @@ class TestIncrementalVecBackfill:
         assert n >= 3
 
 
+class TestWeightedRRF:
+    def test_weights_boost_second_ranking(self) -> None:
+        from vec.rrf import reciprocal_rank_fusion
+
+        # Equal weight: 'A' wins (rank0 in both). Dense-heavy: 'B' can win.
+        fts = ["A", "B"]
+        dense = ["B", "A"]
+        eq = reciprocal_rank_fusion([fts, dense], k=60)
+        assert eq[0][0] in ("A", "B")
+        heavy = reciprocal_rank_fusion([fts, dense], k=60, weights=[1.0, 10.0])
+        assert heavy[0][0] == "B"
+
+    def test_dense_primary_merge_keeps_dense_order(self) -> None:
+        from vec.rrf import _dense_primary_merge
+
+        class Hit:
+            def __init__(self, eid: int, content: str) -> None:
+                self.extraction_id = eid
+                self.content = content
+
+        dense = [Hit(2, "dense-first"), Hit(1, "dense-second")]
+        fts = [Hit(9, "fts-only"), Hit(1, "fts-dup")]
+        out = _dense_primary_merge(dense, fts, limit=5)
+        assert [h.content for h in out] == ["dense-first", "dense-second", "fts-only"]
+
+
 class TestHybridSoftFail:
     def test_hybrid_without_vec_tables_returns_fts_only(self, tmp_path: Path) -> None:
         """No dense tables → FTS-only hybrid, not crash."""

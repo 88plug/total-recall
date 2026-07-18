@@ -274,6 +274,9 @@ def eval_embeds() -> dict:
             "pairwise_target_beats_distractor": pairwise_ok / max(pairwise_n, 1),
             "gates": {
                 "hybrid_not_worse_than_fts_p@5": hyb.finalize()["p@5"] >= fts.finalize()["p@5"],
+                # dense_primary must not regress pure dense top-1 (was 0.40 vs 0.80)
+                "hybrid_p@1_near_dense": hyb.finalize()["p@1"] + 0.05 >= pure.finalize()["p@1"],
+                "hybrid_p@1_ge_0.75": hyb.finalize()["p@1"] >= 0.75,
                 "pure_dense_p@1_ge_0.5": pure.finalize()["p@1"] >= 0.5,
                 "pure_dense_mrr_ge_0.6": pure.finalize()["mrr"] >= 0.6,
                 "pairwise_ge_0.9": (pairwise_ok / max(pairwise_n, 1)) >= 0.9,

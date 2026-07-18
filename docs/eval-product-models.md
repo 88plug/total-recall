@@ -1,6 +1,6 @@
 # total-recall product model eval
 
-Generated: 2026-07-17 20:19:07 -0400
+Generated: 2026-07-17 20:31:12 -0400
 
 ## Product runtime
 ```json
@@ -69,38 +69,40 @@ Generated: 2026-07-17 20:19:07 -0400
   "backfill": {
     "embedded": 28,
     "chunks": 28,
-    "seconds": 0.577
+    "seconds": 0.627
   },
   "pure_dense": {
     "n": 20,
     "p@1": 0.8,
     "p@5": 0.95,
     "mrr": 0.8729166666666668,
-    "latency_ms_p50": 253.42532503418624,
-    "latency_ms_p95": 302.86622198764235,
-    "latency_ms_mean": 258.77259744738694
+    "latency_ms_p50": 275.4541980102658,
+    "latency_ms_p95": 370.4859220306389,
+    "latency_ms_mean": 276.7624404077651
   },
   "fts_only": {
     "n": 20,
     "p@1": 0.2,
     "p@5": 0.25,
     "mrr": 0.23125,
-    "latency_ms_p50": 0.6472690147347748,
-    "latency_ms_p95": 1.0334939579479396,
-    "latency_ms_mean": 0.6198975985171273
+    "latency_ms_p50": 0.633572053629905,
+    "latency_ms_p95": 1.0545109980739653,
+    "latency_ms_mean": 0.6904487469000742
   },
   "hybrid": {
     "n": 20,
-    "p@1": 0.4,
-    "p@5": 0.9,
-    "mrr": 0.61875,
-    "latency_ms_p50": 249.68102999264374,
-    "latency_ms_p95": 301.0294600389898,
-    "latency_ms_mean": 257.613805757137
+    "p@1": 0.8,
+    "p@5": 0.95,
+    "mrr": 0.8729166666666668,
+    "latency_ms_p50": 270.01538599142805,
+    "latency_ms_p95": 384.22725995769724,
+    "latency_ms_mean": 278.49626915121917
   },
   "pairwise_target_beats_distractor": 1.0,
   "gates": {
     "hybrid_not_worse_than_fts_p@5": true,
+    "hybrid_p@1_near_dense": true,
+    "hybrid_p@1_ge_0.75": true,
     "pure_dense_p@1_ge_0.5": true,
     "pure_dense_mrr_ge_0.6": true,
     "pairwise_ge_0.9": true
@@ -129,7 +131,7 @@ Generated: 2026-07-17 20:19:07 -0400
     {
       "name": "extract_decision",
       "pass": true,
-      "latency_ms": 1244.8,
+      "latency_ms": 1386.6,
       "output": {
         "decision": "use asyncpg",
         "topic": "database connection"
@@ -139,7 +141,7 @@ Generated: 2026-07-17 20:19:07 -0400
     {
       "name": "extract_ban",
       "pass": true,
-      "latency_ms": 1563.9,
+      "latency_ms": 1611.4,
       "output": {
         "banned": "committing .env files with secrets",
         "reason": "Always use a secret management vault instead"
@@ -149,7 +151,7 @@ Generated: 2026-07-17 20:19:07 -0400
     {
       "name": "classify_correction",
       "pass": true,
-      "latency_ms": 1479.7,
+      "latency_ms": 1641.3,
       "output": {
         "is_correction": true,
         "summary": "User requested switching from Black to Ruff for code formatting."
@@ -159,7 +161,7 @@ Generated: 2026-07-17 20:19:07 -0400
     {
       "name": "machine_ner",
       "pass": true,
-      "latency_ms": 2050.8,
+      "latency_ms": 2456.7,
       "output": {
         "hosts": [
           "web-01",
@@ -175,7 +177,7 @@ Generated: 2026-07-17 20:19:07 -0400
     {
       "name": "vocab_def",
       "pass": true,
-      "latency_ms": 2230.7,
+      "latency_ms": 2338.0,
       "output": {
         "term": "harness",
         "definition": "the Claude Code / Grok plugin runner"
@@ -184,7 +186,7 @@ Generated: 2026-07-17 20:19:07 -0400
     }
   ],
   "production_refine": {
-    "machines_ms": 2130.4,
+    "machines_ms": 2079.6,
     "machines": {
       "kept": [
         "asyncpg",
@@ -196,7 +198,7 @@ Generated: 2026-07-17 20:19:07 -0400
       "dropped_asyncpg": false
     },
     "machines_ok": true,
-    "vocab_ms": 2984.0,
+    "vocab_ms": 2824.3,
     "vocab_definitions": {
       "harness": "A plugin runner that manages Claude Code and Grok sessions by loading associated MCP servers and skills.",
       "project_key": "A mechanism used to collapse Git worktrees back to the repository root, which helps manage memory pooling."
@@ -218,6 +220,8 @@ Generated: 2026-07-17 20:19:07 -0400
 - `PASS` runtime.chat_model
 - `PASS` mtp.has_mtp_tensors
 - `PASS` embeds.hybrid_not_worse_than_fts_p@5
+- `PASS` embeds.hybrid_p@1_near_dense
+- `PASS` embeds.hybrid_p@1_ge_0.75
 - `PASS` embeds.pure_dense_p@1_ge_0.5
 - `PASS` embeds.pure_dense_mrr_ge_0.6
 - `PASS` embeds.pairwise_ge_0.9
@@ -226,4 +230,4 @@ Generated: 2026-07-17 20:19:07 -0400
 - `PASS` llm.machines_refine_keeps_real_hosts
 - `PASS` llm.vocab_refine_defines_term
 
-**Overall: PASS** (12/12 gates)
+**Overall: PASS** (14/14 gates)

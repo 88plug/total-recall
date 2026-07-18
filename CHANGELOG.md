@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.3] - 2026-07-18
+
+### Hybrid retrieval: dense-primary (fix top-1 regression)
+
+Equal-weight RRF let weak FTS token matches steal top-1 from strong dense hits
+(eval hybrid P@1 **0.40** vs pure dense **0.80**). Default fusion is now
+**`dense_primary`**: keep dense rank order, append novel FTS hits only.
+
+- Env: `TOTAL_RECALL_HYBRID_MODE=dense_primary|weighted_rrf|rrf`
+- Env: `TOTAL_RECALL_HYBRID_DENSE_WEIGHT` / `_FTS_WEIGHT` (weighted_rrf)
+- Weighted RRF also supported (default dense 3× FTS)
+- Eval gates: hybrid P@1 near pure dense; report in `docs/eval-product-models.md`
+
 ## [2.3.2] - 2026-07-17
 
 ### Product-owned ollama for embeds (design fix)

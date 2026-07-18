@@ -64,6 +64,18 @@ There is **no** `TOTAL_RECALL_EMBED_PROVIDER=fastembed`.
 Full opt-out of product ollama: `TOTAL_RECALL_VEC=0` **and**
 `TOTAL_RECALL_LLM_PROVIDER=none`.
 
+## Hybrid fusion
+
+Default **`dense_primary`**: dense rank order first, FTS only appends hits dense
+missed. Stops weak keyword matches from stealing top-1 (eval fix: hybrid P@1
+was 0.40 under equal RRF vs 0.80 pure dense).
+
+| `TOTAL_RECALL_HYBRID_MODE` | Behaviour |
+|----------------------------|-----------|
+| `dense_primary` (default) | Dense order + FTS fill |
+| `weighted_rrf` | RRF with dense weight 3× FTS (tunable) |
+| `rrf` | Equal-weight RRF (legacy) |
+
 ## Rebuild when
 
 - First dense setup
