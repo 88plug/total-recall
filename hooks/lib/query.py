@@ -280,6 +280,16 @@ def cmd_signpost(args):
 # --------------------------------------------------------------------------- #
 
 
+def _try_hybrid_hits(conn, prompt: str, cwd: str | None, limit: int):
+    """Dense+FTS hybrid when product ollama embed is available; else None."""
+    try:
+        from vec.rrf import try_hybrid_search  # type: ignore[import-not-found]
+
+        return try_hybrid_search(conn, prompt, limit=limit, cwd=cwd)
+    except Exception:
+        return None
+
+
 def cmd_prompt_relevant(args):
     """Emit per-prompt retrieval markdown, or nothing if no good hits."""
     q = _try_import_query()
@@ -289,6 +299,10 @@ def cmd_prompt_relevant(args):
     if not args.prompt or len(args.prompt.strip()) < 10:
         return 0
 
+    # Prefer hybrid (dense + FTS) with the natural-language prompt — same path
+    # as MCP recall(). FTS-only left misses paraphrase / "total recall" intent.
+    hits = _try_hybrid_hits(conn, args.prompt.strip(), args.cwd, args.limit)
+
     # FTS5 MATCH wants either a single token or OR-joined quoted tokens; a raw
     # whitespace-separated user sentence parses as AND-of-all-words and almost
     # never matches a single extraction row. Convert here.
@@ -296,9 +310,10 @@ def cmd_prompt_relevant(args):
 
     # Higher-level wrappers (if WT-4 ever ships one) take a natural-language
     # prompt; the lower-level FTS-backed primitives need the OR-joined form.
-    hits = _safe_call(q, "search_relevant", conn, args.prompt, args.cwd, args.limit) or _safe_call(
-        q, "prompt_relevant", conn, args.prompt, args.cwd, args.limit
-    )
+    if not hits:
+        hits = _safe_call(q, "search_relevant", conn, args.prompt, args.cwd, args.limit) or _safe_call(
+            q, "prompt_relevant", conn, args.prompt, args.cwd, args.limit
+        )
     if not hits and fts_query:
         # WT-4's real signature: search_extractions(conn, query, cwd, kind, scope, since, limit).
         hits = (

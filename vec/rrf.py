@@ -191,9 +191,12 @@ def _hit_rank_score(item: Any, query: str, dense_rank: int | None, fts_rank: int
 
     Lets hybrid recover when dense near-misses outrank a doc that actually
     contains the query's distinctive tokens (env vars, model tags, hosts).
+    Adversarial 10×: raise coverage + exactish weight so cross-seed confusion
+    (related product facts) loses to token-true hits.
     """
     content = _hit_content(item)
     cov = _token_coverage(query, content)
+    phrase = 1.0 if _exactish_match(query, content) else 0.0
     # Dense rank signal (rank 0 → ~1.0)
     dense_s = 0.0 if dense_rank is None else 1.0 / (1.0 + dense_rank)
     fts_s = 0.0 if fts_rank is None else 1.0 / (1.0 + fts_rank)
@@ -202,8 +205,62 @@ def _hit_rank_score(item: Any, query: str, dense_rank: int | None, fts_rank: int
     dist = getattr(item, "cosine_distance", None)
     if isinstance(dist, (int, float)):
         sim = max(0.0, 1.0 - float(dist))
-    # Weights: semantics first, then coverage, then each ranker
-    return 0.45 * sim + 0.25 * cov + 0.20 * dense_s + 0.10 * fts_s
+    # Kind boost already applied in vec_search order; re-apply lightly here so
+    # FTS-only items in the pool still lose to decisions when coverage ties.
+    kind = getattr(item, "kind", None) or (
+        item.get("kind") if isinstance(item, dict) else ""
+    )
+    try:
+        from .store import _DENSE_KIND_BOOST
+
+        kind_s = float(_DENSE_KIND_BOOST.get(str(kind or ""), 0.02)) / 0.14  # ~0..1
+    except Exception:  # noqa: BLE001
+        kind_s = 0.0
+    return (
+        0.32 * sim
+        + 0.28 * cov
+        + 0.15 * phrase
+        + 0.12 * dense_s
+        + 0.08 * fts_s
+        + 0.05 * kind_s
+    )
+
+
+def try_hybrid_search(
+    conn: sqlite3.Connection,
+    query: str,
+    *,
+    limit: int = 10,
+    cwd: str | None = None,
+    kind: str | None = None,
+) -> list[Any] | None:
+    """Best-effort hybrid search. ``None`` if vec/embed unavailable or empty query.
+
+    Use this from hooks and MCP tools that previously called FTS-only
+    ``search_extractions`` with free-text queries. Callers should fall back to
+    FTS when this returns ``None`` or ``[]``.
+    """
+    if not query or not str(query).strip():
+        return None
+    try:
+        from .embed import Embedder
+    except Exception as exc:  # noqa: BLE001
+        log.debug("try_hybrid_search: embed import failed: %r", exc)
+        return None
+    try:
+        embedder = Embedder()
+        hits = hybrid_search(
+            conn,
+            str(query).strip(),
+            embedder=embedder,
+            limit=limit,
+            cwd=cwd,
+            kind=kind,
+        )
+        return list(hits) if hits else []
+    except Exception as exc:  # noqa: BLE001
+        log.debug("try_hybrid_search failed: %r", exc)
+        return None
 
 
 def _dense_primary_merge(

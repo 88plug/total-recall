@@ -132,28 +132,40 @@ def recall_corrections_about(
     cwd_filter = _current_cwd() if scope == "this_cwd" else None
 
     try:
-        try:
-            hits = query_mod.search_extractions(
-                conn,
-                query=topic,
-                cwd=cwd_filter,
-                kind="model_correction",
-                limit=limit,
-            )
-        except TypeError:
-            # Older query API w/o `kind` kwarg — fall back and filter in Python.
-            hits = query_mod.search_extractions(
-                conn,
-                query=topic,
-                cwd=cwd_filter,
-                limit=limit,
-            )
-            hits = [
-                h
-                for h in hits
-                if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None))
-                == "model_correction"
-            ]
+        hits = None
+        # Hybrid first when topic is free text (total-recall = dense + FTS).
+        if (topic or "").strip():
+            try:
+                from vec.rrf import try_hybrid_search
+
+                hits = try_hybrid_search(
+                    conn, topic, limit=limit, cwd=cwd_filter, kind="model_correction",
+                )
+            except Exception:
+                hits = None
+        if not hits:
+            try:
+                hits = query_mod.search_extractions(
+                    conn,
+                    query=topic,
+                    cwd=cwd_filter,
+                    kind="model_correction",
+                    limit=limit,
+                )
+            except TypeError:
+                # Older query API w/o `kind` kwarg — fall back and filter in Python.
+                hits = query_mod.search_extractions(
+                    conn,
+                    query=topic,
+                    cwd=cwd_filter,
+                    limit=limit,
+                )
+                hits = [
+                    h
+                    for h in hits
+                    if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None))
+                    == "model_correction"
+                ]
     except Exception as e:
         log.exception("recall_corrections_about() failed")
         return [{"error": f"recall_corrections_about failed: {e!r}"}]

@@ -267,17 +267,28 @@ def _route_checking_past_correction(
         )
     cwd_filter = cwd_hint  # ``None`` → all projects
     try:
-        try:
-            hits = mod.search_extractions(
-                conn,
-                query=subject,
-                cwd=cwd_filter,
-                kind="model_correction",
-                limit=5,
-            )
-        except TypeError:
-            hits = mod.search_extractions(conn, query=subject, cwd=cwd_filter, limit=20)
-            hits = [h for h in hits if _hit_get(h, "kind") == "model_correction"]
+        hits = None
+        if (subject or "").strip():
+            try:
+                from vec.rrf import try_hybrid_search
+
+                hits = try_hybrid_search(
+                    conn, subject, limit=5, cwd=cwd_filter, kind="model_correction",
+                )
+            except Exception:
+                hits = None
+        if not hits:
+            try:
+                hits = mod.search_extractions(
+                    conn,
+                    query=subject,
+                    cwd=cwd_filter,
+                    kind="model_correction",
+                    limit=5,
+                )
+            except TypeError:
+                hits = mod.search_extractions(conn, query=subject, cwd=cwd_filter, limit=20)
+                hits = [h for h in hits if _hit_get(h, "kind") == "model_correction"]
     except Exception as e:
         log.exception("recall_targeted: search_extractions failed")
         return _empty_result(f"search_extractions failed: {e!r}")
@@ -370,7 +381,7 @@ def _route_operator_preference_lookup(conn: sqlite3.Connection, subject: str) ->
 def _route_have_we_discussed_this(
     conn: sqlite3.Connection, subject: str, cwd_hint: str | None
 ) -> dict:
-    """FTS sweep over extractions + raw messages for any mention of ``subject``."""
+    """Hybrid (prefer) + FTS sweep over extractions + messages for ``subject``."""
     mod = _load("query")
     if mod is None:
         return _empty_result(
@@ -379,7 +390,16 @@ def _route_have_we_discussed_this(
         )
 
     try:
-        ext_hits = mod.search_extractions(conn, query=subject, cwd=cwd_hint, limit=5)
+        ext_hits = None
+        if (subject or "").strip():
+            try:
+                from vec.rrf import try_hybrid_search
+
+                ext_hits = try_hybrid_search(conn, subject, limit=5, cwd=cwd_hint)
+            except Exception:
+                ext_hits = None
+        if not ext_hits:
+            ext_hits = mod.search_extractions(conn, query=subject, cwd=cwd_hint, limit=5)
     except Exception:
         ext_hits = []
 

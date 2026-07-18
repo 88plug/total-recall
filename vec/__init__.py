@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .embed import Embedder, chunk_for_embedding
-    from .rrf import hybrid_search, reciprocal_rank_fusion
+    from .rrf import hybrid_search, reciprocal_rank_fusion, try_hybrid_search
     from .store import (
         BackfillReport,
         VecHit,
@@ -31,6 +31,7 @@ __all__ = [
     "upsert_extraction_embedding",
     "vec_search",
     "hybrid_search",
+    "try_hybrid_search",
     "reciprocal_rank_fusion",
     "BackfillReport",
     "VecHit",
@@ -42,7 +43,7 @@ def __getattr__(name: str):
         from . import embed as _embed
 
         return getattr(_embed, name)
-    if name in {"hybrid_search", "reciprocal_rank_fusion"}:
+    if name in {"hybrid_search", "reciprocal_rank_fusion", "try_hybrid_search"}:
         from . import rrf as _rrf
 
         return getattr(_rrf, name)

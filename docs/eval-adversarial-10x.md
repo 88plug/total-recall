@@ -1,6 +1,6 @@
 # Adversarial 10× eval
 
-Generated: 2026-07-17 21:39:37 -0400
+Generated: 2026-07-17 21:44:37 -0400
 
 **n_pairs=432** seeds=84 docs=206 model=`qwen3-embedding:0.6b`
 
@@ -10,8 +10,8 @@ Generated: 2026-07-17 21:39:37 -0400
   "pure_dense": {
     "n": 432,
     "p@1": 0.5972,
-    "p@5": 0.8171,
-    "mrr": 0.6902,
+    "p@5": 0.8148,
+    "mrr": 0.6901,
     "miss_rate@1": 0.4028,
     "miss_samples": [
       "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
@@ -37,10 +37,10 @@ Generated: 2026-07-17 21:39:37 -0400
   },
   "hybrid": {
     "n": 432,
-    "p@1": 0.6296,
-    "p@5": 0.8773,
-    "mrr": 0.7365,
-    "miss_rate@1": 0.3704,
+    "p@1": 0.6505,
+    "p@5": 0.875,
+    "mrr": 0.7462,
+    "miss_rate@1": 0.3495,
     "miss_samples": [
       "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
       "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
@@ -55,16 +55,6 @@ Generated: 2026-07-17 21:39:37 -0400
 ## Worst families (by hybrid miss@1)
 ```json
 [
-  {
-    "family": "asymmetric_instruct",
-    "miss_rate@1": 1.0,
-    "p@1": 0.0
-  },
-  {
-    "family": "num_ctx_llm",
-    "miss_rate@1": 1.0,
-    "p@1": 0.0
-  },
   {
     "family": "searxng",
     "miss_rate@1": 1.0,
@@ -96,19 +86,14 @@ Generated: 2026-07-17 21:39:37 -0400
     "p@1": 0.2
   },
   {
-    "family": "format_v2",
-    "miss_rate@1": 0.8,
-    "p@1": 0.2
-  },
-  {
-    "family": "null_def",
-    "miss_rate@1": 0.8,
-    "p@1": 0.2
-  },
-  {
     "family": "vec_opt_out",
     "miss_rate@1": 0.8,
     "p@1": 0.2
+  },
+  {
+    "family": "alembic",
+    "miss_rate@1": 0.6,
+    "p@1": 0.4
   },
   {
     "family": "anti_echo",
@@ -121,12 +106,27 @@ Generated: 2026-07-17 21:39:37 -0400
     "p@1": 0.4
   },
   {
+    "family": "asymmetric_instruct",
+    "miss_rate@1": 0.6,
+    "p@1": 0.4
+  },
+  {
     "family": "batch_cap",
     "miss_rate@1": 0.6,
     "p@1": 0.4
   },
   {
     "family": "dense_primary",
+    "miss_rate@1": 0.6,
+    "p@1": 0.4
+  },
+  {
+    "family": "domain_instruct",
+    "miss_rate@1": 0.6,
+    "p@1": 0.4
+  },
+  {
+    "family": "echo_filter",
     "miss_rate@1": 0.6,
     "p@1": 0.4
   }
@@ -177,11 +177,12 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.6,
+      "p@1": 0.4,
       "p@5": 1.0,
-      "mrr": 0.8,
-      "miss_rate@1": 0.4,
+      "mrr": 0.6167,
+      "miss_rate@1": 0.6,
       "miss_samples": [
+        "decision: schema changes go through alembic revisions",
         "decision: schema changes go through alembic revisions",
         "decision: schema changes go through alembic revisions"
       ]
@@ -292,13 +293,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.0,
+      "p@1": 0.4,
       "p@5": 0.4,
-      "mrr": 0.225,
-      "miss_rate@1": 1.0,
+      "mrr": 0.4286,
+      "miss_rate@1": 0.6,
       "miss_samples": [
-        "decision: only search queries get Instruct/Query prefix; documents emb",
-        "decision: only search queries get Instruct/Query prefix; documents emb",
         "decision: only search queries get Instruct/Query prefix; documents emb",
         "decision: only search queries get Instruct/Query prefix; documents emb",
         "decision: only search queries get Instruct/Query prefix; documents emb"
@@ -575,7 +574,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.2,
       "p@5": 0.6,
-      "mrr": 0.3952,
+      "mrr": 0.3583,
       "miss_rate@1": 0.8,
       "miss_samples": [
         "decision: qwen3.5:2b is the refine model; 9b null-collapsed under thin",
@@ -610,7 +609,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.8,
       "p@5": 1.0,
-      "mrr": 0.85,
+      "mrr": 0.8667,
       "miss_rate@1": 0.2,
       "miss_samples": [
         "decision: chunk_for_embedding defaults around 400 tokens with overlap "
@@ -643,7 +642,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.7,
+      "mrr": 0.6667,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "standing rule: untested code is broken; prove with real check; persist",
@@ -680,8 +679,8 @@ Generated: 2026-07-17 21:39:37 -0400
     "hybrid": {
       "n": 5,
       "p@1": 0.4,
-      "p@5": 0.8,
-      "mrr": 0.5067,
+      "p@5": 0.6,
+      "mrr": 0.5,
       "miss_rate@1": 0.6,
       "miss_samples": [
         "decision: hybrid default is dense_primary so weak FTS cannot steal par",
@@ -721,7 +720,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.2,
       "p@5": 0.6,
-      "mrr": 0.3786,
+      "mrr": 0.3833,
       "miss_rate@1": 0.8,
       "miss_samples": [
         "decision: qwen3-embedding 0.6b native dim is 1024 with MRL down to 32",
@@ -799,7 +798,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.4,
       "p@5": 0.8,
-      "mrr": 0.5667,
+      "mrr": 0.55,
       "miss_rate@1": 0.6,
       "miss_samples": [
         "decision: client rejects outputs that are near-verbatim of input after",
@@ -839,8 +838,8 @@ Generated: 2026-07-17 21:39:37 -0400
     "hybrid": {
       "n": 5,
       "p@1": 0.2,
-      "p@5": 0.6,
-      "mrr": 0.3786,
+      "p@5": 0.8,
+      "mrr": 0.4067,
       "miss_rate@1": 0.8,
       "miss_samples": [
         "decision: product dense model tag is qwen3-embedding:0.6b (Q8_0 ~639MB",
@@ -1011,12 +1010,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.2,
+      "p@1": 0.4,
       "p@5": 1.0,
-      "mrr": 0.4833,
-      "miss_rate@1": 0.8,
+      "mrr": 0.6667,
+      "miss_rate@1": 0.6,
       "miss_samples": [
-        "decision: vec_meta format 2 marks ollama-only index; mismatch forces r",
         "decision: vec_meta format 2 marks ollama-only index; mismatch forces r",
         "decision: vec_meta format 2 marks ollama-only index; mismatch forces r",
         "decision: vec_meta format 2 marks ollama-only index; mismatch forces r"
@@ -1077,13 +1075,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.8,
+      "p@1": 1.0,
       "p@5": 1.0,
-      "mrr": 0.9,
-      "miss_rate@1": 0.2,
-      "miss_samples": [
-        "decision: license is FSL-1.1-ALv2 on the plugin"
-      ]
+      "mrr": 1.0,
+      "miss_rate@1": 0.0,
+      "miss_samples": []
     }
   },
   "gha": {
@@ -1356,8 +1352,8 @@ Generated: 2026-07-17 21:39:37 -0400
     "hybrid": {
       "n": 5,
       "p@1": 0.4,
-      "p@5": 1.0,
-      "mrr": 0.6167,
+      "p@5": 0.8,
+      "mrr": 0.57,
       "miss_rate@1": 0.6,
       "miss_samples": [
         "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
@@ -1451,11 +1447,13 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 1.0,
+      "p@1": 0.8,
       "p@5": 1.0,
-      "mrr": 1.0,
-      "miss_rate@1": 0.0,
-      "miss_samples": []
+      "mrr": 0.9,
+      "miss_rate@1": 0.2,
+      "miss_samples": [
+        "decision: qwen3-embedding uses last-token pool not mean pool; L2 norma"
+      ]
     }
   },
   "launchdarkly": {
@@ -1521,8 +1519,8 @@ Generated: 2026-07-17 21:39:37 -0400
     "pure_dense": {
       "n": 5,
       "p@1": 0.2,
-      "p@5": 0.6,
-      "mrr": 0.31,
+      "p@5": 0.4,
+      "mrr": 0.2986,
       "miss_rate@1": 0.8,
       "miss_samples": [
         "decision: TOTAL_RECALL_LLM_PROVIDER=none disables chat refine only not",
@@ -1544,12 +1542,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.4,
+      "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.55,
-      "miss_rate@1": 0.6,
+      "mrr": 0.65,
+      "miss_rate@1": 0.4,
       "miss_samples": [
-        "decision: TOTAL_RECALL_LLM_PROVIDER=none disables chat refine only not",
         "decision: TOTAL_RECALL_LLM_PROVIDER=none disables chat refine only not",
         "decision: TOTAL_RECALL_LLM_PROVIDER=none disables chat refine only not"
       ]
@@ -1613,12 +1610,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.6,
+      "p@1": 0.8,
       "p@5": 0.8,
-      "mrr": 0.7,
-      "miss_rate@1": 0.4,
+      "mrr": 0.8,
+      "miss_rate@1": 0.2,
       "miss_samples": [
-        "decision: refine_machines few-shot drops Monday and asyncpg while keep",
         "decision: refine_machines few-shot drops Monday and asyncpg while keep"
       ]
     }
@@ -1744,12 +1740,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.4,
+      "p@1": 0.6,
       "p@5": 1.0,
-      "mrr": 0.6167,
-      "miss_rate@1": 0.6,
+      "mrr": 0.75,
+      "miss_rate@1": 0.4,
       "miss_samples": [
-        "decision: legacy HF embed ids like gte-modernbert are rejected; ollama",
         "decision: legacy HF embed ids like gte-modernbert are rejected; ollama",
         "decision: legacy HF embed ids like gte-modernbert are rejected; ollama"
       ]
@@ -1810,11 +1805,14 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 1.0,
+      "p@1": 0.6,
       "p@5": 1.0,
-      "mrr": 1.0,
-      "miss_rate@1": 0.0,
-      "miss_samples": []
+      "mrr": 0.8,
+      "miss_rate@1": 0.4,
+      "miss_samples": [
+        "decision: services talk over nats jetstream not rabbitmq or kafka for ",
+        "decision: services talk over nats jetstream not rabbitmq or kafka for "
+      ]
     }
   },
   "null_def": {
@@ -1843,13 +1841,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.2,
+      "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.5,
-      "miss_rate@1": 0.8,
+      "mrr": 0.7,
+      "miss_rate@1": 0.4,
       "miss_samples": [
-        "decision: vocab refine returns null definition when snippet is only th",
-        "decision: vocab refine returns null definition when snippet is only th",
         "decision: vocab refine returns null definition when snippet is only th",
         "decision: vocab refine returns null definition when snippet is only th"
       ]
@@ -1919,13 +1915,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.0,
+      "p@1": 0.4,
       "p@5": 0.8,
-      "mrr": 0.375,
-      "miss_rate@1": 1.0,
+      "mrr": 0.6,
+      "miss_rate@1": 0.6,
       "miss_samples": [
-        "decision: LLM refine client pins num_ctx 4096 for short refine jobs no",
-        "decision: LLM refine client pins num_ctx 4096 for short refine jobs no",
         "decision: LLM refine client pins num_ctx 4096 for short refine jobs no",
         "decision: LLM refine client pins num_ctx 4096 for short refine jobs no",
         "decision: LLM refine client pins num_ctx 4096 for short refine jobs no"
@@ -2118,7 +2112,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.8,
       "p@5": 1.0,
-      "mrr": 0.8667,
+      "mrr": 0.9,
       "miss_rate@1": 0.2,
       "miss_samples": [
         "decision: pytest is the only supported test runner"
@@ -2261,7 +2255,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 1.0,
-      "mrr": 0.75,
+      "mrr": 0.7067,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "standing rule: try to refute a finding before trusting it; default to ",
@@ -2294,7 +2288,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.8,
       "p@5": 1.0,
-      "mrr": 0.8667,
+      "mrr": 0.85,
       "miss_rate@1": 0.2,
       "miss_samples": [
         "standing rule: reuse-before-build; do not parallel invent when existin"
@@ -2393,11 +2387,14 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 1.0,
+      "p@1": 0.6,
       "p@5": 1.0,
-      "mrr": 1.0,
-      "miss_rate@1": 0.0,
-      "miss_samples": []
+      "mrr": 0.7333,
+      "miss_rate@1": 0.4,
+      "miss_samples": [
+        "decision: run ruff for linting and formatting drop black never reintro",
+        "decision: run ruff for linting and formatting drop black never reintro"
+      ]
     }
   },
   "schema_format": {
@@ -2426,7 +2423,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 1.0,
-      "mrr": 0.7167,
+      "mrr": 0.7667,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "decision: pass full JSON Schema as format for constrained decode not f",
@@ -2607,7 +2604,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.0,
       "p@5": 1.0,
-      "mrr": 0.3667,
+      "mrr": 0.4333,
       "miss_rate@1": 1.0,
       "miss_samples": [
         "decision: mines transcripts from 10 CLI clients including Claude Code ",
@@ -2644,12 +2641,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.6,
+      "p@1": 0.8,
       "p@5": 1.0,
-      "mrr": 0.8,
-      "miss_rate@1": 0.4,
+      "mrr": 0.9,
+      "miss_rate@1": 0.2,
       "miss_samples": [
-        "decision: SubagentStart inject-claudemd-into-subagents.sh re-injects g",
         "decision: SubagentStart inject-claudemd-into-subagents.sh re-injects g"
       ]
     }
@@ -2749,12 +2745,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.6,
+      "p@1": 0.8,
       "p@5": 1.0,
-      "mrr": 0.75,
-      "miss_rate@1": 0.4,
+      "mrr": 0.85,
+      "miss_rate@1": 0.2,
       "miss_samples": [
-        "decision: generate_json sets think false so qwen does not emit think b",
         "decision: generate_json sets think false so qwen does not emit think b"
       ]
     }
@@ -2814,7 +2809,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.6786,
+      "mrr": 0.6952,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "decision: stay on 0.6b embed; upgrade to 4b only if instruction-heavy ",
@@ -2846,12 +2841,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.6,
+      "p@1": 0.8,
       "p@5": 1.0,
-      "mrr": 0.8,
-      "miss_rate@1": 0.4,
+      "mrr": 0.9,
+      "miss_rate@1": 0.2,
       "miss_samples": [
-        "decision: UserPromptSubmit runs decide_and_format for on-demand memory",
         "decision: UserPromptSubmit runs decide_and_format for on-demand memory"
       ]
     }
@@ -2994,12 +2988,11 @@ Generated: 2026-07-17 21:39:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.4,
+      "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.62,
-      "miss_rate@1": 0.6,
+      "mrr": 0.72,
+      "miss_rate@1": 0.4,
       "miss_samples": [
-        "standing rule: verify before announce; mark provisional when unconfirm",
         "standing rule: verify before announce; mark provisional when unconfirm",
         "standing rule: verify before announce; mark provisional when unconfirm"
       ]
@@ -3029,7 +3022,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 1.0,
-      "mrr": 0.7667,
+      "mrr": 0.7167,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "decision: migrated the web app bundler to vite from webpack",
@@ -3065,7 +3058,7 @@ Generated: 2026-07-17 21:39:37 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.6722,
+      "mrr": 0.65,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "decision: weighted_rrf mode available with dense weight default 3x FTS",

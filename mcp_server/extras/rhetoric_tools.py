@@ -144,26 +144,38 @@ def get_past_truth_assertions(
     fetch_limit = max(limit * 4, limit)
 
     try:
-        try:
-            hits = query_mod.search_extractions(
-                conn,
-                query=topic or "",
-                kind="truth_assertion",
-                limit=fetch_limit,
-            )
-        except TypeError:
-            # Older query API w/o `kind` kwarg — filter in Python.
-            hits = query_mod.search_extractions(
-                conn,
-                query=topic or "",
-                limit=fetch_limit,
-            )
-            hits = [
-                h
-                for h in hits
-                if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None))
-                == "truth_assertion"
-            ]
+        hits = None
+        qtext = (topic or "").strip()
+        if qtext:
+            try:
+                from vec.rrf import try_hybrid_search
+
+                hits = try_hybrid_search(
+                    conn, qtext, limit=fetch_limit, kind="truth_assertion",
+                )
+            except Exception:
+                hits = None
+        if not hits:
+            try:
+                hits = query_mod.search_extractions(
+                    conn,
+                    query=topic or "",
+                    kind="truth_assertion",
+                    limit=fetch_limit,
+                )
+            except TypeError:
+                # Older query API w/o `kind` kwarg — filter in Python.
+                hits = query_mod.search_extractions(
+                    conn,
+                    query=topic or "",
+                    limit=fetch_limit,
+                )
+                hits = [
+                    h
+                    for h in hits
+                    if (h["kind"] if hasattr(h, "keys") else getattr(h, "kind", None))
+                    == "truth_assertion"
+                ]
     except Exception as e:
         log.exception("get_past_truth_assertions() failed")
         return [{"error": f"get_past_truth_assertions failed: {e!r}"}]

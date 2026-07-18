@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [2.3.4] - 2026-07-18
 
+### Fixed — total recall means total (hybrid on all free-text paths)
+
+- **UserPromptSubmit / `cmd_prompt_relevant`** used FTS only; now tries
+  ``try_hybrid_search`` first (same dense+FTS stack as MCP ``recall``).
+- **MCP free-text tools** now prefer hybrid: `find_failed_attempts`,
+  `find_user_preferences` (when domain set), `recall_corrections_about`,
+  `recall_targeted` (corrections + discussed), `get_past_truth_assertions`.
+- Empty-query browses stay FTS (kind/session lists). Soft-fail to FTS if
+  embed/vec unavailable.
+- Hybrid re-rank: higher token-coverage + exactish + light kind weight
+  (adversarial 10× cross-seed confusion).
+
 ### Improved — model-card crank (embed + refine)
 
 - **Domain query instruct** for `qwen3-embedding:0.6b` (session memory /

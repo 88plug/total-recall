@@ -1,15 +1,15 @@
 # total-recall eval round 2 (brand-new suites)
 
-Generated: 2026-07-17 20:59:42 -0400
+Generated: 2026-07-17 21:45:16 -0400
 
 Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
 
 ## Macro retrieval
 ```json
 {
-  "mean_hybrid_p@1": 0.869047619047619,
+  "mean_hybrid_p@1": 0.8333333333333333,
   "mean_hybrid_p@5": 1.0,
-  "mean_miss_rate@1": 0.13095238095238096
+  "mean_miss_rate@1": 0.16666666666666669
 }
 ```
 
@@ -25,7 +25,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 0.875,
       "miss_rate@1": 0.25,
-      "latency_ms_p50": 279.5279219863005,
+      "latency_ms_p50": 177.5557060027495,
       "miss_samples": [
         "session 2026-07-16: ollama keep_alive was 5m so qwen3-embedding unload",
         "product-owned path: ensure_product_ollama downloads bin under plugin d"
@@ -37,7 +37,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 0.9166666666666666,
       "miss_rate@1": 0.125,
-      "latency_ms_p50": 1.2141530169174075,
+      "latency_ms_p50": 0.7174080237746239,
       "miss_samples": [
         "standing rule: always set a hard max_tokens and stream-cancel on clien"
       ]
@@ -48,13 +48,13 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 0.875,
       "miss_rate@1": 0.25,
-      "latency_ms_p50": 268.4465119964443,
+      "latency_ms_p50": 178.61247202381492,
       "miss_samples": [
         "session 2026-07-16: ollama keep_alive was 5m so qwen3-embedding unload",
         "product-owned path: ensure_product_ollama downloads bin under plugin d"
       ]
     },
-    "backfill_s": 0.427,
+    "backfill_s": 0.329,
     "embedded": 13
   },
   "R2_paraphrase": {
@@ -66,7 +66,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 0.7777777777777778,
       "miss_rate@1": 0.33333333333333337,
-      "latency_ms_p50": 252.75649200193584,
+      "latency_ms_p50": 171.43425199901685,
       "miss_samples": [
         "refine_machines must drop hallucinated keys not present in the input c",
         "Instruct line describes session memory retrieval then Query: plus the "
@@ -78,7 +78,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 0.6666666666666666,
       "mrr": 0.5833333333333334,
       "miss_rate@1": 0.5,
-      "latency_ms_p50": 1.023473043460399,
+      "latency_ms_p50": 0.5881569813936949,
       "miss_samples": [
         "TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 stops the embed model from unloading ",
         "searxng MCP prefers 192.168.1.211:8890 then docker then tailscale back",
@@ -89,12 +89,12 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "n": 6,
       "p@1": 0.6666666666666666,
       "p@5": 1.0,
-      "mrr": 0.7777777777777778,
+      "mrr": 0.8055555555555555,
       "miss_rate@1": 0.33333333333333337,
-      "latency_ms_p50": 243.09924995759502,
+      "latency_ms_p50": 170.4315200331621,
       "miss_samples": [
-        "refine_machines must drop hallucinated keys not present in the input c",
-        "Instruct line describes session memory retrieval then Query: plus the "
+        "TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 stops the embed model from unloading ",
+        "refine_machines must drop hallucinated keys not present in the input c"
       ]
     }
   },
@@ -107,7 +107,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 1.0,
       "miss_rate@1": 0.0,
-      "latency_ms_p50": 305.6818959885277,
+      "latency_ms_p50": 202.8571300324984,
       "miss_samples": []
     },
     "fts_only": {
@@ -116,19 +116,21 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 0.8333333333333334,
       "miss_rate@1": 0.25,
-      "latency_ms_p50": 1.299456984270364,
+      "latency_ms_p50": 0.7560689700767398,
       "miss_samples": [
         "decision: ollama qwen3-embedding:0.6b is the only dense path; fastembe"
       ]
     },
     "hybrid": {
       "n": 4,
-      "p@1": 1.0,
+      "p@1": 0.75,
       "p@5": 1.0,
-      "mrr": 1.0,
-      "miss_rate@1": 0.0,
-      "latency_ms_p50": 332.19196303980425,
-      "miss_samples": []
+      "mrr": 0.875,
+      "miss_rate@1": 0.25,
+      "latency_ms_p50": 203.04699504049495,
+      "miss_samples": [
+        "decision: ollama qwen3-embedding:0.6b is the only dense path; fastembe"
+      ]
     }
   },
   "R4_corrections": {
@@ -140,7 +142,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 1.0,
       "miss_rate@1": 0.0,
-      "latency_ms_p50": 269.54150799429044,
+      "latency_ms_p50": 189.2590259667486,
       "miss_samples": []
     },
     "fts_only": {
@@ -149,7 +151,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 1.0,
       "miss_rate@1": 0.0,
-      "latency_ms_p50": 0.8360280189663172,
+      "latency_ms_p50": 0.4887859686277807,
       "miss_samples": []
     },
     "hybrid": {
@@ -158,7 +160,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 1.0,
       "miss_rate@1": 0.0,
-      "latency_ms_p50": 262.6560729695484,
+      "latency_ms_p50": 181.41257599927485,
       "miss_samples": []
     }
   },
@@ -171,7 +173,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 0.8,
       "miss_rate@1": 0.4,
-      "latency_ms_p50": 232.5014439993538,
+      "latency_ms_p50": 153.1331279547885,
       "miss_samples": [
         "product embed model tag is qwen3-embedding:0.6b (1024-d MRL, Q8_0 ~639",
         "ops: nginx restarted on web-01 after certificate rotation"
@@ -183,7 +185,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 1.0,
       "miss_rate@1": 0.0,
-      "latency_ms_p50": 0.6300330278463662,
+      "latency_ms_p50": 0.3474400145933032,
       "miss_samples": []
     },
     "hybrid": {
@@ -192,7 +194,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 1.0,
       "miss_rate@1": 0.0,
-      "latency_ms_p50": 227.379969030153,
+      "latency_ms_p50": 154.11436097929254,
       "miss_samples": []
     }
   },
@@ -205,7 +207,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 0.8333333333333334,
       "miss_rate@1": 0.33333333333333337,
-      "latency_ms_p50": 249.50545001775026,
+      "latency_ms_p50": 148.03310704883188,
       "miss_samples": [
         "decision: ship qwen3-embedding:0.6b; upgrade to 4b only if instruction"
       ]
@@ -216,7 +218,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 0.6666666666666666,
       "mrr": 0.6666666666666666,
       "miss_rate@1": 0.33333333333333337,
-      "latency_ms_p50": 0.6084099877625704,
+      "latency_ms_p50": 0.4294810350984335,
       "miss_samples": [
         "decision: ship qwen3-embedding:0.6b; upgrade to 4b only if instruction"
       ]
@@ -227,7 +229,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 0.8333333333333334,
       "miss_rate@1": 0.33333333333333337,
-      "latency_ms_p50": 231.82308598188683,
+      "latency_ms_p50": 148.26501597417518,
       "miss_samples": [
         "decision: ship qwen3-embedding:0.6b; upgrade to 4b only if instruction"
       ]
@@ -242,7 +244,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 1.0,
       "miss_rate@1": 0.0,
-      "latency_ms_p50": 235.75610300758854,
+      "latency_ms_p50": 150.42987698689103,
       "miss_samples": []
     },
     "fts_only": {
@@ -251,7 +253,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 0.6666666666666666,
       "mrr": 0.6666666666666666,
       "miss_rate@1": 0.33333333333333337,
-      "latency_ms_p50": 0.6423550075851381,
+      "latency_ms_p50": 0.46340603148564696,
       "miss_samples": [
         "rejected: publishing total-recall as a pure pip wheel without the plug"
       ]
@@ -262,7 +264,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
       "p@5": 1.0,
       "mrr": 1.0,
       "miss_rate@1": 0.0,
-      "latency_ms_p50": 237.2454369906336,
+      "latency_ms_p50": 145.9791980450973,
       "miss_samples": []
     }
   },
@@ -337,7 +339,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
     {
       "name": "extract_standing_ban",
       "pass": true,
-      "latency_ms": 1352.2,
+      "latency_ms": 1082.4,
       "output": {
         "banned": "rm -rf on an unbraced shell variable",
         "scope": "shell"
@@ -347,7 +349,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
     {
       "name": "extract_preference_voice",
       "pass": true,
-      "latency_ms": 1502.4,
+      "latency_ms": 1069.3,
       "output": {
         "preference": "lowercase terse no preamble we framing zero emoji",
         "evidence": "talk like me"
@@ -357,7 +359,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
     {
       "name": "classify_not_correction",
       "pass": true,
-      "latency_ms": 1792.0,
+      "latency_ms": 1548.4,
       "output": {
         "is_correction": false,
         "summary": "The user's message is a standard project management instruction regarding testing outcomes and deployment, not a request for correction or verification of facts."
@@ -367,7 +369,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
     {
       "name": "multi_host_evidence",
       "pass": true,
-      "latency_ms": 2598.6,
+      "latency_ms": 2412.1,
       "output": {
         "hosts": [
           {
@@ -385,7 +387,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
     {
       "name": "grounded_null_def",
       "pass": true,
-      "latency_ms": 1268.9,
+      "latency_ms": 745.7,
       "output": {
         "term": "blorptree",
         "definition": null
@@ -395,7 +397,7 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
     {
       "name": "decision_with_reject",
       "pass": true,
-      "latency_ms": 1009.9,
+      "latency_ms": 745.5,
       "output": {
         "chosen": "screen-mcp",
         "rejected": "playwright"
@@ -404,14 +406,14 @@ Post model-card crank learnings. New corpora — not the 2.3.3/2.3.4 easy set.
     }
   ],
   "production_refine": {
-    "machines_ms": 1266.4,
+    "machines_ms": 1091.5,
     "kept": [
       "edge-relay",
       "gpu-box-3"
     ],
     "machines_ok": true,
     "precision": true,
-    "vocab_ms": 3018.4,
+    "vocab_ms": 3066.8,
     "definitions": {
       "dense_primary": "A retrieval strategy that prioritizes vector ranking while selectively adding fuzzy text search results to prevent weaker keywords from displacing top-ranked matches.",
       "product ollama": "An Ollama instance that is owned and managed as a separate plugin component within the application's data directory, responsible for serving both embedding and chat models."

@@ -354,6 +354,20 @@ def find_failed_attempts(pattern: str, cwd: str | None = None, limit: int = 5) -
     target_cwd = cwd if explicit_cwd else _current_cwd()
 
     def _run(cwd_filter: str | None):
+        # Hybrid first (same stack as recall) so paraphrase corrections surface.
+        rrf_mod, embedder = _load_vec_module()
+        if rrf_mod is not None and embedder is not None:
+            try:
+                return rrf_mod.hybrid_search(
+                    conn,
+                    pattern,
+                    embedder,
+                    limit=limit,
+                    cwd=cwd_filter,
+                    kind="correction",
+                )
+            except Exception:
+                log.debug("find_failed_attempts hybrid failed; FTS fallback", exc_info=True)
         return query_mod.search_extractions(
             conn,
             query=pattern,
@@ -432,10 +446,21 @@ def find_user_preferences(
         return [{"error": "index.query module not available on this branch"}]
 
     def _run(cwd_filter: str | None) -> list[Any]:
-        # Preferences usually surface as corrections + domain_facts. We pull
-        # both and rely on score-ranking inside `search_extractions`.
+        # Preferences usually surface as corrections + domain_facts. Free-text
+        # domain → hybrid; empty domain → FTS kind browse (hybrid needs a query).
         out: list[Any] = []
+        qtext = (domain or "").strip()
+        rrf_mod, embedder = _load_vec_module()
         for k in ("correction", "domain_fact"):
+            if qtext and rrf_mod is not None and embedder is not None:
+                try:
+                    chunk = rrf_mod.hybrid_search(
+                        conn, qtext, embedder, limit=limit, cwd=cwd_filter, kind=k,
+                    )
+                    out.extend(chunk)
+                    continue
+                except Exception:
+                    log.debug("find_user_preferences hybrid failed; FTS", exc_info=True)
             chunk = query_mod.search_extractions(
                 conn,
                 query=domain or "",
