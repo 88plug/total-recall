@@ -132,12 +132,13 @@ def _exactish_match(query: str, content: str) -> bool:
         return False
     if q in c:
         return True
-    # tokens: keep alnum + common id punctuation (:, ., _, -, /)
-    import re
-
-    toks = re.findall(r"[a-z0-9][a-z0-9:._/-]{1,}", q)
-    toks = [t for t in toks if len(t) >= 2 and t not in {"in", "on", "the", "a", "an", "to", "for", "of"}]
-    return bool(toks) and all(t in c for t in toks)
+    toks = _query_tokens(query)
+    if not toks:
+        return False
+    # Single identifier query: substring match is enough (don't require stopwords)
+    if len(toks) == 1 and _token_weight(toks[0]) >= 1.5:
+        return toks[0] in c
+    return all(t in c for t in toks)
 
 
 def _merge_primary(primary: list[Any], secondary: list[Any], limit: int) -> list[Any]:
@@ -163,66 +164,124 @@ def _merge_primary(primary: list[Any], secondary: list[Any], limit: int) -> list
     return out
 
 
-def _token_coverage(query: str, content: str) -> float:
-    """Fraction of significant query tokens present in content (0..1)."""
+def _query_tokens(query: str) -> list[str]:
     import re
 
     q = (query or "").strip().lower()
-    c = (content or "").lower()
-    if not q or not c:
-        return 0.0
     stop = {
         "in", "on", "the", "a", "an", "to", "for", "of", "we", "how", "do",
         "did", "is", "are", "was", "what", "which", "when", "with", "from",
         "that", "this", "our", "and", "or", "not", "only", "get", "got",
+        "should", "must", "can", "use", "using", "used", "vs", "versus",
     }
-    toks = [
+    return [
         t
         for t in re.findall(r"[a-z0-9][a-z0-9:._/-]{1,}", q)
         if len(t) >= 2 and t not in stop
     ]
-    if not toks:
+
+
+def _token_weight(tok: str) -> float:
+    """Heavier weight for identifiers (env vars, model tags, hostnames, dims)."""
+    w = 1.0
+    if any(c in tok for c in ":_/.-"):
+        w += 2.0  # qwen3-embedding:0.6b, TOTAL_RECALL_VEC, web-01
+    if len(tok) >= 10:
+        w += 0.75
+    elif len(tok) >= 6:
+        w += 0.35
+    # ALL_CAPS-ish env tokens
+    if tok.isupper() or (tok.isupper() is False and tok == tok.upper() and "_" in tok):
+        w += 0.5
+    if any(ch.isdigit() for ch in tok) and any(ch.isalpha() for ch in tok):
+        w += 0.5  # 0.6b, 4096, 2b mixed
+    return w
+
+
+def _token_coverage(query: str, content: str) -> float:
+    """Weighted fraction of significant query tokens present in content (0..1)."""
+    c = (content or "").lower()
+    toks = _query_tokens(query)
+    if not toks or not c:
         return 0.0
-    return sum(1 for t in toks if t in c) / len(toks)
+    num = 0.0
+    den = 0.0
+    for t in toks:
+        w = _token_weight(t)
+        den += w
+        if t in c:
+            num += w
+    return num / den if den else 0.0
+
+
+def _identifier_centrality(query: str, content: str) -> float:
+    """Prefer docs where query identifiers appear early / as primary subject.
+
+    Fixes cross-seed theft: ``qwen3-embedding:0.6b`` query ranking a dim-fact
+    that merely *mentions* the tag over the model-tag decision itself.
+    """
+    import re
+
+    c = (content or "").lower()
+    q = (query or "").strip().lower()
+    if not c or not q:
+        return 0.0
+    idents = re.findall(
+        r"[a-z0-9]+(?:[._:-][a-z0-9]+)+|[a-z]*_[a-z0-9_]+|[a-z]+-\d+",
+        q,
+    )
+    if not idents:
+        # single short id host/env without punctuation
+        toks = _query_tokens(query)
+        idents = [t for t in toks if _token_weight(t) >= 1.5] or toks[:1]
+    best = 0.0
+    for ident in idents:
+        pos = c.find(ident)
+        if pos < 0:
+            continue
+        # Earlier mention + shorter focused doc wins ties among exact matches
+        pos_s = 1.0 - min(pos, 160) / 160.0
+        len_s = 1.0 / (1.0 + len(c) / 180.0)
+        # Bonus if ident appears in first clause (before first period)
+        first = c.split(".", 1)[0]
+        head_s = 1.0 if ident in first else 0.3
+        best = max(best, 0.4 * pos_s + 0.3 * len_s + 0.3 * head_s)
+    return best
 
 
 def _hit_rank_score(item: Any, query: str, dense_rank: int | None, fts_rank: int | None) -> float:
-    """Higher is better. Blends RRF-ish rank with lexical coverage.
+    """Higher is better. Blends cosine, weighted lexical coverage, identifiers.
 
-    Lets hybrid recover when dense near-misses outrank a doc that actually
-    contains the query's distinctive tokens (env vars, model tags, hosts).
-    Adversarial 10×: raise coverage + exactish weight so cross-seed confusion
-    (related product facts) loses to token-true hits.
+    Adversarial 10×: related product facts share vocabulary — identifier
+    centrality + weighted coverage beat pure cosine on symbol/env/model queries.
     """
     content = _hit_content(item)
     cov = _token_coverage(query, content)
     phrase = 1.0 if _exactish_match(query, content) else 0.0
-    # Dense rank signal (rank 0 → ~1.0)
+    ident = _identifier_centrality(query, content)
     dense_s = 0.0 if dense_rank is None else 1.0 / (1.0 + dense_rank)
     fts_s = 0.0 if fts_rank is None else 1.0 / (1.0 + fts_rank)
-    # Cosine distance when present (VecHit): convert to similarity
     sim = 0.0
     dist = getattr(item, "cosine_distance", None)
     if isinstance(dist, (int, float)):
         sim = max(0.0, 1.0 - float(dist))
-    # Kind boost already applied in vec_search order; re-apply lightly here so
-    # FTS-only items in the pool still lose to decisions when coverage ties.
     kind = getattr(item, "kind", None) or (
         item.get("kind") if isinstance(item, dict) else ""
     )
     try:
         from .store import _DENSE_KIND_BOOST
 
-        kind_s = float(_DENSE_KIND_BOOST.get(str(kind or ""), 0.02)) / 0.14  # ~0..1
+        kind_s = float(_DENSE_KIND_BOOST.get(str(kind or ""), 0.02)) / 0.14
     except Exception:  # noqa: BLE001
         kind_s = 0.0
     return (
-        0.32 * sim
-        + 0.28 * cov
-        + 0.15 * phrase
-        + 0.12 * dense_s
-        + 0.08 * fts_s
-        + 0.05 * kind_s
+        0.28 * sim
+        + 0.26 * cov
+        + 0.16 * phrase
+        + 0.14 * ident
+        + 0.08 * dense_s
+        + 0.05 * fts_s
+        + 0.03 * kind_s
     )
 
 

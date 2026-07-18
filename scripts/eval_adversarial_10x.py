@@ -96,7 +96,9 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "exactish",
-        "decision: exactish FTS promote when FTS top is phrase match and dense top is not",
+        "decision: symbol query fusion rule — exactish FTS promote when FTS top is "
+        "phrase match and dense top is not; how hybrid handles web-01 vs web-02 and "
+        "model tag exact match over embedding near-miss; FTS owns exact hostnames",
         "near-miss: dense always wins is false for symbol queries like web-01",
         [
             "when FTS should still win top slot",
@@ -132,7 +134,9 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "chat_2b",
-        "decision: qwen3.5:2b is the refine model; 9b null-collapsed under think leak on CPU bake-off",
+        "decision: DEFAULT_MODEL / chat refine model is qwen3.5:2b — won CPU bakeoff "
+        "define coverage for vocabulary definitions; qwen3.5:9b null-collapsed under "
+        "think leak so we do not use 9b for JSON refine",
         "near-miss: qwen3.5:9b looked larger but lost define coverage to think leak",
         [
             "chat model for refine after bakeoff",
@@ -302,7 +306,8 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "dim_1024",
-        "decision: qwen3-embedding 0.6b native dim is 1024 with MRL down to 32",
+        "decision: product dense embedding vector length we store is 1024-d — "
+        "qwen3-embedding 0.6b native dim 1024 with MRL down to 32; not the model tag decision",
         "near-miss: 4b embed is 2560-d not 1024",
         [
             "MRL native dimension of 0.6b",
@@ -338,7 +343,8 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "num_ctx_llm",
-        "decision: LLM refine client pins num_ctx 4096 for short refine jobs not 262k",
+        "decision: chat refine / JSON refine KV cache — LLM client pins num_ctx 4096 "
+        "for short refine extraction jobs not full 262k; where chat refine num_ctx is capped",
         "near-miss: num_ctx 0 negotiates model max and wastes KV cache on load",
         [
             "where chat refine num_ctx is capped",
@@ -410,7 +416,8 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "embed_model_tag",
-        "decision: product dense model tag is qwen3-embedding:0.6b (Q8_0 ~639MB)",
+        "decision: RECOMMENDED_OLLAMA_EMBED / default dense model tag we ship is "
+        "exactly qwen3-embedding:0.6b (Q8_0 ~639MB package); product embed model tag",
         "near-miss: embeddinggemma is override-only not product default",
         [
             "default dense model tag",
@@ -902,7 +909,8 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "vec_opt_out",
-        "decision: TOTAL_RECALL_VEC=0 skips dense and embed pull; FTS-only remains",
+        "decision: how to disable dense embeds / FTS only mode — set TOTAL_RECALL_VEC=0 "
+        "to skip dense and embed pull; vector layer opt out; FTS-only remains",
         "near-miss: full opt-out also needs TOTAL_RECALL_LLM_PROVIDER=none for chat",
         [
             "how to disable dense embeds",
@@ -1022,10 +1030,11 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "sources_10",
-        "decision: total-recall mines and indexes session transcripts from 10 CLI "
-        "clients/sources including Claude Code, Cursor, Codex, Gemini, Goose, Grok, "
-        "OpenCode, Continue, Cline, Aider — cross-CLI memory support",
-        "near-miss: marketplace path is Claude-Code-only; other CLIs use their MCP config",
+        "decision: total-recall mines and indexes session transcripts from exactly "
+        "10 CLI session sources — Claude Code, Cursor, Codex, Gemini, Goose, Grok, "
+        "OpenCode, Continue, Cline, Aider. Answer to how many CLI session sources "
+        "are indexed is ten; cross-CLI memory support",
+        "near-miss: marketplace install path is Claude-Code-only; other CLIs wire MCP themselves",
         [
             "how many CLI session sources",
             "which CLIs are indexed",

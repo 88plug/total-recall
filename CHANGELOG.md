@@ -15,6 +15,9 @@ All notable changes to this project will be documented in this file.
   embed/vec unavailable.
 - Hybrid re-rank: higher token-coverage + exactish + light kind weight
   (adversarial 10× cross-seed confusion).
+- Hybrid re-rank v2: **weighted identifier tokens** + **identifier centrality**
+  (prefer early/focused mention of env vars, model tags, hosts) so related
+  product facts stop stealing top-1 from the primary decision.
 
 ### Improved — model-card crank (embed + refine)
 
