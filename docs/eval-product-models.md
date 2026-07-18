@@ -1,6 +1,6 @@
 # total-recall product model eval
 
-Generated: 2026-07-17 20:41:09 -0400
+Generated: 2026-07-17 21:00:58 -0400
 
 ## Product runtime
 ```json
@@ -63,27 +63,27 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
       "p@1": 0.85,
       "p@5": 0.9,
       "mrr": 0.8821428571428571,
-      "latency_ms_p50": 275.0484310090542,
-      "latency_ms_p95": 330.8732900186442,
-      "latency_ms_mean": 294.2612450075103
+      "latency_ms_p50": 247.85696802427992,
+      "latency_ms_p95": 328.7716280319728,
+      "latency_ms_mean": 251.49336074537132
     },
     "fts_only": {
       "n": 20,
       "p@1": 0.2,
       "p@5": 0.25,
       "mrr": 0.23125,
-      "latency_ms_p50": 0.7504950044676661,
-      "latency_ms_p95": 0.9673759923316538,
-      "latency_ms_mean": 0.7689593068789691
+      "latency_ms_p50": 0.6527060177177191,
+      "latency_ms_p95": 0.8382070227526128,
+      "latency_ms_mean": 0.6198359944391996
     },
     "hybrid": {
       "n": 20,
       "p@1": 0.85,
       "p@5": 0.9,
       "mrr": 0.8821428571428571,
-      "latency_ms_p50": 290.370239992626,
-      "latency_ms_p95": 374.2661669966765,
-      "latency_ms_mean": 299.7586076904554
+      "latency_ms_p50": 256.02550100302324,
+      "latency_ms_p95": 345.6179589848034,
+      "latency_ms_mean": 251.41611070430372
     },
     "pairwise_target_beats_distractor": 1.0,
     "hybrid_miss_at_1": [
@@ -101,27 +101,27 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
       "p@1": 0.8,
       "p@5": 1.0,
       "mrr": 0.9,
-      "latency_ms_p50": 244.11773699102923,
-      "latency_ms_p95": 339.4356649951078,
-      "latency_ms_mean": 277.2653060072723
+      "latency_ms_p50": 236.82788899168372,
+      "latency_ms_p95": 274.34368897229433,
+      "latency_ms_mean": 235.037018925262
     },
     "fts_only": {
       "n": 15,
       "p@1": 0.7333333333333333,
       "p@5": 0.8666666666666667,
       "mrr": 0.8,
-      "latency_ms_p50": 0.9044960024766624,
-      "latency_ms_p95": 1.387408992741257,
-      "latency_ms_mean": 0.9467614038536946
+      "latency_ms_p50": 0.7088310085237026,
+      "latency_ms_p95": 1.1250689858570695,
+      "latency_ms_mean": 0.7757883906985322
     },
     "hybrid": {
       "n": 15,
       "p@1": 0.8,
       "p@5": 1.0,
       "mrr": 0.9,
-      "latency_ms_p50": 241.2854129797779,
-      "latency_ms_p95": 371.5451050084084,
-      "latency_ms_mean": 265.26670320114744
+      "latency_ms_p50": 221.24680900014937,
+      "latency_ms_p95": 278.59093697043136,
+      "latency_ms_mean": 228.7107519999457
     },
     "pairwise_target_beats_distractor": 1.0,
     "hybrid_miss_at_1": [
@@ -137,18 +137,18 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
       "p@1": 0.8,
       "p@5": 0.95,
       "mrr": 0.86875,
-      "latency_ms_p50": 244.04119298560545,
-      "latency_ms_p95": 316.2671070313081,
-      "latency_ms_mean": 254.21270855003968
+      "latency_ms_p50": 238.38170297676697,
+      "latency_ms_p95": 281.47068101679906,
+      "latency_ms_mean": 233.8946486939676
     },
     "memory_instruct": {
       "n": 20,
       "p@1": 0.85,
       "p@5": 0.9,
       "mrr": 0.88125,
-      "latency_ms_p50": 204.71891103079543,
-      "latency_ms_p95": 237.07058699801564,
-      "latency_ms_mean": 206.81498409830965
+      "latency_ms_p50": 229.65535102412105,
+      "latency_ms_p95": 259.4395630294457,
+      "latency_ms_mean": 219.23377754283138
     },
     "memory_p@1_delta": 0.05,
     "memory_mrr_delta": 0.0125,
@@ -156,9 +156,9 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
   },
   "backfill": {
     "easy_embedded": 30,
-    "easy_seconds": 1.541,
+    "easy_seconds": 0.848,
     "hard_embedded": 40,
-    "hard_seconds": 1.738
+    "hard_seconds": 0.775
   },
   "model": "qwen3-embedding:0.6b",
   "dim": 1024
@@ -175,7 +175,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "extract_decision",
       "pass": true,
-      "latency_ms": 1179.8,
+      "latency_ms": 1092.1,
       "output": {
         "decision": "asyncpg for postgres",
         "topic": "database connection"
@@ -185,7 +185,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "extract_ban",
       "pass": true,
-      "latency_ms": 1625.9,
+      "latency_ms": 1404.3,
       "output": {
         "banned": "commit .env files with secrets",
         "reason": "prevents accidental exposure of sensitive credentials in version control"
@@ -195,7 +195,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "classify_correction",
       "pass": true,
-      "latency_ms": 1247.1,
+      "latency_ms": 1300.9,
       "output": {
         "is_correction": true,
         "summary": "prefer ruff over black"
@@ -205,7 +205,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "machine_ner",
       "pass": true,
-      "latency_ms": 1266.7,
+      "latency_ms": 1299.2,
       "output": {
         "hosts": [
           "web-01",
@@ -221,7 +221,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "vocab_def",
       "pass": true,
-      "latency_ms": 1159.0,
+      "latency_ms": 1160.7,
       "output": {
         "term": "harness",
         "definition": "Claude Code / Grok plugin runner"
@@ -231,7 +231,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "null_when_missing",
       "pass": true,
-      "latency_ms": 859.4,
+      "latency_ms": 762.5,
       "output": {
         "hosts": []
       },
@@ -239,7 +239,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     }
   ],
   "production_refine": {
-    "machines_ms": 1205.0,
+    "machines_ms": 1390.5,
     "machines": {
       "kept": [
         "cache-02",
@@ -250,7 +250,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
       "dropped_asyncpg": true
     },
     "machines_ok": true,
-    "vocab_ms": 2601.4,
+    "vocab_ms": 2832.0,
     "vocab_definitions": {
       "harness": "A plugin runner that manages Claude Code and Grok sessions by loading associated MCP servers and skills.",
       "project_key": "A mechanism used to collapse Git worktrees back to the repository root, which helps manage memory pooling."

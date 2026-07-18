@@ -12,10 +12,17 @@ All notable changes to this project will be documented in this file.
 - Client **L2 re-normalize** after embed (no-op when Ollama already unit-norms).
 - **Dense kind re-rank**: corrections/bans/decisions beat `domain_fact`
   near-misses when cosine is close (aligned with FTS kind priority).
+- **`dense_primary` exactish promote**: when FTS top-1 matches the query as a
+  phrase/tokens and dense top-1 does not (e.g. `web-01` vs `web-02`, model
+  tags), hybrid promotes FTS so symbol queries cannot bury under near-misses.
 - **`refine_machines`**: few-shot keep/drop examples for qwen3.5:2b IF quality.
 - **Eval suite** (`scripts/eval_product_models.py`): hard near-miss corpus on a
   separate index, instruct A/B (web vs memory), card-aligned LLM sampling +
   schemas (no forced temp=0), stricter machines precision gate.
+- **Round-2 brand-new evals** (`scripts/eval_round2.py`, `docs/eval-round2.md`):
+  session notes, zero-overlap paraphrase, confusable twins, corrections, symbol
+  IDs, kind stress, reject memory, cwd isolation, new LLM tasks. Macro hybrid
+  P@1 ≈ 0.87, P@5 = 1.0, LLM 6/6 after exactish promote.
 
 ## [2.3.3] - 2026-07-18
 

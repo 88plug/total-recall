@@ -112,15 +112,39 @@ def _hybrid_weights() -> tuple[float, float]:
     return max(0.0, fts_w), max(0.0, dense_w)
 
 
-def _dense_primary_merge(vec_hits: list[Any], fts_hits: list[Any], limit: int) -> list[Any]:
-    """Dense rank order first; FTS only appends novel exact-keyword hits.
+def _hit_content(item: Any) -> str:
+    c = getattr(item, "content", None)
+    if c is None and isinstance(item, dict):
+        c = item.get("content")
+    return str(c or "")
 
-    Preserves pure-dense P@1/P@5 on paraphrase queries (where FTS is noisy)
-    while still surfacing keyword-only rows dense missed.
+
+def _exactish_match(query: str, content: str) -> bool:
+    """True if content carries the query as a phrase or all significant tokens.
+
+    Used to detect FTS wins on env vars, model tags, hostnames, error names —
+    cases where dense near-misses (web-02 vs web-01, embeddinggemma vs qwen tag)
+    must not steal top-1 under dense_primary.
     """
+    q = (query or "").strip().lower()
+    c = (content or "").lower()
+    if not q or not c:
+        return False
+    if q in c:
+        return True
+    # tokens: keep alnum + common id punctuation (:, ., _, -, /)
+    import re
+
+    toks = re.findall(r"[a-z0-9][a-z0-9:._/-]{1,}", q)
+    toks = [t for t in toks if len(t) >= 2 and t not in {"in", "on", "the", "a", "an", "to", "for", "of"}]
+    return bool(toks) and all(t in c for t in toks)
+
+
+def _merge_primary(primary: list[Any], secondary: list[Any], limit: int) -> list[Any]:
+    """Primary rank order first; secondary only appends novel extraction_ids."""
     out: list[Any] = []
     seen: set[int] = set()
-    for item in vec_hits:
+    for item in primary:
         ident = _extraction_id(item)
         if ident in seen:
             continue
@@ -128,7 +152,7 @@ def _dense_primary_merge(vec_hits: list[Any], fts_hits: list[Any], limit: int) -
         out.append(item)
         if len(out) >= limit:
             return out
-    for item in fts_hits:
+    for item in secondary:
         ident = _extraction_id(item)
         if ident in seen:
             continue
@@ -137,6 +161,29 @@ def _dense_primary_merge(vec_hits: list[Any], fts_hits: list[Any], limit: int) -
         if len(out) >= limit:
             break
     return out
+
+
+def _dense_primary_merge(
+    vec_hits: list[Any],
+    fts_hits: list[Any],
+    limit: int,
+    query: str = "",
+) -> list[Any]:
+    """Dense rank order first; FTS only appends novel exact-keyword hits.
+
+    Exception: when FTS top-1 is an exactish match for the query and dense
+    top-1 is not (symbol/id queries like ``web-01``, ``qwen3-embedding:0.6b``),
+    promote FTS order so dense near-misses cannot bury the true hit.
+    """
+    if (
+        query
+        and fts_hits
+        and vec_hits
+        and _exactish_match(query, _hit_content(fts_hits[0]))
+        and not _exactish_match(query, _hit_content(vec_hits[0]))
+    ):
+        return _merge_primary(list(fts_hits), list(vec_hits), limit)
+    return _merge_primary(list(vec_hits), list(fts_hits), limit)
 
 
 def hybrid_search(
@@ -197,7 +244,7 @@ def hybrid_search(
 
     mode = _hybrid_mode()
     if mode == "dense_primary":
-        return _dense_primary_merge(list(vec_hits), list(fts_hits), limit)
+        return _dense_primary_merge(list(vec_hits), list(fts_hits), limit, query=query)
 
     if mode == "weighted_rrf":
         fts_w, dense_w = _hybrid_weights()
