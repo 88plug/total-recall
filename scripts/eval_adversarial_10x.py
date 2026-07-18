@@ -70,7 +70,9 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "asymmetric_instruct",
-        "decision: only search queries get Instruct/Query prefix; documents embed raw",
+        "decision: asymmetric encode for qwen3-embedding — only search queries get "
+        "the Instruct/Query instruct wrapper prefix; indexed extraction documents "
+        "embed raw with no prefix",
         "near-miss: some stacks put instruct on documents too; we never do that",
         [
             "query side only gets the instruct wrapper",
@@ -286,7 +288,9 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "searxng",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then tailscale",
+        "decision: searxng-plus MCP primary search backend chain is LAN first-hop "
+        "192.168.1.211:8890 then local docker then tailscale for local metasearch "
+        "without leaving the LAN; duckduckgo scrapers banned",
         "near-miss: duckduckgo-only scrapers are not the search MCP",
         [
             "searxng preferred first hop",
@@ -1018,7 +1022,9 @@ _SEEDS: list[tuple[str, str, str, list[str]]] = [
     ),
     (
         "sources_10",
-        "decision: mines transcripts from 10 CLI clients including Claude Code Cursor Codex Gemini Goose Grok",
+        "decision: total-recall mines and indexes session transcripts from 10 CLI "
+        "clients/sources including Claude Code, Cursor, Codex, Gemini, Goose, Grok, "
+        "OpenCode, Continue, Cline, Aider — cross-CLI memory support",
         "near-miss: marketplace path is Claude-Code-only; other CLIs use their MCP config",
         [
             "how many CLI session sources",

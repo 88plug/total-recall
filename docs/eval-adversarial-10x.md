@@ -1,6 +1,6 @@
 # Adversarial 10× eval
 
-Generated: 2026-07-17 21:44:37 -0400
+Generated: 2026-07-17 21:48:04 -0400
 
 **n_pairs=432** seeds=84 docs=206 model=`qwen3-embedding:0.6b`
 
@@ -9,10 +9,10 @@ Generated: 2026-07-17 21:44:37 -0400
 {
   "pure_dense": {
     "n": 432,
-    "p@1": 0.5972,
-    "p@5": 0.8148,
-    "mrr": 0.6901,
-    "miss_rate@1": 0.4028,
+    "p@1": 0.6019,
+    "p@5": 0.8194,
+    "mrr": 0.6948,
+    "miss_rate@1": 0.3981,
     "miss_samples": [
       "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
       "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
@@ -23,10 +23,10 @@ Generated: 2026-07-17 21:44:37 -0400
   },
   "fts_only": {
     "n": 432,
-    "p@1": 0.5532,
-    "p@5": 0.7847,
-    "mrr": 0.6588,
-    "miss_rate@1": 0.4468,
+    "p@1": 0.5579,
+    "p@5": 0.7917,
+    "mrr": 0.6642,
+    "miss_rate@1": 0.4421,
     "miss_samples": [
       "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
       "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
@@ -37,10 +37,10 @@ Generated: 2026-07-17 21:44:37 -0400
   },
   "hybrid": {
     "n": 432,
-    "p@1": 0.6505,
-    "p@5": 0.875,
-    "mrr": 0.7462,
-    "miss_rate@1": 0.3495,
+    "p@1": 0.6597,
+    "p@5": 0.8773,
+    "mrr": 0.7523,
+    "miss_rate@1": 0.3403,
     "miss_samples": [
       "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
       "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whol",
@@ -55,11 +55,6 @@ Generated: 2026-07-17 21:44:37 -0400
 ## Worst families (by hybrid miss@1)
 ```json
 [
-  {
-    "family": "searxng",
-    "miss_rate@1": 1.0,
-    "p@1": 0.0
-  },
   {
     "family": "sources_10",
     "miss_rate@1": 1.0,
@@ -127,6 +122,11 @@ Generated: 2026-07-17 21:44:37 -0400
   },
   {
     "family": "echo_filter",
+    "miss_rate@1": 0.6,
+    "p@1": 0.4
+  },
+  {
+    "family": "format_v2",
     "miss_rate@1": 0.6,
     "p@1": 0.4
   }
@@ -232,7 +232,7 @@ Generated: 2026-07-17 21:44:37 -0400
       "n": 5,
       "p@1": 0.4,
       "p@5": 0.6,
-      "mrr": 0.5,
+      "mrr": 0.52,
       "miss_rate@1": 0.6,
       "miss_samples": [
         "decision: argocd syncs manifests to the cluster on merge to main",
@@ -255,7 +255,7 @@ Generated: 2026-07-17 21:44:37 -0400
       "n": 5,
       "p@1": 0.4,
       "p@5": 0.6,
-      "mrr": 0.5,
+      "mrr": 0.52,
       "miss_rate@1": 0.6,
       "miss_samples": [
         "decision: argocd syncs manifests to the cluster on merge to main",
@@ -269,7 +269,7 @@ Generated: 2026-07-17 21:44:37 -0400
       "n": 5,
       "p@1": 0.0,
       "p@5": 0.0,
-      "mrr": 0.0333,
+      "mrr": 0.0286,
       "miss_rate@1": 1.0,
       "miss_samples": [
         "decision: only search queries get Instruct/Query prefix; documents emb",
@@ -547,7 +547,7 @@ Generated: 2026-07-17 21:44:37 -0400
       "n": 5,
       "p@1": 0.2,
       "p@5": 0.8,
-      "mrr": 0.3767,
+      "mrr": 0.3789,
       "miss_rate@1": 0.8,
       "miss_samples": [
         "decision: qwen3.5:2b is the refine model; 9b null-collapsed under thin",
@@ -559,8 +559,8 @@ Generated: 2026-07-17 21:44:37 -0400
     "fts_only": {
       "n": 5,
       "p@1": 0.0,
-      "p@5": 0.4,
-      "mrr": 0.14,
+      "p@5": 0.6,
+      "mrr": 0.1467,
       "miss_rate@1": 1.0,
       "miss_samples": [
         "decision: qwen3.5:2b is the refine model; 9b null-collapsed under thin",
@@ -1754,8 +1754,8 @@ Generated: 2026-07-17 21:44:37 -0400
     "pure_dense": {
       "n": 5,
       "p@1": 0.4,
-      "p@5": 0.8,
-      "mrr": 0.6333,
+      "p@5": 1.0,
+      "mrr": 0.64,
       "miss_rate@1": 0.6,
       "miss_samples": [
         "decision: qwen3.5:2b ships mtp.* tensors for multi-token prediction on",
@@ -1805,12 +1805,11 @@ Generated: 2026-07-17 21:44:37 -0400
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.6,
+      "p@1": 0.8,
       "p@5": 1.0,
-      "mrr": 0.8,
-      "miss_rate@1": 0.4,
+      "mrr": 0.9,
+      "miss_rate@1": 0.2,
       "miss_samples": [
-        "decision: services talk over nats jetstream not rabbitmq or kafka for ",
         "decision: services talk over nats jetstream not rabbitmq or kafka for "
       ]
     }
@@ -1971,7 +1970,7 @@ Generated: 2026-07-17 21:44:37 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.7,
+      "mrr": 0.7333,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "decision: speak-like-operator skill matches lowercase terse we-framing",
@@ -2029,7 +2028,7 @@ Generated: 2026-07-17 21:44:37 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.6833,
+      "mrr": 0.6733,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "decision: managed ollama binary lives under plugin data bin; system PA",
@@ -2051,7 +2050,7 @@ Generated: 2026-07-17 21:44:37 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 1.0,
-      "mrr": 0.69,
+      "mrr": 0.68,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "decision: managed ollama binary lives under plugin data bin; system PA",
@@ -2274,12 +2273,11 @@ Generated: 2026-07-17 21:44:37 -0400
     },
     "fts_only": {
       "n": 5,
-      "p@1": 0.4,
+      "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.6,
-      "miss_rate@1": 0.6,
+      "mrr": 0.7,
+      "miss_rate@1": 0.4,
       "miss_samples": [
-        "standing rule: reuse-before-build; do not parallel invent when existin",
         "standing rule: reuse-before-build; do not parallel invent when existin",
         "standing rule: reuse-before-build; do not parallel invent when existin"
       ]
@@ -2310,7 +2308,7 @@ Generated: 2026-07-17 21:44:37 -0400
       "n": 5,
       "p@1": 0.4,
       "p@5": 1.0,
-      "mrr": 0.54,
+      "mrr": 0.5567,
       "miss_rate@1": 0.6,
       "miss_samples": [
         "decision: never propose rm -rf on unbraced $VAR; empty expands to file",
@@ -2465,44 +2463,38 @@ Generated: 2026-07-17 21:44:37 -0400
   "searxng": {
     "pure_dense": {
       "n": 5,
-      "p@1": 0.0,
-      "p@5": 0.8,
-      "mrr": 0.2567,
-      "miss_rate@1": 1.0,
+      "p@1": 0.4,
+      "p@5": 1.0,
+      "mrr": 0.65,
+      "miss_rate@1": 0.6,
       "miss_samples": [
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then "
+        "decision: searxng-plus MCP primary search backend chain is LAN first-h",
+        "decision: searxng-plus MCP primary search backend chain is LAN first-h",
+        "decision: searxng-plus MCP primary search backend chain is LAN first-h"
       ]
     },
     "fts_only": {
       "n": 5,
-      "p@1": 0.0,
-      "p@5": 0.6,
-      "mrr": 0.2917,
-      "miss_rate@1": 1.0,
+      "p@1": 0.2,
+      "p@5": 1.0,
+      "mrr": 0.6,
+      "miss_rate@1": 0.8,
       "miss_samples": [
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then "
+        "decision: searxng-plus MCP primary search backend chain is LAN first-h",
+        "decision: searxng-plus MCP primary search backend chain is LAN first-h",
+        "decision: searxng-plus MCP primary search backend chain is LAN first-h",
+        "decision: searxng-plus MCP primary search backend chain is LAN first-h"
       ]
     },
     "hybrid": {
       "n": 5,
-      "p@1": 0.0,
-      "p@5": 0.8,
-      "mrr": 0.3833,
-      "miss_rate@1": 1.0,
+      "p@1": 0.6,
+      "p@5": 1.0,
+      "mrr": 0.8,
+      "miss_rate@1": 0.4,
       "miss_samples": [
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then ",
-        "decision: searxng MCP prefers LAN 192.168.1.211:8890 then docker then "
+        "decision: searxng-plus MCP primary search backend chain is LAN first-h",
+        "decision: searxng-plus MCP primary search backend chain is LAN first-h"
       ]
     }
   },
