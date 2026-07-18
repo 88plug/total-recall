@@ -182,17 +182,23 @@ def _query_tokens(query: str) -> list[str]:
 
 
 def _token_weight(tok: str) -> float:
-    """Heavier weight for identifiers (env vars, model tags, hostnames, dims)."""
+    """Heavier weight for identifiers (env vars, model tags, hostnames, dims).
+
+    Long plain English words must NOT count as IDs (``background`` is 10 chars
+    but not an identifier — that bug made hybrid re-rank fire on paraphrases).
+    """
     w = 1.0
-    if any(c in tok for c in ":_/.-"):
+    punct = any(c in tok for c in ":_/.-")
+    if punct:
         w += 2.0  # qwen3-embedding:0.6b, TOTAL_RECALL_VEC, web-01
-    if len(tok) >= 10:
-        w += 0.75
-    elif len(tok) >= 6:
-        w += 0.35
-    # ALL_CAPS-ish env tokens
-    if tok.isupper() or (tok.isupper() is False and tok == tok.upper() and "_" in tok):
-        w += 0.5
+    # Length boost only for punctuated / digit-bearing tokens
+    if punct or any(ch.isdigit() for ch in tok):
+        if len(tok) >= 10:
+            w += 0.75
+        elif len(tok) >= 6:
+            w += 0.35
+    if "_" in tok and any(ch.isupper() for ch in tok):
+        w += 0.5  # TOTAL_RECALL_VEC style
     if any(ch.isdigit() for ch in tok) and any(ch.isalpha() for ch in tok):
         w += 0.5  # 0.6b, 4096, 2b mixed
     return w
@@ -317,15 +323,33 @@ def _hit_rank_score(item: Any, query: str, dense_rank: int | None, fts_rank: int
     elif "standing rule" in cl or "standing decision" in cl:
         stand = 0.25
     neg = _legacy_negation_penalty(content)
+
+    # Adaptive blend: pure paraphrases (no identifiers, low coverage) must
+    # trust cosine — heavy lexical re-rank tanks easy P@1 (scoreboard: 0.85→0.70).
+    # When IDs / exact phrase / legacy phrasing appear, lean lexical + penalty.
+    q_toks = _query_tokens(query)
+    has_heavy_id = any(_token_weight(t) >= 1.5 for t in q_toks)
+    lexical_mode = bool(has_heavy_id or phrase >= 1.0 or neg > 0.05 or ident >= 0.45)
+    if lexical_mode:
+        return (
+            0.26 * sim
+            + 0.24 * cov
+            + 0.14 * phrase
+            + 0.12 * ident
+            + 0.08 * kind_s
+            + 0.06 * stand
+            + 0.06 * dense_s
+            + 0.04 * fts_s
+            - neg
+        )
+    # Paraphrase mode: dense-led, light kind/stand only
     return (
-        0.26 * sim
-        + 0.24 * cov
-        + 0.14 * phrase
-        + 0.12 * ident
-        + 0.08 * kind_s
+        0.55 * sim
+        + 0.12 * cov
+        + 0.12 * dense_s
+        + 0.10 * kind_s
         + 0.06 * stand
-        + 0.06 * dense_s
-        + 0.04 * fts_s
+        + 0.05 * fts_s
         - neg
     )
 
@@ -381,18 +405,34 @@ def _dense_primary_merge(
         blend of cosine / RRF ranks / token coverage so near-miss domain_facts
         that lack query tokens fall below true hits.
     """
+    # FTS exact promote only for identifier-ish queries (web-01, env vars, tags).
+    # Generic multi-word paraphrases: FTS "exactish" is too loose and steals top-1.
     if (
         query
         and fts_hits
         and vec_hits
+        and any(_token_weight(t) >= 1.5 for t in _query_tokens(query))
         and _exactish_match(query, _hit_content(fts_hits[0]))
         and not _exactish_match(query, _hit_content(vec_hits[0]))
     ):
         return _merge_primary(list(fts_hits), list(vec_hits), limit)
 
-    # Build candidate pool (dense-first order, FTS fill) then coverage re-rank.
+    # Dense-first pool; re-rank only when lexical signals matter.
+    # Paraphrase queries: keep pure dense order (scoreboard: re-rank tanked
+    # easy P@1 0.85→0.65). ID / exact / legacy-near-miss queries: re-rank.
     pool = _merge_primary(list(vec_hits), list(fts_hits), max(limit * 3, limit))
     if not query or len(pool) <= 1:
+        return pool[:limit]
+
+    q_toks = _query_tokens(query)
+    needs_lexical = any(_token_weight(t) >= 1.5 for t in q_toks)
+    if not needs_lexical:
+        for h in pool[:8]:
+            c = _hit_content(h)
+            if _exactish_match(query, c) or _legacy_negation_penalty(c) > 0.1:
+                needs_lexical = True
+                break
+    if not needs_lexical:
         return pool[:limit]
 
     dense_rank = {_extraction_id(h): i for i, h in enumerate(vec_hits)}
