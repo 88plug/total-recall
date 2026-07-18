@@ -1,12 +1,12 @@
 # total-recall product model eval
 
-Generated: 2026-07-17 23:27:46 -0400
+Generated: 2026-07-18 01:27:13 -0400
 
 ## Product runtime
 ```json
 {
   "daemon_reachable": true,
-  "bin": "/usr/local/bin/ollama",
+  "bin": "/home/andrew/.claude/plugins/data/total-recall-88plug/total-recall/bin/ollama",
   "ensure": {
     "base_url": "http://localhost:11434",
     "embed": true,
@@ -16,7 +16,7 @@ Generated: 2026-07-17 23:27:46 -0400
     "chat_model": "qwen3.5:2b",
     "embed_ready": true,
     "chat_ready": true,
-    "bin": "/usr/local/bin/ollama"
+    "bin": "/home/andrew/.claude/plugins/data/total-recall-88plug/total-recall/bin/ollama"
   },
   "models_present": {
     "qwen3-embedding:0.6b": true,
@@ -64,27 +64,27 @@ Query:`
       "p@1": 0.9,
       "p@5": 0.95,
       "mrr": 0.9180555555555555,
-      "latency_ms_p50": 257.05421797465533,
-      "latency_ms_p95": 419.81468396261334,
-      "latency_ms_mean": 284.65071604878176
+      "latency_ms_p50": 170.9154569543898,
+      "latency_ms_p95": 213.90419598901644,
+      "latency_ms_mean": 176.72483424830716
     },
     "fts_only": {
       "n": 20,
       "p@1": 0.2,
       "p@5": 0.25,
       "mrr": 0.23125,
-      "latency_ms_p50": 0.7626769947819412,
-      "latency_ms_p95": 1.1314380099065602,
-      "latency_ms_mean": 0.7817669422365725
+      "latency_ms_p50": 0.4569239681586623,
+      "latency_ms_p95": 0.6606400129385293,
+      "latency_ms_mean": 0.45480430708266795
     },
     "hybrid": {
       "n": 20,
       "p@1": 0.9,
       "p@5": 0.95,
       "mrr": 0.9180555555555555,
-      "latency_ms_p50": 262.2270179563202,
-      "latency_ms_p95": 431.5020330250263,
-      "latency_ms_mean": 284.87078080070205
+      "latency_ms_p50": 169.64655299670994,
+      "latency_ms_p95": 232.56529396167025,
+      "latency_ms_mean": 173.77330980089027
     },
     "pairwise_target_beats_distractor": 1.0,
     "hybrid_miss_at_1": [
@@ -101,27 +101,27 @@ Query:`
       "p@1": 0.8666666666666667,
       "p@5": 1.0,
       "mrr": 0.9333333333333333,
-      "latency_ms_p50": 204.56670498242602,
-      "latency_ms_p95": 243.15504700643942,
-      "latency_ms_mean": 208.26763627119362
+      "latency_ms_p50": 177.03533603344113,
+      "latency_ms_p95": 238.79676597425714,
+      "latency_ms_mean": 184.731784730684
     },
     "fts_only": {
       "n": 15,
       "p@1": 0.7333333333333333,
       "p@5": 0.8666666666666667,
       "mrr": 0.8,
-      "latency_ms_p50": 0.7612520130351186,
-      "latency_ms_p95": 1.1814930476248264,
-      "latency_ms_mean": 0.8001601362290481
+      "latency_ms_p50": 0.696711998898536,
+      "latency_ms_p95": 1.0409990209154785,
+      "latency_ms_mean": 0.6692357904588183
     },
     "hybrid": {
       "n": 15,
       "p@1": 0.9333333333333333,
       "p@5": 1.0,
       "mrr": 0.9666666666666667,
-      "latency_ms_p50": 201.4566630241461,
-      "latency_ms_p95": 241.63966695778072,
-      "latency_ms_mean": 206.3887540716678
+      "latency_ms_p50": 168.39949798304588,
+      "latency_ms_p95": 233.4175689611584,
+      "latency_ms_mean": 175.52920239589488
     },
     "pairwise_target_beats_distractor": 1.0,
     "hybrid_miss_at_1": [
@@ -135,18 +135,18 @@ Query:`
       "p@1": 0.8,
       "p@5": 0.95,
       "mrr": 0.86875,
-      "latency_ms_p50": 261.9475679821335,
-      "latency_ms_p95": 326.4428359689191,
-      "latency_ms_mean": 261.2651654431829
+      "latency_ms_p50": 150.8983739768155,
+      "latency_ms_p95": 165.41962802875787,
+      "latency_ms_mean": 150.52820890268777
     },
     "memory_instruct": {
       "n": 20,
       "p@1": 0.85,
       "p@5": 0.95,
       "mrr": 0.8899999999999999,
-      "latency_ms_p50": 240.7570770010352,
-      "latency_ms_p95": 282.9727579955943,
-      "latency_ms_mean": 235.90226670203265
+      "latency_ms_p50": 139.35315399430692,
+      "latency_ms_p95": 156.12296998733655,
+      "latency_ms_mean": 142.11747565423138
     },
     "memory_p@1_delta": 0.05,
     "memory_mrr_delta": 0.0212,
@@ -154,9 +154,9 @@ Query:`
   },
   "backfill": {
     "easy_embedded": 30,
-    "easy_seconds": 0.595,
+    "easy_seconds": 0.549,
     "hard_embedded": 40,
-    "hard_seconds": 0.702
+    "hard_seconds": 0.749
   },
   "model": "qwen3-embedding:0.6b",
   "dim": 1024
@@ -173,7 +173,7 @@ Query:`
     {
       "name": "extract_decision",
       "pass": true,
-      "latency_ms": 1188.2,
+      "latency_ms": 7104.6,
       "output": {
         "decision": "asyncpg for postgres",
         "topic": "database connection"
@@ -183,7 +183,7 @@ Query:`
     {
       "name": "extract_ban",
       "pass": true,
-      "latency_ms": 1424.2,
+      "latency_ms": 1321.0,
       "output": {
         "banned": "commit .env files with secrets",
         "reason": "prevents accidental exposure of sensitive credentials in version control"
@@ -193,7 +193,7 @@ Query:`
     {
       "name": "classify_correction",
       "pass": true,
-      "latency_ms": 984.2,
+      "latency_ms": 951.7,
       "output": {
         "is_correction": true,
         "summary": "prefer ruff over black"
@@ -203,7 +203,7 @@ Query:`
     {
       "name": "machine_ner",
       "pass": true,
-      "latency_ms": 1093.7,
+      "latency_ms": 1048.2,
       "output": {
         "hosts": [
           "web-01",
@@ -219,7 +219,7 @@ Query:`
     {
       "name": "vocab_def",
       "pass": true,
-      "latency_ms": 1213.2,
+      "latency_ms": 1108.6,
       "output": {
         "term": "harness",
         "definition": "Claude Code / Grok plugin runner"
@@ -229,7 +229,7 @@ Query:`
     {
       "name": "null_when_missing",
       "pass": true,
-      "latency_ms": 694.2,
+      "latency_ms": 728.7,
       "output": {
         "hosts": []
       },
@@ -237,7 +237,7 @@ Query:`
     }
   ],
   "production_refine": {
-    "machines_ms": 1063.2,
+    "machines_ms": 986.1,
     "machines": {
       "kept": [
         "cache-02",
@@ -248,7 +248,7 @@ Query:`
       "dropped_asyncpg": true
     },
     "machines_ok": true,
-    "vocab_ms": 2725.2,
+    "vocab_ms": 2440.2,
     "vocab_definitions": {
       "harness": "A plugin runner that manages Claude Code and Grok sessions by loading associated MCP servers and skills.",
       "project_key": "A mechanism used to collapse Git worktrees back to the repository root, which helps manage memory pooling."

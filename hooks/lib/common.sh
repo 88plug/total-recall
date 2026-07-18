@@ -672,10 +672,21 @@ recall::_ollama_arch() {
 recall::_ollama_local_version() {
   local bin="${1:-}"
   [ -n "$bin" ] && [ -x "$bin" ] || return 1
-  local raw
-  raw="$("$bin" --version 2>/dev/null || true)"
-  # "ollama version is 0.32.1" or "ollama version 0.32.1"
-  printf '%s' "$raw" | sed -nE 's/.*version( is)? ([0-9]+(\.[0-9]+)+).*/\2/p' | head -1
+  local raw v=""
+  # Isolate from any running daemon. With a live older server, `ollama --version`
+  # prints "ollama version is <server>" first and "client version is <bin>"
+  # second — taking the first match poisons .ollama-latest with the server
+  # version and blocks auto-update (seen 0.32.1 client + 0.30.10 server).
+  raw="$(OLLAMA_HOST="${RECALL_OLLAMA_VERSION_PROBE_HOST:-127.0.0.1:0}" \
+    "$bin" --version 2>&1 || true)"
+  # Prefer explicit client line (always the binary).
+  v="$(printf '%s' "$raw" | sed -nE 's/.*client version is ([0-9]+(\.[0-9]+)+).*/\1/p' | head -1)"
+  if [ -z "$v" ]; then
+    # Offline / single-line: "ollama version is 0.32.1" or "ollama version 0.32.1"
+    v="$(printf '%s' "$raw" | sed -nE 's/.*version( is)? ([0-9]+(\.[0-9]+)+).*/\2/p' | head -1)"
+  fi
+  [ -n "$v" ] || return 1
+  printf '%s' "$v"
 }
 
 # True if $1 is strictly older than $2 (semver-ish via sort -V).
@@ -891,9 +902,11 @@ recall::_install_ollama() {
   if [ -n "$got" ]; then
     printf '%s\n' "$got" >"${dest_bin}/.ollama-version" 2>/dev/null || true
   fi
-  # Refresh latest cache to installed when pin unset.
-  if [ -z "$pin" ] && [ -n "$got" ]; then
-    printf '%s\n' "$got" >"${dest_bin}/.ollama-latest" 2>/dev/null || true
+  # Cache intended release as latest — prefer pin, else binary version.
+  # Never write a stale server-reported version (see _ollama_local_version).
+  local stamped="${pin:-$got}"
+  if [ -n "$stamped" ]; then
+    printf '%s\n' "$stamped" >"${dest_bin}/.ollama-latest" 2>/dev/null || true
   fi
   # Clear resolver cache so next recall::ollama re-picks.
   RECALL_OLLAMA_CACHED=""
@@ -957,22 +970,16 @@ recall::_ensure_product_ollama_current() {
   return 0
 }
 
-# Resolve a usable ollama binary. Candidate order (highest priority first):
-#   1. $RECALL_OLLAMA env override
-#   2. ${RECALL_DATA_ROOT}/bin/ollama (product-managed — auto-updated to latest)
-#   3. ollama on PATH (system install — fallback only)
-#   4. /snap/bin/ollama (Ubuntu snap install)
-#   5. auto-fetch (downloads official tar.zst, no sudo — ships CUDA libs)
+# Resolve the product-owned ollama binary. Always the embedded binary under
+# ${RECALL_DATA_ROOT}/bin/ollama (auto-updated to GitHub latest). System PATH /
+# snap ollama are never used for product work — opt in only with
+# RECALL_OLLAMA_ALLOW_SYSTEM=1 (debug/rescue). Explicit RECALL_OLLAMA still wins.
 #
 # Product auto-update (default on): when the managed binary is missing or older
 # than GitHub latest (or OLLAMA_VERSION pin), re-fetch. TTL 24h between probes
 # (RECALL_OLLAMA_UPDATE_TTL_S). RECALL_OLLAMA_AUTO_UPDATE=0 disables bumps
 # (still installs if missing). Critical for think:false + structured JSON:
 # ollama ≥0.31.2 fixed that path; stale 0.30.x product bins silently regress.
-#
-# GPU preference (RECALL_PREFER_GPU=1, the default): when an NVIDIA GPU is
-# present we make TWO passes over the candidates — pass 1 returns the first
-# GPU-capable candidate, pass 2 falls back to the first runnable one.
 #
 # Prints the resolved path to stdout; returns non-zero if none found/fetchable.
 recall::ollama() {
@@ -981,10 +988,9 @@ recall::ollama() {
     return 0
   fi
 
-  local prefer_gpu="${RECALL_PREFER_GPU:-1}"
   local bundled="${RECALL_DATA_ROOT}/bin/ollama"
 
-  # RECALL_OLLAMA explicit override bypasses GPU checking + auto-update.
+  # RECALL_OLLAMA explicit override (operator pin) — still product-facing.
   if [ -n "${RECALL_OLLAMA:-}" ] && recall::_can_run_ollama "$RECALL_OLLAMA"; then
     RECALL_OLLAMA_CACHED="$RECALL_OLLAMA"
     recall::log "ollama: using explicit RECALL_OLLAMA override $RECALL_OLLAMA"
@@ -992,64 +998,40 @@ recall::ollama() {
   fi
 
   # Product-managed binary: install if missing, bump if behind latest.
-  # Soft-fail — network blips must not block PATH fallback.
   recall::_ensure_product_ollama_current 2>>"$RECALL_LOG_FILE" || true
 
-  # Build the candidate list in priority order.
-  local -a candidates=()
-  # Bundled binary first — we own version + CUDA layout.
-  candidates+=("$bundled")
-  command -v ollama >/dev/null 2>&1 && candidates+=("$(command -v ollama)")
-  candidates+=("/snap/bin/ollama")
-
-  local want_gpu=0
-  if [ "$prefer_gpu" = "1" ] && recall::_has_nvidia_gpu; then
-    want_gpu=1
-  fi
-
-  local cand
-
-  # Pass 1: GPU-capable candidate (only when we want GPU).
-  if [ "$want_gpu" -eq 1 ]; then
-    for cand in "${candidates[@]}"; do
-      if recall::_can_run_ollama "$cand" && recall::_ollama_gpu_capable "$cand"; then
-        RECALL_OLLAMA_CACHED="$cand"
-        recall::log "ollama: selected GPU-capable binary $cand ($("$cand" --version 2>/dev/null || echo '?'))"
-        printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
-      fi
-    done
-
-    # No present binary is GPU-capable. Official tarball ships CUDA libs.
-    if recall::_can_run_ollama "$bundled" || { recall::_install_ollama && recall::_can_run_ollama "$bundled"; }; then
-      if recall::_ollama_gpu_capable "$bundled"; then
-        RECALL_OLLAMA_CACHED="$bundled"
-        recall::log "ollama: selected GPU-capable fetched binary $bundled"
-        printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
-      fi
-    fi
-
-    local base_url="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
-    if curl -sf --max-time 2 "${base_url}/api/tags" >/dev/null 2>&1; then
-      recall::log "ollama: NVIDIA GPU present but a CPU-only daemon is already serving ${base_url}; using CPU. To switch, stop that daemon and re-run — total-recall will not kill it."
-    else
-      recall::log "ollama: NVIDIA GPU present but no GPU-capable binary found; falling back to CPU-only."
-    fi
-  fi
-
-  # Pass 2 (and the only pass when want_gpu=0): first runnable candidate.
-  for cand in "${candidates[@]}"; do
-    if recall::_can_run_ollama "$cand"; then
-      RECALL_OLLAMA_CACHED="$cand"
-      printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
-    fi
-  done
-
-  # Auto-fetch as last resort.
-  if recall::_install_ollama && recall::_can_run_ollama "$bundled"; then
+  if recall::_can_run_ollama "$bundled"; then
     RECALL_OLLAMA_CACHED="$bundled"
+    local ver
+    ver="$(recall::_ollama_local_version "$bundled" 2>/dev/null || echo '?')"
+    recall::log "ollama: product-embedded binary $bundled ($ver)"
     printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
   fi
 
+  # Missing or broken — fetch once more hard.
+  if recall::_install_ollama && recall::_can_run_ollama "$bundled"; then
+    RECALL_OLLAMA_CACHED="$bundled"
+    recall::log "ollama: product-embedded binary after install $bundled"
+    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+  fi
+
+  # Opt-in system rescue only (not product path).
+  case "${RECALL_OLLAMA_ALLOW_SYSTEM:-0}" in
+    1|true|yes|on|TRUE|YES|ON)
+      local sys=""
+      command -v ollama >/dev/null 2>&1 && sys="$(command -v ollama)"
+      if [ -z "$sys" ] && [ -x /snap/bin/ollama ]; then
+        sys=/snap/bin/ollama
+      fi
+      if [ -n "$sys" ] && recall::_can_run_ollama "$sys"; then
+        RECALL_OLLAMA_CACHED="$sys"
+        recall::log "ollama: RECALL_OLLAMA_ALLOW_SYSTEM=1 using $sys (not product)"
+        printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+      fi
+      ;;
+  esac
+
+  recall::log "ollama: product binary unavailable at $bundled (install failed)"
   return 1
 }
 
@@ -1065,6 +1047,11 @@ recall::_ollama_product_env() {
   # Multi-token prediction (MTP) draft depth — applied where the runner supports it.
   export OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS="${OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS:-4}"
   export OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS="${OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS:-4}"
+  # Optional shared model store (e.g. host already has /var/lib/ollama models).
+  # Prefer RECALL_OLLAMA_MODELS; fall through to OLLAMA_MODELS if already set.
+  if [ -n "${RECALL_OLLAMA_MODELS:-}" ]; then
+    export OLLAMA_MODELS="$RECALL_OLLAMA_MODELS"
+  fi
 }
 
 # Start the ollama daemon if not already reachable. Detaches via setsid/nohup

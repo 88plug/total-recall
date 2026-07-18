@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.8] - 2026-07-18
+
+### Fixed — product ollama always embedded; version probe no longer poisons cache
+
+- **Always use product-embedded** ``$data/bin/ollama`` — never PATH / snap
+  unless ``RECALL_OLLAMA_ALLOW_SYSTEM=1`` (rescue only). Bash + Python agree.
+- **``_ollama_local_version``** prefers ``client version is X`` and probes with
+  ``OLLAMA_HOST=127.0.0.1:0`` so a live older daemon cannot report as the
+  binary version (was writing ``0.30.10`` into ``.ollama-latest`` while the
+  product client was already ``0.32.1``).
+- Bakeoff: ``--gemma4-no-mtp`` / ``--mtp on|off|both`` for gemma4 no-MTP arm.
+
 ## [2.3.7] - 2026-07-18
 
 ### Improved — gemma4 sampling + full LLM bakeoff (GPU+CPU)

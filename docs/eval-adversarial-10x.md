@@ -1,6 +1,6 @@
 # Adversarial 10× eval
 
-Generated: 2026-07-17 23:30:36 -0400
+Generated: 2026-07-18 01:29:34 -0400
 
 **n_pairs=432** seeds=84 docs=206 model=`qwen3-embedding:0.6b`
 
@@ -10,8 +10,8 @@ Generated: 2026-07-17 23:30:36 -0400
   "pure_dense": {
     "n": 432,
     "p@1": 0.6829,
-    "p@5": 0.8912,
-    "mrr": 0.7696,
+    "p@5": 0.8889,
+    "mrr": 0.7695,
     "miss_rate@1": 0.3171,
     "miss_samples": [
       "decision: standing rule for embed model unload \u2014 pin embed weights res",
@@ -39,7 +39,7 @@ Generated: 2026-07-17 23:30:36 -0400
     "n": 432,
     "p@1": 0.7269,
     "p@5": 0.8889,
-    "mrr": 0.798,
+    "mrr": 0.7979,
     "miss_rate@1": 0.2731,
     "miss_samples": [
       "decision: standing rule for embed model unload \u2014 pin embed weights res",
@@ -2943,8 +2943,8 @@ Generated: 2026-07-17 23:30:36 -0400
     "pure_dense": {
       "n": 5,
       "p@1": 0.6,
-      "p@5": 1.0,
-      "mrr": 0.7067,
+      "p@5": 0.8,
+      "mrr": 0.7,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "decision: weighted_rrf mode available with dense weight default 3x FTS",
@@ -2966,7 +2966,7 @@ Generated: 2026-07-17 23:30:36 -0400
       "n": 5,
       "p@1": 0.6,
       "p@5": 0.8,
-      "mrr": 0.6952,
+      "mrr": 0.6917,
       "miss_rate@1": 0.4,
       "miss_samples": [
         "decision: weighted_rrf mode available with dense weight default 3x FTS",

@@ -1,9 +1,10 @@
 """Product-owned ollama runtime for dense embeds (+ optional chat refine).
 
-Design: total-recall **owns** the ollama binary under the plugin data dir
-(``$CLAUDE_PLUGIN_DATA/total-recall/bin/ollama``), starts ``ollama serve`` if
-needed, and pulls models. System PATH ollama is a fallback, not the product
-story. Python talks HTTP to that daemon — same process LLM refine uses.
+Design: total-recall **always** owns the ollama binary under the plugin data
+dir (``$CLAUDE_PLUGIN_DATA/total-recall/bin/ollama``), starts ``ollama serve``
+if needed, and pulls models. System PATH / snap ollama are never used unless
+``RECALL_OLLAMA_ALLOW_SYSTEM=1``. Python talks HTTP to that daemon — same
+process LLM refine uses.
 """
 
 from __future__ import annotations
@@ -125,7 +126,7 @@ def model_present(tag: str, names: list[str] | None = None) -> bool:
 
 
 def resolve_ollama_bin() -> Path | None:
-    """Resolve product-owned binary first, then PATH."""
+    """Resolve product-embedded binary only (never system PATH by default)."""
     env = (os.environ.get("RECALL_OLLAMA") or "").strip()
     if env:
         p = Path(env)
@@ -134,12 +135,14 @@ def resolve_ollama_bin() -> Path | None:
     bundled = data_root() / "bin" / "ollama"
     if bundled.is_file() and os.access(bundled, os.X_OK):
         return bundled
-    which = shutil.which("ollama")
-    if which:
-        return Path(which)
-    snap = Path("/snap/bin/ollama")
-    if snap.is_file() and os.access(snap, os.X_OK):
-        return snap
+    allow = (os.environ.get("RECALL_OLLAMA_ALLOW_SYSTEM") or "0").strip().lower()
+    if allow in ("1", "true", "yes", "on"):
+        which = shutil.which("ollama")
+        if which:
+            return Path(which)
+        snap = Path("/snap/bin/ollama")
+        if snap.is_file() and os.access(snap, os.X_OK):
+            return snap
     return None
 
 
@@ -193,6 +196,10 @@ def _product_serve_env() -> dict[str, str]:
     # on models like qwen3.5:2b (no extra env required, but harmless).
     env.setdefault("OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS", "4")
     env.setdefault("OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS", "4")
+    # Optional shared model store (host already has models elsewhere).
+    recall_models = (os.environ.get("RECALL_OLLAMA_MODELS") or "").strip()
+    if recall_models:
+        env["OLLAMA_MODELS"] = recall_models
     return env
 
 

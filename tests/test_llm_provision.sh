@@ -177,8 +177,8 @@ else
   fail "ollama resolver (RECALL_OLLAMA)" "rc=$RC result='$RESULT' (expected '$FAKE_OLLAMA')"
 fi
 
-# 3b — ollama on PATH when product binary missing and install blocked.
-#       Product auto-fetch would otherwise win (and hit the network).
+# 3b — product-only by default: PATH ignored when product bin missing.
+#       System rescue only with RECALL_OLLAMA_ALLOW_SYSTEM=1.
 write_stub "curl" "exit 1"
 write_stub "ollama" 'echo "ollama version 0.0.0-stub"; exit 0'
 rm -f "$TMPDATA/total-recall/bin/ollama" 2>/dev/null || true
@@ -187,14 +187,30 @@ set +e
 RESULT=$(run_in_subshell "
   export RECALL_OLLAMA=''
   export RECALL_OLLAMA_AUTO_UPDATE=0
+  export RECALL_OLLAMA_ALLOW_SYSTEM=0
+  recall::ollama
+")
+RC=$?
+set -e
+if [ "$RC" -ne 0 ]; then
+  ok "ollama resolver: no PATH fallback without product bin"
+else
+  fail "ollama resolver (no system)" "rc=$RC result='$RESULT' (expected non-zero)"
+fi
+
+set +e
+RESULT=$(run_in_subshell "
+  export RECALL_OLLAMA=''
+  export RECALL_OLLAMA_AUTO_UPDATE=0
+  export RECALL_OLLAMA_ALLOW_SYSTEM=1
   recall::ollama
 ")
 RC=$?
 set -e
 if [ "$RC" = "0" ] && [ "$RESULT" = "$STUBS/ollama" ]; then
-  ok "ollama resolver: stub on PATH when product bin missing"
+  ok "ollama resolver: ALLOW_SYSTEM=1 uses PATH stub"
 else
-  fail "ollama resolver (PATH)" "rc=$RC result='$RESULT' (expected '$STUBS/ollama')"
+  fail "ollama resolver (ALLOW_SYSTEM)" "rc=$RC result='$RESULT' (expected '$STUBS/ollama')"
 fi
 rm_stub "ollama"
 rm_stub "curl"
@@ -417,6 +433,8 @@ esac
 
 set +e
 run_in_subshell "
+  export RECALL_OLLAMA='$STUBS/ollama'
+  export RECALL_OLLAMA_AUTO_UPDATE=0
   recall::ollama_pull 'qwen3.5:2b'
 "
 RC=$?
@@ -491,7 +509,7 @@ else
   fail "_version_lt (equal)" "expected non-zero"
 fi
 
-# local version parse
+# local version parse (single-line offline form)
 write_stub "ollama" 'echo "ollama version is 0.32.1"; exit 0'
 set +e
 VER_OUT="$(run_in_subshell '
@@ -503,6 +521,21 @@ if [ "$RC" -eq 0 ] && [ "$VER_OUT" = "0.32.1" ]; then
   ok "_ollama_local_version parses 0.32.1"
 else
   fail "_ollama_local_version" "got rc=$RC out=$VER_OUT"
+fi
+rm_stub "ollama"
+
+# Prefer client version when an older daemon answers first (poison-cache bug).
+write_stub "ollama" 'echo "ollama version is 0.30.10"; echo "Warning: client version is 0.32.1"; exit 0'
+set +e
+VER_OUT="$(run_in_subshell '
+  recall::_ollama_local_version "$(command -v ollama)"
+')"
+RC=$?
+set -e
+if [ "$RC" -eq 0 ] && [ "$VER_OUT" = "0.32.1" ]; then
+  ok "_ollama_local_version prefers client over server"
+else
+  fail "_ollama_local_version (client>server)" "got rc=$RC out=$VER_OUT"
 fi
 rm_stub "ollama"
 
@@ -549,6 +582,8 @@ run_in_subshell "
   export TOTAL_RECALL_LLM_PROVIDER=auto
   export TOTAL_RECALL_LLM_MODEL=qwen3.5:2b
   export TOTAL_RECALL_LLM_BASE_URL=http://localhost:11434
+  export RECALL_OLLAMA='$STUBS/ollama'
+  export RECALL_OLLAMA_AUTO_UPDATE=0
   recall::provision_llm
 "
 RC=$?

@@ -1,6 +1,6 @@
 # total-recall eval round 3 — vectors live + 10x hard A/B
 
-Generated: 2026-07-17 23:31:13 -0400
+Generated: 2026-07-18 01:30:10 -0400
 
 ## Production index (real machine)
 ```json
@@ -123,7 +123,7 @@ Generated: 2026-07-17 23:31:13 -0400
   "backfill": {
     "embedded": 85,
     "chunks": 85,
-    "seconds": 1.249
+    "seconds": 1.122
   }
 }
 ```

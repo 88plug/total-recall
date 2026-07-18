@@ -276,7 +276,24 @@ def _score_row(json_r: dict, mach: dict, vocab: dict) -> float:
     )
 
 
-def run_one(model: str, device: str) -> dict[str, Any]:
+def _apply_mtp_env(mtp: bool) -> None:
+    """Process-side MTP knobs (MLX draft depth). CUDA uses built-in mtp.* when present.
+
+    mtp=False zeros draft tokens so runners that honor OLLAMA_MLX_MTP_* skip MTP.
+    Daemon must also be started without MTP for a clean no-MTP serve — see
+    scripts that restart product serve between arms.
+    """
+    if mtp:
+        os.environ.setdefault("OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS", "4")
+        os.environ.setdefault("OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS", "4")
+        os.environ.pop("TOTAL_RECALL_OLLAMA_MTP", None)
+    else:
+        os.environ["OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS"] = "0"
+        os.environ["OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS"] = "0"
+        os.environ["TOTAL_RECALL_OLLAMA_MTP"] = "0"
+
+
+def run_one(model: str, device: str, *, mtp: bool = True) -> dict[str, Any]:
     # Device: gpu → full offload; cpu → force num_gpu=0
     if device == "cpu":
         os.environ["TOTAL_RECALL_OLLAMA_NUM_GPU"] = "0"
@@ -292,31 +309,37 @@ def run_one(model: str, device: str) -> dict[str, Any]:
         os.environ["TOTAL_RECALL_OLLAMA_NUM_GPU"] = "999"
         os.environ.pop("TOTAL_RECALL_OLLAMA_NUM_THREAD", None)
 
+    _apply_mtp_env(mtp)
+
     from extractors.llm.client import LLMClient, _resolve_sampling
 
     meta = _model_meta(model)
     opts, think = _resolve_sampling(model, None)
     meta["sampling_profile"] = {**opts, "think": think}
+    meta["mtp_requested"] = mtp
     client = LLMClient(provider="ollama", model=model, timeout=300.0)
     if not client.available:
         return {
             "model": model,
             "device": device,
+            "mtp": mtp,
             "available": False,
             "meta": meta,
             "error": "model not available",
         }
 
-    print(f"  [{device}] {model}: json…", flush=True)
+    label = f"{model} mtp={'on' if mtp else 'off'}"
+    print(f"  [{device}] {label}: json…", flush=True)
     json_r = _run_json_tasks(client)
-    print(f"  [{device}] {model}: machines…", flush=True)
+    print(f"  [{device}] {label}: machines…", flush=True)
     mach = _run_machines(client)
-    print(f"  [{device}] {model}: vocab…", flush=True)
+    print(f"  [{device}] {label}: vocab…", flush=True)
     vocab = _run_vocab(client)
     score = _score_row(json_r, mach, vocab)
     return {
         "model": model,
         "device": device,
+        "mtp": mtp,
         "available": True,
         "meta": meta,
         "json_tasks": json_r,
@@ -341,27 +364,51 @@ def main() -> int:
         help="run on gpu (num_gpu=999), cpu (num_gpu=0), or both",
     )
     ap.add_argument(
+        "--mtp",
+        default="on",
+        choices=["on", "off", "both"],
+        help="MTP env arm: on (product default), off (zero draft tokens), or both",
+    )
+    ap.add_argument(
+        "--gemma4-no-mtp",
+        action="store_true",
+        help="extra arm: all gemma4:* models with mtp=off (in addition to --mtp)",
+    )
+    ap.add_argument(
         "--out",
         default=str(_REPO / "docs" / "eval-llm-bakeoff.md"),
     )
     args = ap.parse_args()
     models = [m.strip() for m in args.models.split(",") if m.strip()]
     devices = ["gpu", "cpu"] if args.device == "both" else [args.device]
+    mtp_arms = [True, False] if args.mtp == "both" else [args.mtp == "on"]
 
     from vec.runtime import ensure_product_ollama
 
     ensure_product_ollama(embed=False, chat=True, pull=True)
 
+    # Worklist: (model, mtp)
+    work: list[tuple[str, bool]] = []
+    for model in models:
+        for mtp in mtp_arms:
+            work.append((model, mtp))
+    if args.gemma4_no_mtp:
+        for model in models:
+            if model.startswith("gemma4") and (model, False) not in work:
+                work.append((model, False))
+
     rows: list[dict] = []
     for device in devices:
-        for model in models:
-            print(f"=== {device.upper()} / {model} ===", flush=True)
+        for model, mtp in work:
+            tag = f"{device.upper()} / {model} / mtp={'on' if mtp else 'off'}"
+            print(f"=== {tag} ===", flush=True)
             try:
-                row = run_one(model, device)
+                row = run_one(model, device, mtp=mtp)
             except Exception as exc:  # noqa: BLE001
                 row = {
                     "model": model,
                     "device": device,
+                    "mtp": mtp,
                     "available": False,
                     "error": repr(exc),
                 }
@@ -372,21 +419,32 @@ def main() -> int:
                     f"mach_f1={row['machines']['f1']:.2f} "
                     f"def_cov={row['vocab']['define_coverage']:.2f} "
                     f"echo={row['vocab']['echo_rate']:.2f} "
-                    f"score={row['composite_score']:.2f}",
+                    f"score={row['composite_score']:.2f} "
+                    f"mtp={'on' if mtp else 'off'}",
                     flush=True,
                 )
             else:
                 print(f"  → SKIP {row.get('error')}", flush=True)
 
-    # Rank per device among available
+    # Rank per device among available (mtp=on preferred for product ranking)
     ranking: dict[str, list] = {}
     for device in devices:
-        avail = [r for r in rows if r.get("device") == device and r.get("available")]
+        avail = [
+            r
+            for r in rows
+            if r.get("device") == device
+            and r.get("available")
+            and r.get("mtp", True)
+        ]
+        # If only no-mtp rows, rank those.
+        if not avail:
+            avail = [r for r in rows if r.get("device") == device and r.get("available")]
         avail.sort(key=lambda r: r.get("composite_score") or 0, reverse=True)
         ranking[device] = [
             {
                 "rank": i + 1,
                 "model": r["model"],
+                "mtp": r.get("mtp", True),
                 "score": r["composite_score"],
                 "json_pass": r["json_tasks"]["pass_rate"],
                 "mach_f1": r["machines"]["f1"],
@@ -401,8 +459,11 @@ def main() -> int:
     report = {
         "generated": time.strftime("%Y-%m-%d %H:%M:%S %z"),
         "ollama_version": _ollama_version(),
+        "ollama_bin": "product-embedded",
         "models_requested": models,
         "devices": devices,
+        "mtp_arms": ["on" if t else "off" for t in mtp_arms]
+        + (["gemma4-no-mtp-extra"] if args.gemma4_no_mtp else []),
         "ranking": ranking,
         "rows": rows,
         "recommendation": _recommend(ranking, rows),
@@ -505,19 +566,52 @@ def _render_md(report: dict) -> str:
         "",
     ]
     for device, board in (report.get("ranking") or {}).items():
-        lines.append(f"### {device.upper()}")
+        lines.append(f"### {device.upper()} (product ranking — mtp=on)")
         lines.append("")
         lines.append(
-            "| rank | model | score | json | mach F1 | def_cov | echo | mach ms | vocab ms |"
+            "| rank | model | mtp | score | json | mach F1 | def_cov | echo | mach ms | vocab ms |"
         )
-        lines.append("|------|-------|-------|------|---------|---------|------|---------|----------|")
+        lines.append(
+            "|------|-------|-----|-------|------|---------|---------|------|---------|----------|"
+        )
         for r in board:
+            mtp = "on" if r.get("mtp", True) else "off"
             lines.append(
-                f"| {r['rank']} | `{r['model']}` | {r['score']} | {r['json_pass']} | "
+                f"| {r['rank']} | `{r['model']}` | {mtp} | {r['score']} | {r['json_pass']} | "
                 f"{r['mach_f1']} | {r['define_coverage']} | {r['echo_rate']} | "
                 f"{r['mach_ms']} | {r['vocab_ms']} |"
             )
         lines.append("")
+
+    off_rows = [
+        r
+        for r in (report.get("rows") or [])
+        if r.get("available")
+        and not r.get("mtp", True)
+        and str(r.get("model") or "").startswith("gemma4")
+    ]
+    if off_rows:
+        lines += [
+            "## Gemma4 without MTP",
+            "",
+            "Same harness with `OLLAMA_MLX_MTP_*_DRAFT_TOKENS=0`. Stock Linux GGUF",
+            "tags usually lack MTP heads — treat small deltas as residual noise.",
+            "",
+            "| device | model | score | json | mach F1 | def_cov | echo | mach ms | vocab ms |",
+            "|--------|-------|-------|------|---------|---------|------|---------|----------|",
+        ]
+        off_rows.sort(
+            key=lambda r: (r.get("device") or "", -(r.get("composite_score") or 0))
+        )
+        for r in off_rows:
+            lines.append(
+                f"| {r.get('device')} | `{r['model']}` | {r['composite_score']} | "
+                f"{r['json_tasks']['pass_rate']} | {r['machines']['f1']} | "
+                f"{r['vocab']['define_coverage']} | {r['vocab']['echo_rate']} | "
+                f"{r['machines']['ms']} | {r['vocab']['ms']} |"
+            )
+        lines.append("")
+
     lines += [
         "## MTP / speculative",
         "",
