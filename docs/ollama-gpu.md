@@ -56,7 +56,7 @@ sudo cp scripts/ollama-gpu-hard.conf /etc/systemd/system/ollama.service.d/99-gpu
 sudo systemctl daemon-reload
 sudo systemctl restart ollama
 # Point product at that daemon (default URL already matches):
-# export TOTAL_RECALL_LLM_BASE_URL=http://127.0.0.1:11434
+# export TOTAL_RECALL_LLM_BASE_URL=http://127.0.0.1:11435
 ```
 
 Or pin the product binary: `export RECALL_OLLAMA=/usr/bin/ollama`.

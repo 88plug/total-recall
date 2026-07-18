@@ -25,7 +25,7 @@ ready, on the next `rebuild`.
 **Your transcripts never leave the machine.** The model runs on-device via
 ollama. Cloud APIs are deliberately not supported — they would break the
 no-reupload guarantee that is a core design constraint of total-recall. The
-ollama daemon listens on `localhost:11434` only.
+product ollama daemon listens on `127.0.0.1:11435` by default (never system `:11434`).
 
 ## What refinement improves
 
@@ -50,7 +50,7 @@ coverage ~0.20) and `qwen3.5:4b`. `qwen3.5:2b` won on all three axes at the
 | `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `none` disables the entire LLM layer (no download, no daemon, no refinement). `ollama` forces the ollama code path. |
 | `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Model tag to use. Any model you have pulled with `ollama pull` works. |
 | `TOTAL_RECALL_LLM_REFINE_TEXT` | `1` | Set to `0` to disable vocab/narrative refinement while keeping machine-name extraction. |
-| `TOTAL_RECALL_LLM_BASE_URL` | `http://localhost:11434` | Ollama API endpoint. |
+| `TOTAL_RECALL_LLM_BASE_URL` | `http://127.0.0.1:11435` | Product ollama API (not system 11434). |
 
 ### Disable entirely
 
@@ -83,15 +83,12 @@ to retry. Alternatively: `export TOTAL_RECALL_LLM_PROVIDER=none` to opt out.
 
 ```bash
 ollama serve &   # or: systemctl --user start ollama
-curl http://localhost:11434/api/tags   # should return JSON
+curl http://127.0.0.1:11435/api/tags   # product daemon
 ```
 
-If the port is in use by a system ollama install, set
-`TOTAL_RECALL_LLM_BASE_URL` to point at it:
-
-```bash
-export TOTAL_RECALL_LLM_BASE_URL=http://localhost:11434
-```
+Product defaults to **:11435** so system ollama on :11434 never collides.
+Only pin `TOTAL_RECALL_LLM_BASE_URL` if you intentionally own that endpoint
+with the **product** binary (foreign daemons are refused).
 
 ### Disk space
 

@@ -20,7 +20,24 @@ fail() { printf "  FAIL %s — %s\n" "$1" "$2"; FAIL=$(( FAIL + 1 )); }
 # Isolate all plugin-data writes.
 TMPDATA="$(mktemp -d)"
 STUBS="$(mktemp -d)"
-trap 'rm -rf "$TMPDATA" "$STUBS"' EXIT
+cleanup_tests() {
+  # Kill any product-fake serve left under TMPDATA (bash waits for jobs on EXIT).
+  if [ -n "${TMPDATA:-}" ] && [ -d "$TMPDATA" ]; then
+    for pf in "$TMPDATA"/total-recall/bin/ollama.pid "$TMPDATA"/*/total-recall/bin/ollama.pid; do
+      [ -f "$pf" ] || continue
+      pid="$(tr -d '[:space:]' <"$pf" 2>/dev/null || true)"
+      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    done
+  fi
+  # Also reap any leftover job children of this test shell.
+  jobs -p 2>/dev/null | while read -r jp; do
+    kill -9 "$jp" 2>/dev/null || true
+  done
+  rm -rf "${TMPDATA:-}" "${STUBS:-}"
+}
+trap cleanup_tests EXIT
 
 export CLAUDE_PLUGIN_DATA="$TMPDATA"
 
@@ -288,30 +305,65 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Idempotent re-provision: daemon up + both models listed → no pull.
-#    (sentinel alone no longer skips — must still ensure models.)
+# Helper: product-owned fake daemon (real process + OLLAMA_HOST for ownership).
+# ---------------------------------------------------------------------------
+start_product_fake() {
+  # $1 = path to write product bin; $2 = optional body for list/pull cases
+  local bin="$1"
+  local extra="${2:-}"
+  local pid
+  mkdir -p "$(dirname "$bin")"
+  cat > "$bin" <<EOF
+#!/usr/bin/env bash
+case "\${1:-}" in
+  serve)
+    while true; do sleep 60; done
+    ;;
+  --version)
+    echo "Warning: client version is 0.32.1"
+    exit 0
+    ;;
+${extra}
+  *) exit 0 ;;
+esac
+EOF
+  chmod +x "$bin"
+  OLLAMA_HOST=127.0.0.1:11435 "$bin" serve >/dev/null 2>&1 &
+  pid=$!
+  disown "$pid" 2>/dev/null || true
+  # Ownership uses this pidfile (script stubs show as comm=bash, not ollama).
+  printf '%s\n' "$pid" >"$(dirname "$bin")/ollama.pid"
+  echo "$pid"
+}
+
+# ---------------------------------------------------------------------------
+# 5. Idempotent re-provision: product daemon up + both models listed → no pull.
 # ---------------------------------------------------------------------------
 echo "[5] idempotent re-provision when models already present"
 
 PULL_LOG="$TMPDATA/pull_idempotent.txt"
 rm -f "$PULL_LOG"
-
-write_stub "curl" 'exit 0'  # daemon reachable
-write_stub "ollama" "
-case \"\$1\" in
-  --version) echo 'ollama version 0.0.0-stub'; exit 0;;
-  list)  printf 'NAME\nid\nsize\nqwen3-embedding:0.6b\tx\t1B\nqwen3.5:2b\ty\t1B\n'; exit 0;;
-  pull)  echo pull_called >> '$PULL_LOG'; exit 0;;
-  serve) exit 0;;
-  *)     exit 0;;
-esac
-"
+PRODUCT_BIN="$TMPDATA/total-recall/bin/ollama"
+FAKE_PID="$(start_product_fake "$PRODUCT_BIN" "
+  list)
+    printf 'NAME\nid\nsize\nqwen3-embedding:0.6b\tx\t1B\nqwen3.5:2b\ty\t1B\n'
+    exit 0
+    ;;
+  pull)
+    echo pull_called >> '$PULL_LOG'
+    exit 0
+    ;;
+")"
+sleep 0.2
+write_stub "curl" 'exit 0'  # product URL reachable
 
 set +e
 run_in_subshell "
   export TOTAL_RECALL_LLM_PROVIDER=auto
   export TOTAL_RECALL_VEC=1
-  export RECALL_OLLAMA='$STUBS/ollama'
+  export TOTAL_RECALL_LLM_BASE_URL=http://127.0.0.1:11435
+  export RECALL_OLLAMA='$PRODUCT_BIN'
+  export RECALL_OLLAMA_AUTO_UPDATE=0
   recall::provision_llm
 "
 RC=$?
@@ -329,9 +381,10 @@ else
   fail "idempotent" "unexpected pull: $(cat "$PULL_LOG")"
 fi
 
+kill "$FAKE_PID" 2>/dev/null || true
+wait "$FAKE_PID" 2>/dev/null || true
 rm_stub "curl"
-rm_stub "ollama"
-rm -f "$PULL_LOG"
+rm -f "$PULL_LOG" "$PRODUCT_BIN"
 
 # ---------------------------------------------------------------------------
 # 5b. LLM_PROVIDER=none still pulls embed model (product dense path).
@@ -340,24 +393,27 @@ echo "[5b] LLM=none still provisions embed model"
 
 PULL_LOG="$TMPDATA/pull_embed_only.txt"
 rm -f "$PULL_LOG"
-write_stub "curl" 'exit 0'
-write_stub "ollama" "
-case \"\$1\" in
-  --version) echo 'ollama version 0.0.0-stub'; exit 0;;
-  list)  printf 'NAME\nid\n'; exit 0;;
+PRODUCT_BIN="$TMPDATA/total-recall/bin/ollama"
+FAKE_PID="$(start_product_fake "$PRODUCT_BIN" "
+  list)
+    printf 'NAME\nid\n'
+    exit 0
+    ;;
   pull)
     echo \"\$2\" >> '$PULL_LOG'
-    exit 0;;
-  serve) exit 0;;
-  *) exit 0;;
-esac
-"
+    exit 0
+    ;;
+")"
+sleep 0.2
+write_stub "curl" 'exit 0'
 
 set +e
 run_in_subshell "
   export TOTAL_RECALL_LLM_PROVIDER=none
   export TOTAL_RECALL_VEC=1
-  export RECALL_OLLAMA='$STUBS/ollama'
+  export TOTAL_RECALL_LLM_BASE_URL=http://127.0.0.1:11435
+  export RECALL_OLLAMA='$PRODUCT_BIN'
+  export RECALL_OLLAMA_AUTO_UPDATE=0
   recall::provision_llm
 "
 RC=$?
@@ -375,43 +431,76 @@ else
   fail "LLM=none chat" "chat model was pulled: $(cat "$PULL_LOG")"
 fi
 
+kill "$FAKE_PID" 2>/dev/null || true
+wait "$FAKE_PID" 2>/dev/null || true
 rm_stub "curl"
-rm_stub "ollama"
-rm -f "$PULL_LOG"
+rm -f "$PULL_LOG" "$PRODUCT_BIN"
 
 # ---------------------------------------------------------------------------
-# 6. recall::ollama_serve — no-op when daemon already reachable.
+# 6. recall::ollama_serve — product ownership (never ride foreign daemon).
 # ---------------------------------------------------------------------------
-echo "[6] ollama_serve no-op when daemon reachable"
+echo "[6] ollama_serve product ownership"
 
-write_stub "curl"   'exit 0'   # pretend /api/tags returns 200
+# 6a: API up but no product process → foreign → refuse (rc != 0), do not treat as ours.
+# curl succeeds; product bin is missing so _daemon_is_product fails; serve tries
+# install/start and still fails cleanly without claiming foreign as up.
+write_stub "curl" 'exit 0'
 SERVE_LOG="$TMPDATA/serve_called.txt"
 rm -f "$SERVE_LOG"
+# product bin missing + no RECALL_OLLAMA → serve fails resolve or start
+rm -f "$TMPDATA/total-recall/bin/ollama" 2>/dev/null || true
 write_stub "ollama" "echo serve_called >> '$SERVE_LOG'; exit 0"
 
 set +e
 run_in_subshell "
-  export TOTAL_RECALL_LLM_BASE_URL=http://localhost:11434
+  export TOTAL_RECALL_LLM_BASE_URL=http://127.0.0.1:11435
+  export RECALL_OLLAMA=''
+  export RECALL_OLLAMA_AUTO_UPDATE=0
+  export RECALL_OLLAMA_ALLOW_SYSTEM=0
+  recall::ollama_serve
+"
+RC=$?
+set -e
+
+if [ "$RC" -ne 0 ]; then
+  ok "ollama_serve: foreign-or-missing product bin returns non-zero"
+else
+  fail "ollama_serve (foreign)" "expected non-zero when product daemon not owned"
+fi
+rm_stub "curl"
+rm_stub "ollama"
+rm -f "$SERVE_LOG"
+
+# 6b: product bin is serving + API up → no-op (serve not re-invoked).
+PRODUCT_BIN="$TMPDATA/total-recall/bin/ollama"
+FAKE_PID="$(start_product_fake "$PRODUCT_BIN")"
+sleep 0.2
+write_stub "curl" 'exit 0'
+
+set +e
+run_in_subshell "
+  export TOTAL_RECALL_LLM_BASE_URL=http://127.0.0.1:11435
+  export RECALL_OLLAMA='$PRODUCT_BIN'
+  export RECALL_OLLAMA_AUTO_UPDATE=0
   recall::ollama_serve
 "
 RC=$?
 set -e
 
 if [ "$RC" = "0" ]; then
-  ok "ollama_serve: returns 0 when daemon reachable"
+  ok "ollama_serve: product-owned daemon is no-op success"
 else
-  fail "ollama_serve (reachable)" "rc=$RC"
+  fail "ollama_serve (product owned)" "rc=$RC"
 fi
 
-if [ ! -f "$SERVE_LOG" ]; then
-  ok "ollama_serve: 'ollama serve' not invoked when daemon already up"
+if kill -0 "$FAKE_PID" 2>/dev/null; then
+  ok "ollama_serve: product serve process left running"
 else
-  fail "ollama_serve (reachable)" "unexpectedly invoked serve: $(cat "$SERVE_LOG")"
+  fail "ollama_serve (product owned)" "fake product serve died"
 fi
-
+kill -9 "$FAKE_PID" 2>/dev/null || true
 rm_stub "curl"
-rm_stub "ollama"
-rm -f "$SERVE_LOG"
+rm -f "$PRODUCT_BIN"
 
 # ---------------------------------------------------------------------------
 # 7. recall::ollama_pull — skips pull when model already listed.
@@ -557,32 +646,34 @@ fi
 rm_stub "curl"
 
 # ---------------------------------------------------------------------------
-# 9. recall::provision_llm — full happy path with stubs (no sentinel).
+# 9. recall::provision_llm — full happy path with product-owned fake daemon.
 # ---------------------------------------------------------------------------
 echo "[9] provision_llm happy path (stubbed)"
 
 SENTINEL="$TMPDATA/total-recall/.ollama_ready"
 rm -f "$SENTINEL"
-
-# curl stub: succeed for /api/tags (daemon "up").
+PRODUCT_BIN="$TMPDATA/total-recall/bin/ollama"
+FAKE_PID="$(start_product_fake "$PRODUCT_BIN" "
+  list)
+    # embed missing first so pull runs; after pull tests list again — always claim both
+    printf 'NAME\tID\nqwen3-embedding:0.6b\ta\nqwen3.5:2b\tb\n'
+    exit 0
+    ;;
+  pull)
+    echo pulling_stub_noop
+    exit 0
+    ;;
+")"
+sleep 0.2
 write_stub "curl" 'exit 0'
-# ollama stub: --version, list, pull all succeed.
-write_stub "ollama" "
-case \"\$1\" in
-  --version) echo 'ollama version 0.0.0-stub'; exit 0;;
-  list)  printf 'NAME\t\t\tID\t\t\tSIZE\tMODIFIED\nqwen3.5:2b\tbbbb\t2.7G\t0 secs ago\n'; exit 0;;
-  pull)  echo 'pulling stub noop'; exit 0;;
-  serve) sleep 30; exit 0;;
-  *)     exit 0;;
-esac
-"
 
 set +e
 run_in_subshell "
   export TOTAL_RECALL_LLM_PROVIDER=auto
   export TOTAL_RECALL_LLM_MODEL=qwen3.5:2b
-  export TOTAL_RECALL_LLM_BASE_URL=http://localhost:11434
-  export RECALL_OLLAMA='$STUBS/ollama'
+  export TOTAL_RECALL_VEC=1
+  export TOTAL_RECALL_LLM_BASE_URL=http://127.0.0.1:11435
+  export RECALL_OLLAMA='$PRODUCT_BIN'
   export RECALL_OLLAMA_AUTO_UPDATE=0
   recall::provision_llm
 "
@@ -601,8 +692,10 @@ else
   fail "provision_llm (sentinel)" ".ollama_ready not created (data_root=$TMPDATA/total-recall)"
 fi
 
+kill "$FAKE_PID" 2>/dev/null || true
+wait "$FAKE_PID" 2>/dev/null || true
 rm_stub "curl"
-rm_stub "ollama"
+rm -f "$PRODUCT_BIN"
 
 # ---------------------------------------------------------------------------
 # 10. recall::provision_llm — failure inside is swallowed (returns 0).

@@ -105,7 +105,7 @@ def _model_meta(name: str) -> dict[str, Any]:
 
     try:
         req = urllib.request.Request(
-            "http://127.0.0.1:11434/api/show",
+            f"{os.environ.get('TOTAL_RECALL_LLM_BASE_URL', 'http://127.0.0.1:11435').rstrip('/')}/api/show",
             data=json.dumps({"name": name}).encode(),
             method="POST",
             headers={"Content-Type": "application/json"},
@@ -481,7 +481,8 @@ def _ollama_version() -> str:
     import urllib.request
 
     try:
-        with urllib.request.urlopen("http://127.0.0.1:11434/api/version", timeout=5) as r:
+        base = os.environ.get("TOTAL_RECALL_LLM_BASE_URL", "http://127.0.0.1:11435").rstrip("/")
+        with urllib.request.urlopen(f"{base}/api/version", timeout=5) as r:
             return json.loads(r.read()).get("version", "?")
     except Exception:  # noqa: BLE001
         return "?"

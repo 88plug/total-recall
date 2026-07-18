@@ -24,7 +24,8 @@ from .cache import LLMCache
 log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "qwen3.5:2b"
-DEFAULT_BASE_URL = "http://localhost:11434"
+# Product-owned port — never share system ollama's :11434 by default.
+DEFAULT_BASE_URL = "http://127.0.0.1:11435"
 DEFAULT_TIMEOUT_S = 180.0  # cold-load + first inference can take >60s on CPU
 
 # ---------------------------------------------------------------------------

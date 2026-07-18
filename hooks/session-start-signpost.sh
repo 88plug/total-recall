@@ -115,7 +115,7 @@ LLM_NOTICE_MARK="${RECALL_DATA_ROOT}/.ollama_notice_shown"
 LLM_PROVISION_MARK="${RECALL_DATA_ROOT}/.llm_provisioning"
 if [ "$LLM_PROVIDER" != "none" ] && [ ! -f "$LLM_NOTICE_MARK" ]; then
   LLM_MODEL_TAG="${TOTAL_RECALL_LLM_MODEL:-qwen3.5:2b}"
-  LLM_BASE_URL="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
+  LLM_BASE_URL="${TOTAL_RECALL_LLM_BASE_URL:-http://127.0.0.1:11435}"
   LLM_NOTICE=""
   if [ -f "$LLM_PROVISION_MARK" ]; then
     # Auto-provisioning is in progress (started by bootstrap).

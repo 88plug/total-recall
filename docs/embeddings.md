@@ -9,24 +9,27 @@ primary path.
 | Piece | Who owns it |
 |-------|-------------|
 | Binary | `$CLAUDE_PLUGIN_DATA/total-recall/bin/ollama` (**auto-updated** to latest, no sudo) |
-| Daemon | We start `ollama serve` on localhost when needed |
+| Daemon | Product-owned **`127.0.0.1:11435`** only (never rides system `:11434`) |
 | Embed model | **`qwen3-embedding:0.6b`** (auto-pulled) |
 | Chat model | **`qwen3.5:2b`** (optional refine; auto-pulled unless disabled) |
 
 Hooks fire `recall::provision_llm` on first bootstrap. Rebuild / first embed
 also call `vec.runtime.ensure_product_ollama` so CLI-only machines still work.
 
-**Binary auto-update:** product path is preferred over system PATH. On resolve,
-total-recall probes GitHub latest (24h TTL) and re-fetches when behind. Current
-Linux package is `.tar.zst` (CUDA libs; needs `zstd`) — old `.tgz` is 404 on
-0.32+. Pin with `OLLAMA_VERSION=0.32.1`. Disable bumps with
+**Binary auto-update:** product-embedded only (PATH/snap never used unless
+`RECALL_OLLAMA_ALLOW_SYSTEM=1`). On resolve, probes GitHub latest (24h TTL) and
+re-fetches when behind. Current Linux package is `.tar.zst` (CUDA libs; needs
+`zstd`). Pin with `OLLAMA_VERSION=0.32.1`. Disable bumps with
 `RECALL_OLLAMA_AUTO_UPDATE=0` (still installs if missing).
+
+**Daemon ownership:** default URL is `http://127.0.0.1:11435`. Serve / pull /
+embed / refine only count when the **product binary** is the process bound to
+that URL (`OLLAMA_HOST` set on start). A live system ollama on `:11434` is
+ignored — no version skew, no silent foreign daemon.
 
 Why latest matters: **ollama ≥0.31.2** fixed *structured output for thinking
 models when thinking is disabled* — exactly our qwen3.5 `think:false` + JSON
 schema refine path.
-
-System PATH ollama is a **fallback** only.
 
 ## Two models
 
@@ -75,7 +78,7 @@ instruct on **queries only**, documents raw, English task text.
 |----------|---------|---------|
 | `TOTAL_RECALL_EMBED_MODEL` | `qwen3-embedding:0.6b` | Ollama embed tag (not HF ids) |
 | `TOTAL_RECALL_EMBED_INSTRUCT` | product memory task | `web` / `memory` / `memory_v1` / full `Instruct:…\nQuery:` / bare task |
-| `TOTAL_RECALL_LLM_BASE_URL` | `http://localhost:11434` | Product daemon URL |
+| `TOTAL_RECALL_LLM_BASE_URL` | `http://127.0.0.1:11435` | Product daemon URL (not system 11434) |
 | `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Chat refine tag |
 | `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `none` disables **chat only** |
 | `TOTAL_RECALL_VEC` | on | `0` skips dense (and embed pull) |

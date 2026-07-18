@@ -6,7 +6,7 @@
 #
 # Env overrides:
 #   TOTAL_RECALL_LLM_MODEL       — model tag to pull (default: qwen3.5:2b)
-#   TOTAL_RECALL_LLM_BASE_URL    — daemon URL (default: http://localhost:11434)
+#   TOTAL_RECALL_LLM_BASE_URL    — daemon URL (default: http://127.0.0.1:11435)
 #   TOTAL_RECALL_LLM_PROVIDER    — set to "none" to skip (same opt-out as auto path)
 #   RECALL_OLLAMA                — explicit path to ollama binary (skips auto-resolve)
 #   CLAUDE_PLUGIN_DATA           — plugin data root (harness sets this; falls back to
@@ -46,7 +46,7 @@ if [ "$LLM_PROVIDER" = "none" ]; then
 fi
 
 MODEL="${TOTAL_RECALL_LLM_MODEL:-qwen3.5:2b}"
-BASE_URL="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
+BASE_URL="${TOTAL_RECALL_LLM_BASE_URL:-http://127.0.0.1:11435}"
 SENTINEL="${RECALL_DATA_ROOT}/.ollama_ready"
 
 mkdir -p "$RECALL_DATA_ROOT" "$RECALL_LOG_DIR"

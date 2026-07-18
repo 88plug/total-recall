@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.9] - 2026-07-18
+
+### Fixed — product daemon never rides system ollama
+
+- Default URL **``http://127.0.0.1:11435``** (product-owned). System ``:11434``
+  is ignored.
+- Serve / pull / ensure only succeed when the **product binary** is the process
+  bound to that URL (``OLLAMA_HOST`` set on start; ownership check on exe + env).
+- Foreign reachable daemon → refuse (no silent version skew).
+- Binary install restarts product serve so API version matches the embedded bin.
+- Stamp: ``$data/bin/.ollama-base-url`` shared by bash + Python.
+
 ## [2.3.8] - 2026-07-18
 
 ### Fixed — product ollama always embedded; version probe no longer poisons cache

@@ -591,6 +591,99 @@ recall::_ollama_is_serving_bin() {
   return 1
 }
 
+# Product-owned HTTP endpoint. Never share system ollama's :11434 by default —
+# foreign daemons on 11434 used to silently satisfy "port up" and freeze users
+# on a stale system binary while the product client sat unused.
+# Override only with TOTAL_RECALL_LLM_BASE_URL (operator pin).
+RECALL_OLLAMA_DEFAULT_URL="http://127.0.0.1:11435"
+
+recall::llm_base_url() {
+  local u="${TOTAL_RECALL_LLM_BASE_URL:-}"
+  if [ -z "$u" ] && [ -f "${RECALL_DATA_ROOT}/bin/.ollama-base-url" ]; then
+    u="$(tr -d '[:space:]' <"${RECALL_DATA_ROOT}/bin/.ollama-base-url" 2>/dev/null || true)"
+  fi
+  if [ -z "$u" ]; then
+    u="${RECALL_OLLAMA_DEFAULT_URL}"
+  fi
+  # strip trailing slash
+  u="${u%/}"
+  printf '%s' "$u"
+}
+
+# host:port for OLLAMA_HOST (ollama CLI + serve bind).
+recall::llm_host_port() {
+  local u host
+  u="$(recall::llm_base_url)"
+  u="${u#http://}"
+  u="${u#https://}"
+  host="${u%%/*}"
+  printf '%s' "$host"
+}
+
+# True iff the product binary is the process serving *our* base URL.
+# Reachable-but-foreign (system ollama, other users) → false.
+#
+# Candidate PIDs:
+#   1. ${RECALL_DATA_ROOT}/bin/ollama.pid (written on product start)
+#   2. pgrep -x ollama (real ELF product binary; never pgrep -f)
+recall::_daemon_is_product() {
+  local bin="${1:-}"
+  local base_url host port pid exe want cmd environ pidfile candidates=""
+  base_url="$(recall::llm_base_url)"
+  curl -sf --max-time 2 "${base_url}/api/tags" >/dev/null 2>&1 || return 1
+
+  if [ -z "$bin" ]; then
+    bin="${RECALL_OLLAMA:-${RECALL_DATA_ROOT}/bin/ollama}"
+  fi
+  want="$(readlink -f "$bin" 2>/dev/null || printf '%s' "$bin")"
+  [ -n "$want" ] || return 1
+  host="$(recall::llm_host_port)"
+  port="${host##*:}"
+  [ "$port" = "$host" ] && port="11435"
+
+  pidfile="${RECALL_DATA_ROOT}/bin/ollama.pid"
+  if [ -f "$pidfile" ]; then
+    candidates="$(tr -d '[:space:]' <"$pidfile" 2>/dev/null || true)"
+  fi
+  if command -v pgrep >/dev/null 2>&1; then
+    candidates="${candidates} $(pgrep -x ollama 2>/dev/null || true)"
+  fi
+
+  for pid in $candidates; do
+    [ -n "$pid" ] || continue
+    [ -d "/proc/$pid" ] || continue
+    exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+    cmd="$(tr '\0' ' ' </proc/$pid/cmdline 2>/dev/null || true)"
+    printf '%s' "$cmd" | grep -q 'serve' || continue
+    # Real ELF: /proc/pid/exe == product bin. Script wrapper: exe is the
+    # interpreter — accept when cmdline contains the product bin path.
+    if [ "$exe" != "$want" ] && ! printf '%s' "$cmd" | grep -Fq "$want"; then
+      continue
+    fi
+    # Prefer OLLAMA_HOST match (we always set it on product start).
+    environ="$(tr '\0' '\n' </proc/$pid/environ 2>/dev/null || true)"
+    if printf '%s\n' "$environ" | grep -qx "OLLAMA_HOST=${host}" \
+      || printf '%s\n' "$environ" | grep -qE "^OLLAMA_HOST=.+:${port}$"; then
+      return 0
+    fi
+    # Fallback: process listens on our port (ss best-effort).
+    if command -v ss >/dev/null 2>&1; then
+      if ss -ltnp 2>/dev/null | grep -E ":${port}\\b" | grep -q "pid=${pid},"; then
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+# Persist active product URL so bash + python + next hooks agree.
+recall::_stamp_ollama_url() {
+  local u="${1:-}"
+  [ -n "$u" ] || return 0
+  mkdir -p "${RECALL_DATA_ROOT}/bin" 2>/dev/null || true
+  printf '%s\n' "$u" >"${RECALL_DATA_ROOT}/bin/.ollama-base-url" 2>/dev/null || true
+}
+
 declare -A RECALL_OLLAMA_GPU_CACHE 2>/dev/null || true
 recall::_ollama_gpu_capable() {
   local bin="$1"
@@ -636,7 +729,8 @@ recall::_ollama_gpu_capable() {
   # resolved path against the running `ollama serve` process's executable.
   if [ "$verdict" -eq 0 ] && command -v curl >/dev/null 2>&1 \
      && recall::_ollama_is_serving_bin "$bin"; then
-    local base_url="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
+    local base_url
+    base_url="$(recall::llm_base_url)"
     local ps_json
     if ps_json="$(curl -sf --max-time 2 "${base_url}/api/ps" 2>/dev/null)" \
        && [ -n "$ps_json" ]; then
@@ -911,6 +1005,13 @@ recall::_install_ollama() {
   # Clear resolver cache so next recall::ollama re-picks.
   RECALL_OLLAMA_CACHED=""
   recall::log "install_ollama: ollama ready at $dest (${got:-unknown})"
+  # If we replaced a live product daemon (or any product serve is down after
+  # upgrade), bring product serve back on the product-owned URL so API version
+  # always matches the embedded binary — never leave traffic on a foreign host.
+  if ! recall::_daemon_is_product "$dest"; then
+    recall::log "install_ollama: restarting product serve after binary install"
+    recall::ollama_serve 2>>"${RECALL_LOG_FILE:-/dev/null}" || true
+  fi
   return 0
 }
 
@@ -1054,23 +1155,42 @@ recall::_ollama_product_env() {
   fi
 }
 
-# Start the ollama daemon if not already reachable. Detaches via setsid/nohup
-# (same pattern as recall::start_bootstrap). Idempotent — no-op if port up.
+# Start the product ollama daemon on the product-owned URL.
+# Idempotent only when *our* binary is already serving that URL — a foreign
+# daemon (system ollama on 11434, or anything else) never counts as "up".
 # Logs to ${RECALL_LOG_DIR}/llm-provision.log.
 recall::ollama_serve() {
-  local base_url="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
-  if curl -sf "${base_url}/api/tags" >/dev/null 2>&1; then
-    recall::log "ollama_serve: daemon already reachable at ${base_url}"
+  local ollama_bin base_url host_port log_file launcher daemon_pid i
+  ollama_bin="$(recall::ollama)" || return 1
+  base_url="$(recall::llm_base_url)"
+  host_port="$(recall::llm_host_port)"
+
+  if recall::_daemon_is_product "$ollama_bin"; then
+    recall::_stamp_ollama_url "$base_url"
+    # Export so same shell's pull/list hit the product daemon.
+    export TOTAL_RECALL_LLM_BASE_URL="$base_url"
+    export OLLAMA_HOST="$host_port"
+    recall::log "ollama_serve: product daemon already serving ${base_url} (bin=$ollama_bin)"
     return 0
   fi
-  local ollama_bin; ollama_bin="$(recall::ollama)" || return 1
-  local log_file="${RECALL_LOG_DIR}/llm-provision.log"
+
+  if curl -sf --max-time 2 "${base_url}/api/tags" >/dev/null 2>&1; then
+    # Port up but not our binary — never ride a foreign daemon.
+    recall::log "ollama_serve: ${base_url} is up but not product binary ${ollama_bin} — not using foreign daemon"
+    return 1
+  fi
+
+  log_file="${RECALL_LOG_DIR}/llm-provision.log"
   mkdir -p "$RECALL_LOG_DIR" 2>/dev/null || true
-  local launcher="nohup"
+  launcher="nohup"
   if command -v setsid >/dev/null 2>&1; then launcher="setsid nohup"; fi
   recall::_ollama_product_env
-  recall::log "ollama_serve: starting daemon GPU+MTP (log: $log_file)"
+  # Bind explicitly — never inherit a host OLLAMA_HOST pointing at system 11434.
+  export OLLAMA_HOST="$host_port"
+  export TOTAL_RECALL_LLM_BASE_URL="$base_url"
+  recall::log "ollama_serve: starting product daemon at ${base_url} (OLLAMA_HOST=${host_port}, log: $log_file)"
   $launcher env \
+    OLLAMA_HOST="${host_port}" \
     OLLAMA_FLASH_ATTENTION="${OLLAMA_FLASH_ATTENTION}" \
     OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE}" \
     OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAX_LOADED_MODELS}" \
@@ -1078,34 +1198,41 @@ recall::ollama_serve() {
     OLLAMA_MAX_QUEUE="${OLLAMA_MAX_QUEUE}" \
     OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS="${OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS}" \
     OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS="${OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS}" \
+    ${OLLAMA_MODELS:+OLLAMA_MODELS="${OLLAMA_MODELS}"} \
     "$ollama_bin" serve >>"$log_file" 2>&1 < /dev/null &
-  local daemon_pid=$!
+  daemon_pid=$!
   disown 2>/dev/null || true
-  # Wait up to 10s for the port to open.
-  local i=0
-  while [ $i -lt 10 ]; do
+  printf '%s\n' "$daemon_pid" >"${RECALL_DATA_ROOT}/bin/ollama.pid" 2>/dev/null || true
+
+  i=0
+  while [ $i -lt 15 ]; do
     i=$(( i + 1 ))
     sleep 1
-    if curl -sf "${base_url}/api/tags" >/dev/null 2>&1; then
-      recall::log "ollama_serve: daemon up (pid=$daemon_pid, waited ${i}s)"
+    if recall::_daemon_is_product "$ollama_bin"; then
+      recall::_stamp_ollama_url "$base_url"
+      recall::log "ollama_serve: product daemon up at ${base_url} (pid=$daemon_pid, waited ${i}s)"
       return 0
     fi
   done
-  recall::log "ollama_serve: daemon still not reachable after 10s — continuing anyway"
+  recall::log "ollama_serve: product daemon not confirmed at ${base_url} after 15s (pid=$daemon_pid)"
   return 1
 }
 
-# Pull a model if it is not already present. Idempotent.
+# Pull a model on the *product* daemon (OLLAMA_HOST forced). Idempotent.
 recall::ollama_pull() {
   local model="$1"
-  local ollama_bin; ollama_bin="$(recall::ollama)" || return 1
-  if "$ollama_bin" list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "${model}\(:latest\)\?"; then
-    recall::log "ollama_pull: model ${model} already present"
+  local ollama_bin host_port log_file
+  ollama_bin="$(recall::ollama)" || return 1
+  host_port="$(recall::llm_host_port)"
+  export OLLAMA_HOST="$host_port"
+  if OLLAMA_HOST="$host_port" "$ollama_bin" list 2>/dev/null \
+    | awk 'NR>1{print $1}' | grep -qx "${model}\(:latest\)\?"; then
+    recall::log "ollama_pull: model ${model} already present (host=${host_port})"
     return 0
   fi
-  recall::log "ollama_pull: pulling ${model} — may be several minutes / GB-scale download"
-  local log_file="${RECALL_LOG_DIR}/llm-provision.log"
-  "$ollama_bin" pull "${model}" >> "$log_file" 2>&1
+  recall::log "ollama_pull: pulling ${model} via ${host_port} — may be several minutes / GB-scale download"
+  log_file="${RECALL_LOG_DIR}/llm-provision.log"
+  OLLAMA_HOST="$host_port" "$ollama_bin" pull "${model}" >> "$log_file" 2>&1
 }
 
 # Product-owned ollama defaults (embed = hybrid dense; chat = optional refine).

@@ -239,7 +239,7 @@ The model runs on-device via ollama; transcripts are never uploaded. Cloud APIs 
 | `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `none` disables the LLM layer; `ollama` forces ollama |
 | `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Override model; larger = more coverage, more RAM |
 | `TOTAL_RECALL_LLM_REFINE_TEXT` | `1` | `0` disables text-gen refinement, keeps machine-name extraction |
-| `TOTAL_RECALL_LLM_BASE_URL` | `http://localhost:11434` | Ollama API endpoint |
+| `TOTAL_RECALL_LLM_BASE_URL` | `http://127.0.0.1:11435` | Product ollama API (not system :11434) |
 
 </details>
 

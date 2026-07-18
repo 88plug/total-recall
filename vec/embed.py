@@ -7,7 +7,7 @@ Product contract (format v2, 2026-07):
   * Auto-ensure: first embed/rebuild starts the product daemon + pulls the
     embed model when missing (see :mod:`vec.runtime`).
   * Override: ``TOTAL_RECALL_EMBED_MODEL`` (ollama tag) or ``Embedder(model=tag)``.
-  * Base URL: ``TOTAL_RECALL_LLM_BASE_URL`` (default ``http://localhost:11434``).
+  * Base URL: ``TOTAL_RECALL_LLM_BASE_URL`` (default ``http://127.0.0.1:11435``).
 
 Qwen3-embedding query convention (``as_query=True``):
   Instruct: {domain task — not generic web search}\nQuery:{query}
@@ -76,7 +76,7 @@ def _qwen3_query_instruct() -> str:
         )
     return f"Instruct: {raw}\nQuery:"
 
-_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
+_OLLAMA_DEFAULT_BASE_URL = "http://127.0.0.1:11435"
 _OLLAMA_PROBE_TIMEOUT_S = 10.0
 _OLLAMA_EMBED_TIMEOUT_S = 120.0
 
