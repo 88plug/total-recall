@@ -8,7 +8,7 @@ primary path.
 
 | Piece | Who owns it |
 |-------|-------------|
-| Binary | `$CLAUDE_PLUGIN_DATA/total-recall/bin/ollama` (auto-fetched, no sudo) |
+| Binary | `$CLAUDE_PLUGIN_DATA/total-recall/bin/ollama` (**auto-updated** to latest, no sudo) |
 | Daemon | We start `ollama serve` on localhost when needed |
 | Embed model | **`qwen3-embedding:0.6b`** (auto-pulled) |
 | Chat model | **`qwen3.5:2b`** (optional refine; auto-pulled unless disabled) |
@@ -16,8 +16,17 @@ primary path.
 Hooks fire `recall::provision_llm` on first bootstrap. Rebuild / first embed
 also call `vec.runtime.ensure_product_ollama` so CLI-only machines still work.
 
-System PATH ollama is a **fallback** if present and GPU-capable; the product
-still prefers the managed binary when it can.
+**Binary auto-update:** product path is preferred over system PATH. On resolve,
+total-recall probes GitHub latest (24h TTL) and re-fetches when behind. Current
+Linux package is `.tar.zst` (CUDA libs; needs `zstd`) — old `.tgz` is 404 on
+0.32+. Pin with `OLLAMA_VERSION=0.32.1`. Disable bumps with
+`RECALL_OLLAMA_AUTO_UPDATE=0` (still installs if missing).
+
+Why latest matters: **ollama ≥0.31.2** fixed *structured output for thinking
+models when thinking is disabled* — exactly our qwen3.5 `think:false` + JSON
+schema refine path.
+
+System PATH ollama is a **fallback** only.
 
 ## Two models
 

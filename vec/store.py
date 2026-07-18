@@ -541,11 +541,11 @@ def vec_search(
         if prev is None or hit.cosine_distance < prev.cosine_distance:
             seen[hit.extraction_id] = hit
 
-    # Kind-aware re-rank (matches FTS composite philosophy in index.query):
+    # Kind + distinctive lexical re-rank (matches hybrid / FTS philosophy):
     # decisions/corrections/bans outrank domain_fact near-misses when cosine is
-    # close. Pure distance alone lets "we tried X before Y" steal top-1 from the
-    # actual decision. Boost is subtracted from distance (lower = better).
-    out = sorted(seen.values(), key=lambda h: _dense_rank_key(h))
+    # close; sibling decisions that miss heavy query tokens fall behind.
+    # Lower score is better.
+    out = sorted(seen.values(), key=lambda h: _dense_rank_key(h, query))
     return out[:limit]
 
 
@@ -564,7 +564,21 @@ _DENSE_KIND_BOOST: dict[str, float] = {
 }
 
 
-def _dense_rank_key(hit: VecHit) -> float:
-    """Sort key: cosine distance minus kind boost (lower is better)."""
+def _dense_rank_key(hit: VecHit, query: str = "") -> float:
+    """Sort key: cosine distance minus kind/lexical boosts (lower is better)."""
     boost = _DENSE_KIND_BOOST.get(hit.kind, 0.02)
-    return hit.cosine_distance - boost
+    if not query:
+        return hit.cosine_distance - boost
+    try:
+        from .rrf import (
+            _distinctive_token_coverage,
+            _legacy_negation_penalty,
+            _token_coverage,
+        )
+    except Exception:  # noqa: BLE001
+        return hit.cosine_distance - boost
+    dcov = _distinctive_token_coverage(query, hit.content)
+    cov = _token_coverage(query, hit.content)
+    neg = _legacy_negation_penalty(hit.content)
+    # Small pulls only — keep cosine dominant for pure paraphrases.
+    return hit.cosine_distance - boost - 0.04 * dcov - 0.02 * cov + 0.08 * neg

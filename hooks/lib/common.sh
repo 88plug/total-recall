@@ -668,11 +668,86 @@ recall::_ollama_arch() {
   esac
 }
 
-# Download the CPU-only ollama tarball into ${RECALL_DATA_ROOT}/bin/ — no sudo.
-# The tarball layout is bin/ollama (+ optional lib/). We extract so the binary
-# lands at ${RECALL_DATA_ROOT}/bin/ollama.
+# Parse ``ollama --version`` → bare semver (e.g. 0.32.1). Empty on failure.
+recall::_ollama_local_version() {
+  local bin="${1:-}"
+  [ -n "$bin" ] && [ -x "$bin" ] || return 1
+  local raw
+  raw="$("$bin" --version 2>/dev/null || true)"
+  # "ollama version is 0.32.1" or "ollama version 0.32.1"
+  printf '%s' "$raw" | sed -nE 's/.*version( is)? ([0-9]+(\.[0-9]+)+).*/\2/p' | head -1
+}
+
+# True if $1 is strictly older than $2 (semver-ish via sort -V).
+recall::_version_lt() {
+  local a="${1:-}" b="${2:-}"
+  [ -n "$a" ] && [ -n "$b" ] || return 1
+  [ "$a" = "$b" ] && return 1
+  [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | head -1)" = "$a" ]
+}
+
+# Resolve latest ollama release tag (no leading v). Sources:
+#   1. OLLAMA_VERSION / TOTAL_RECALL_OLLAMA_VERSION env pin
+#   2. GitHub releases/latest (cached under data dir for TTL)
+#   3. empty on total failure (caller keeps current binary)
+recall::_ollama_latest_version() {
+  local pin="${OLLAMA_VERSION:-${TOTAL_RECALL_OLLAMA_VERSION:-}}"
+  pin="${pin#v}"
+  if [ -n "$pin" ]; then
+    printf '%s' "$pin"
+    return 0
+  fi
+  local cache="${RECALL_DATA_ROOT}/bin/.ollama-latest"
+  local ttl="${RECALL_OLLAMA_UPDATE_TTL_S:-86400}"
+  local now age=999999999
+  now="$(date +%s 2>/dev/null || echo 0)"
+  if [ -f "$cache" ]; then
+    local mtime
+    mtime="$(stat -c %Y "$cache" 2>/dev/null || echo 0)"
+    age=$((now - mtime))
+    if [ "$age" -ge 0 ] && [ "$age" -lt "$ttl" ]; then
+      local cached
+      cached="$(tr -d '[:space:]' <"$cache" 2>/dev/null || true)"
+      if [ -n "$cached" ]; then
+        printf '%s' "$cached"
+        return 0
+      fi
+    fi
+  fi
+  command -v curl >/dev/null 2>&1 || return 1
+  local tag=""
+  # Prefer GitHub API (JSON); fall back to Location of /releases/latest.
+  tag="$(curl -fsSL --max-time 8 \
+    -H 'Accept: application/vnd.github+json' \
+    'https://api.github.com/repos/ollama/ollama/releases/latest' 2>/dev/null \
+    | sed -nE 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v?([^"]+)".*/\1/p' \
+    | head -1)"
+  if [ -z "$tag" ]; then
+    tag="$(curl -fsSI --max-time 8 \
+      'https://github.com/ollama/ollama/releases/latest' 2>/dev/null \
+      | tr -d '\r' \
+      | sed -nE 's|^[Ll]ocation: .*/tag/v?([^[:space:]]+).*|\1|p' \
+      | head -1)"
+  fi
+  tag="${tag#v}"
+  [ -n "$tag" ] || return 1
+  mkdir -p "$(dirname "$cache")" 2>/dev/null || true
+  printf '%s\n' "$tag" >"$cache" 2>/dev/null || true
+  printf '%s' "$tag"
+}
+
+# Download product-managed ollama into ${RECALL_DATA_ROOT}/bin/ — no sudo.
+#
+# Official packaging (2026): primary Linux asset is ``.tar.zst`` (~1.4GB with
+# CUDA libs). ``.tgz`` is gone for current releases (404 on v0.32.1) — keep as
+# fallback for older pins only. Matches ollama.com/install.sh extract logic.
+#
+# Env:
+#   OLLAMA_VERSION / TOTAL_RECALL_OLLAMA_VERSION — pin a release (e.g. 0.32.1)
+#   RECALL_OLLAMA_AUTO_UPDATE=0 — install only when missing (no version bump)
 recall::_install_ollama() {
   local dest_bin="${RECALL_DATA_ROOT}/bin"
+  local extract_root="${RECALL_DATA_ROOT}"
   mkdir -p "$dest_bin" 2>/dev/null || { recall::log "install_ollama: can't create $dest_bin"; return 1; }
   if ! command -v curl >/dev/null 2>&1; then
     recall::log "install_ollama: curl not on PATH — install curl, or install ollama manually (https://ollama.com)"
@@ -682,49 +757,222 @@ recall::_install_ollama() {
     recall::log "install_ollama: unsupported arch $(uname -m) — install ollama manually"
     return 1
   }
-  local url="https://ollama.com/download/ollama-linux-${arch}.tgz"
-  local tmp; tmp="$(mktemp --suffix=.tgz 2>/dev/null || mktemp /tmp/ollama.tgz.XXXXXX)"
-  trap 'rm -f "$tmp"' RETURN
-  recall::log "install_ollama: downloading ${url} (~38MB CPU tarball, no sudo needed)"
-  if ! curl -fsSL --retry 3 -o "$tmp" "$url" 2>>"$RECALL_LOG_FILE"; then
-    recall::log "install_ollama: download failed; see hooks.log"
+
+  local pin="${OLLAMA_VERSION:-${TOTAL_RECALL_OLLAMA_VERSION:-}}"
+  pin="${pin#v}"
+  local ver_q=""
+  [ -n "$pin" ] && ver_q="?version=${pin}"
+
+  local base="https://ollama.com/download"
+  local fname="ollama-linux-${arch}"
+  local url="" fmt=""
+  # Prefer zst (current releases). Probe with HEAD -L; fall back to tgz for pins.
+  # Note: v0.32.1+ no longer ships .tgz for linux-amd64 (404) — zstd required.
+  if curl -fsSIL --max-time 15 "${base}/${fname}.tar.zst${ver_q}" >/dev/null 2>&1; then
+    url="${base}/${fname}.tar.zst${ver_q}"
+    fmt="zst"
+  elif curl -fsSIL --max-time 15 "${base}/${fname}.tgz${ver_q}" >/dev/null 2>&1; then
+    url="${base}/${fname}.tgz${ver_q}"
+    fmt="tgz"
+  else
+    # Unprobed direct GitHub latest zst as last resort.
+    url="https://github.com/ollama/ollama/releases/latest/download/${fname}.tar.zst"
+    fmt="zst"
+  fi
+
+  if [ "$fmt" = "zst" ] && ! command -v zstd >/dev/null 2>&1; then
+    recall::log "install_ollama: zstd required for current ollama releases (apt install zstd / dnf install zstd)"
     return 1
   fi
-  # The tarball contains bin/ollama (relative path); extract into dest_bin
-  # parent so it becomes dest_bin/ollama.
-  local extract_root; extract_root="$(dirname "$dest_bin")"
-  if ! tar -xzf "$tmp" -C "$extract_root" 2>>"$RECALL_LOG_FILE"; then
-    recall::log "install_ollama: tar extract failed; see hooks.log"
+
+  # Fresh extract dir per run — never wipe-and-reuse a variable path.
+  local tmp_dir
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/tr-ollama.XXXXXX")" || {
+    recall::log "install_ollama: mktemp failed"
     return 1
-  fi
-  if [ ! -x "$dest_bin/ollama" ]; then
-    # Some releases ship as a flat binary rather than bin/ollama inside the tar.
-    # If the binary landed directly in extract_root, move it.
-    if [ -x "$extract_root/ollama" ]; then
-      mv "$extract_root/ollama" "$dest_bin/ollama"
-    else
-      recall::log "install_ollama: extracted but $dest_bin/ollama not found"
+  }
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmp_dir'" RETURN
+
+  recall::log "install_ollama: downloading ${url} (product-managed, no sudo; ${fmt})"
+  if [ "$fmt" = "zst" ]; then
+    if ! curl -fsSL --retry 3 --max-time 600 "$url" 2>>"$RECALL_LOG_FILE" \
+      | zstd -d 2>>"$RECALL_LOG_FILE" \
+      | tar -xf - -C "$tmp_dir" 2>>"$RECALL_LOG_FILE"; then
+      recall::log "install_ollama: zst download/extract failed; see hooks.log"
+      return 1
+    fi
+  else
+    if ! curl -fsSL --retry 3 --max-time 600 "$url" 2>>"$RECALL_LOG_FILE" \
+      | tar -xzf - -C "$tmp_dir" 2>>"$RECALL_LOG_FILE"; then
+      recall::log "install_ollama: tgz download/extract failed; see hooks.log"
       return 1
     fi
   fi
-  recall::log "install_ollama: ollama ready at $dest_bin/ollama ($("$dest_bin/ollama" --version 2>&1 || echo '?'))"
+
+  # Locate binary in extract tree (bin/ollama or flat ollama).
+  local src_bin=""
+  if [ -x "$tmp_dir/bin/ollama" ]; then
+    src_bin="$tmp_dir/bin/ollama"
+  elif [ -x "$tmp_dir/ollama" ]; then
+    src_bin="$tmp_dir/ollama"
+  else
+    src_bin="$(find "$tmp_dir" -type f -name ollama -perm -u+x 2>/dev/null | head -1 || true)"
+  fi
+  if [ -z "$src_bin" ] || [ ! -x "$src_bin" ]; then
+    recall::log "install_ollama: extracted but ollama binary not found under $tmp_dir"
+    return 1
+  fi
+
+  # If product binary is currently the serving daemon, stop it before replace.
+  local dest="$dest_bin/ollama"
+  if [ -x "$dest" ] && recall::_ollama_is_serving_bin "$dest"; then
+    local pid
+    for pid in $(pgrep -x ollama 2>/dev/null); do
+      local exe
+      exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+      local want
+      want="$(readlink -f "$dest" 2>/dev/null || printf '%s' "$dest")"
+      if [ "$exe" = "$want" ]; then
+        recall::log "install_ollama: stopping product daemon pid=$pid for binary replace"
+        kill "$pid" 2>/dev/null || true
+      fi
+    done
+    sleep 0.5
+  fi
+
+  # Install binary + lib/ollama CUDA backends next to it (official layout).
+  cp -f "$src_bin" "$dest" 2>>"$RECALL_LOG_FILE" || {
+    recall::log "install_ollama: failed to copy binary to $dest"
+    return 1
+  }
+  chmod +x "$dest" 2>/dev/null || true
+
+  local src_lib=""
+  if [ -d "$tmp_dir/lib/ollama" ]; then
+    src_lib="$tmp_dir/lib/ollama"
+  elif [ -d "$(dirname "$src_bin")/../lib/ollama" ]; then
+    src_lib="$(cd "$(dirname "$src_bin")/../lib/ollama" && pwd)"
+  fi
+  if [ -n "$src_lib" ] && [ -d "$src_lib" ]; then
+    local dest_lib="${extract_root}/lib/ollama"
+    mkdir -p "$(dirname "$dest_lib")" 2>/dev/null || true
+    # Replace lib tree atomically-ish: new temp sibling then rename.
+    local new_lib
+    new_lib="$(mktemp -d "${extract_root}/lib/ollama.new.XXXXXX" 2>/dev/null \
+      || mktemp -d "${TMPDIR:-/tmp}/tr-ollama-lib.XXXXXX")"
+    if cp -a "$src_lib/." "$new_lib/" 2>>"$RECALL_LOG_FILE"; then
+      if [ -d "$dest_lib" ]; then
+        local old_lib="${dest_lib}.old.$$"
+        mv "$dest_lib" "$old_lib" 2>/dev/null || true
+        if mv "$new_lib" "$dest_lib" 2>>"$RECALL_LOG_FILE"; then
+          # Safe delete: only a path we just renamed this run under extract_root.
+          if [ -n "$old_lib" ] && [ -d "$old_lib" ] && [ "$old_lib" != "/" ]; then
+            find "$old_lib" -mindepth 1 -delete 2>/dev/null || true
+            rmdir "$old_lib" 2>/dev/null || true
+          fi
+        else
+          # Roll back rename if possible.
+          [ -d "$old_lib" ] && mv "$old_lib" "$dest_lib" 2>/dev/null || true
+          find "$new_lib" -mindepth 1 -delete 2>/dev/null || true
+          rmdir "$new_lib" 2>/dev/null || true
+        fi
+      else
+        mv "$new_lib" "$dest_lib" 2>>"$RECALL_LOG_FILE" || true
+      fi
+    else
+      find "$new_lib" -mindepth 1 -delete 2>/dev/null || true
+      rmdir "$new_lib" 2>/dev/null || true
+    fi
+  fi
+
+  local got
+  got="$(recall::_ollama_local_version "$dest" || true)"
+  if [ -n "$got" ]; then
+    printf '%s\n' "$got" >"${dest_bin}/.ollama-version" 2>/dev/null || true
+  fi
+  # Refresh latest cache to installed when pin unset.
+  if [ -z "$pin" ] && [ -n "$got" ]; then
+    printf '%s\n' "$got" >"${dest_bin}/.ollama-latest" 2>/dev/null || true
+  fi
+  # Clear resolver cache so next recall::ollama re-picks.
+  RECALL_OLLAMA_CACHED=""
+  recall::log "install_ollama: ollama ready at $dest (${got:-unknown})"
+  return 0
+}
+
+# Ensure product-managed binary exists and is not older than latest release.
+# No-op when RECALL_OLLAMA_AUTO_UPDATE=0 (still installs if missing).
+# Soft: network failure leaves existing binary alone.
+recall::_ensure_product_ollama_current() {
+  local bundled="${RECALL_DATA_ROOT}/bin/ollama"
+  local auto="${RECALL_OLLAMA_AUTO_UPDATE:-1}"
+
+  if [ ! -x "$bundled" ]; then
+    recall::_install_ollama || return 1
+    return 0
+  fi
+
+  case "$auto" in
+    0|false|no|off|FALSE|NO|OFF) return 0 ;;
+  esac
+
+  # Throttle version probes (default 24h) unless FORCE.
+  local force="${RECALL_OLLAMA_FORCE_UPDATE:-0}"
+  local check="${RECALL_DATA_ROOT}/bin/.ollama-check"
+  local ttl="${RECALL_OLLAMA_UPDATE_TTL_S:-86400}"
+  local now
+  now="$(date +%s 2>/dev/null || echo 0)"
+  if [ "$force" != "1" ] && [ -f "$check" ]; then
+    local mtime age
+    mtime="$(stat -c %Y "$check" 2>/dev/null || echo 0)"
+    age=$((now - mtime))
+    if [ "$age" -ge 0 ] && [ "$age" -lt "$ttl" ]; then
+      return 0
+    fi
+  fi
+  printf '%s\n' "$now" >"$check" 2>/dev/null || true
+
+  local local_v latest_v
+  local_v="$(recall::_ollama_local_version "$bundled" || true)"
+  latest_v="$(recall::_ollama_latest_version || true)"
+  if [ -z "$latest_v" ]; then
+    recall::log "ollama auto-update: could not resolve latest version; keeping ${local_v:-unknown}"
+    return 0
+  fi
+  if [ -z "$local_v" ]; then
+    recall::log "ollama auto-update: local version unreadable; reinstalling"
+    recall::_install_ollama || return 1
+    return 0
+  fi
+  if recall::_version_lt "$local_v" "$latest_v"; then
+    recall::log "ollama auto-update: ${local_v} → ${latest_v} (product-managed binary)"
+    recall::_install_ollama || {
+      recall::log "ollama auto-update: install failed; keeping ${local_v}"
+      return 1
+    }
+  else
+    recall::log "ollama auto-update: product binary current (${local_v})"
+  fi
   return 0
 }
 
 # Resolve a usable ollama binary. Candidate order (highest priority first):
 #   1. $RECALL_OLLAMA env override
-#   2. ${RECALL_DATA_ROOT}/bin/ollama (our managed copy — predictable version/GPU)
+#   2. ${RECALL_DATA_ROOT}/bin/ollama (product-managed — auto-updated to latest)
 #   3. ollama on PATH (system install — fallback only)
 #   4. /snap/bin/ollama (Ubuntu snap install)
-#   5. auto-fetch (downloads the official tarball, no sudo — ships CUDA libs)
+#   5. auto-fetch (downloads official tar.zst, no sudo — ships CUDA libs)
+#
+# Product auto-update (default on): when the managed binary is missing or older
+# than GitHub latest (or OLLAMA_VERSION pin), re-fetch. TTL 24h between probes
+# (RECALL_OLLAMA_UPDATE_TTL_S). RECALL_OLLAMA_AUTO_UPDATE=0 disables bumps
+# (still installs if missing). Critical for think:false + structured JSON:
+# ollama ≥0.31.2 fixed that path; stale 0.30.x product bins silently regress.
 #
 # GPU preference (RECALL_PREFER_GPU=1, the default): when an NVIDIA GPU is
 # present we make TWO passes over the candidates — pass 1 returns the first
-# GPU-capable candidate, pass 2 falls back to the first runnable one. This
-# stops a distro CPU-only build (e.g. Arch's /usr/bin/ollama, no CUDA linked)
-# from shadowing the CUDA-capable bundled/fetched binary. On a CPU-only host,
-# or with RECALL_PREFER_GPU=0, this collapses to the original first-runnable
-# behavior with zero extra work.
+# GPU-capable candidate, pass 2 falls back to the first runnable one.
 #
 # Prints the resolved path to stdout; returns non-zero if none found/fetchable.
 recall::ollama() {
@@ -736,12 +984,20 @@ recall::ollama() {
   local prefer_gpu="${RECALL_PREFER_GPU:-1}"
   local bundled="${RECALL_DATA_ROOT}/bin/ollama"
 
-  # Build the candidate list in priority order. Auto-fetch is handled inline
-  # below (it has a side effect) rather than pre-listed.
+  # RECALL_OLLAMA explicit override bypasses GPU checking + auto-update.
+  if [ -n "${RECALL_OLLAMA:-}" ] && recall::_can_run_ollama "$RECALL_OLLAMA"; then
+    RECALL_OLLAMA_CACHED="$RECALL_OLLAMA"
+    recall::log "ollama: using explicit RECALL_OLLAMA override $RECALL_OLLAMA"
+    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
+  fi
+
+  # Product-managed binary: install if missing, bump if behind latest.
+  # Soft-fail — network blips must not block PATH fallback.
+  recall::_ensure_product_ollama_current 2>>"$RECALL_LOG_FILE" || true
+
+  # Build the candidate list in priority order.
   local -a candidates=()
-  [ -n "${RECALL_OLLAMA:-}" ] && candidates+=("$RECALL_OLLAMA")
-  # Bundled binary takes priority over whatever the user has installed — we own
-  # and manage this copy so its version and GPU support are predictable.
+  # Bundled binary first — we own version + CUDA layout.
   candidates+=("$bundled")
   command -v ollama >/dev/null 2>&1 && candidates+=("$(command -v ollama)")
   candidates+=("/snap/bin/ollama")
@@ -753,39 +1009,25 @@ recall::ollama() {
 
   local cand
 
-  # RECALL_OLLAMA explicit override bypasses GPU checking — operator said
-  # exactly which binary to use, so respect it unconditionally.
-  if [ -n "${RECALL_OLLAMA:-}" ] && recall::_can_run_ollama "$RECALL_OLLAMA"; then
-    RECALL_OLLAMA_CACHED="$RECALL_OLLAMA"
-    recall::log "ollama: using explicit RECALL_OLLAMA override $RECALL_OLLAMA"
-    printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
-  fi
-
-  # Pass 1: GPU-capable candidate (only when we want GPU). We deliberately do
-  # NOT auto-fetch here yet — we first see if any already-present binary is
-  # GPU-capable before paying for a download.
+  # Pass 1: GPU-capable candidate (only when we want GPU).
   if [ "$want_gpu" -eq 1 ]; then
     for cand in "${candidates[@]}"; do
-      [ "$cand" = "${RECALL_OLLAMA:-}" ] && continue  # already handled above
       if recall::_can_run_ollama "$cand" && recall::_ollama_gpu_capable "$cand"; then
         RECALL_OLLAMA_CACHED="$cand"
-        recall::log "ollama: selected GPU-capable binary $cand"
+        recall::log "ollama: selected GPU-capable binary $cand ($("$cand" --version 2>/dev/null || echo '?'))"
         printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
       fi
     done
 
-    # No present binary is GPU-capable. The official tarball ships CUDA libs,
-    # so fetch it and prefer it over any CPU-only binary we found.
+    # No present binary is GPU-capable. Official tarball ships CUDA libs.
     if recall::_can_run_ollama "$bundled" || { recall::_install_ollama && recall::_can_run_ollama "$bundled"; }; then
       if recall::_ollama_gpu_capable "$bundled"; then
         RECALL_OLLAMA_CACHED="$bundled"
-        recall::log "ollama: selected GPU-capable fetched binary $bundled (no CUDA binary was on PATH)"
+        recall::log "ollama: selected GPU-capable fetched binary $bundled"
         printf '%s' "$RECALL_OLLAMA_CACHED"; return 0
       fi
     fi
 
-    # Still nothing GPU-capable. Warn (do NOT kill any running CPU daemon) and
-    # fall through to the CPU pass so refinement still works, just slower.
     local base_url="${TOTAL_RECALL_LLM_BASE_URL:-http://localhost:11434}"
     if curl -sf --max-time 2 "${base_url}/api/tags" >/dev/null 2>&1; then
       recall::log "ollama: NVIDIA GPU present but a CPU-only daemon is already serving ${base_url}; using CPU. To switch, stop that daemon and re-run — total-recall will not kill it."
@@ -802,7 +1044,7 @@ recall::ollama() {
     fi
   done
 
-  # Auto-fetch as last resort (no GPU preference, or every present binary failed).
+  # Auto-fetch as last resort.
   if recall::_install_ollama && recall::_can_run_ollama "$bundled"; then
     RECALL_OLLAMA_CACHED="$bundled"
     printf '%s' "$RECALL_OLLAMA_CACHED"; return 0

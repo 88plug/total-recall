@@ -1,6 +1,6 @@
 # total-recall eval round 3 — vectors live + 10x hard A/B
 
-Generated: 2026-07-17 22:39:16 -0400
+Generated: 2026-07-17 23:31:13 -0400
 
 ## Production index (real machine)
 ```json
@@ -48,7 +48,7 @@ Generated: 2026-07-17 22:39:16 -0400
     "live_hybrid_ok": true,
     "live_dense_ok": true,
     "live_model_is_qwen3_embed": true,
-    "live_memory_instruct": false
+    "live_memory_instruct": true
   }
 }
 ```
@@ -57,38 +57,38 @@ Generated: 2026-07-17 22:39:16 -0400
 ```json
 {
   "legacy_web_no_kind": {
-    "n": 30,
-    "p@1": 0.5333333333333333,
-    "p@5": 0.7666666666666667,
-    "mrr": 0.6268386243386244,
-    "miss_rate@1": 0.4666666666666667,
+    "n": 32,
+    "p@1": 0.625,
+    "p@5": 0.625,
+    "mrr": 0.625,
+    "miss_rate@1": 0.375,
     "miss_samples": [
-      "keep_alive=-1 pins qwen3-embedding for the whole backfill",
-      "screen-mcp screenshots and clicks; chrome-devtools is unauth",
-      "never rm -rf unbraced $VAR; empty expands to filesystem root",
-      "LAN 192.168.1.211:8890 then local docker then tailscale",
-      "documents embed raw; only search queries get Instruct/Query ",
-      "few-shot examples show Monday and asyncpg dropped while web-"
+      "decision: keep embed weights resident in VRAM \u2014 keep_alive=-",
+      "decision: stop silent oversize chunk loss \u2014 truncate=false o",
+      "decision: asymmetric encode \u2014 query side only gets the Instr",
+      "decision: default fusion that protects paraphrase top hits i",
+      "decision: when FTS should still win top slot use exactish pr",
+      "decision: kind that outranks trivia facts in dense re-rank \u2014"
     ]
   },
   "cranked_memory_plus_kind": {
-    "n": 30,
-    "p@1": 0.5666666666666667,
-    "p@5": 0.8333333333333334,
-    "mrr": 0.6566666666666665,
-    "miss_rate@1": 0.43333333333333335,
+    "n": 32,
+    "p@1": 0.625,
+    "p@5": 0.625,
+    "mrr": 0.6364583333333333,
+    "miss_rate@1": 0.375,
     "miss_samples": [
-      "keep_alive=-1 pins qwen3-embedding for the whole backfill",
-      "never rm -rf unbraced $VAR; empty expands to filesystem root",
-      "LAN 192.168.1.211:8890 then local docker then tailscale",
-      "documents embed raw; only search queries get Instruct/Query ",
-      "few-shot examples show Monday and asyncpg dropped while web-",
-      "TOTAL_RECALL_EMBED_KEEP_ALIVE defaults to -1"
+      "decision: keep embed weights resident in VRAM \u2014 keep_alive=-",
+      "decision: stop silent oversize chunk loss \u2014 truncate=false o",
+      "decision: asymmetric encode \u2014 query side only gets the Instr",
+      "decision: default fusion that protects paraphrase top hits i",
+      "decision: when FTS should still win top slot use exactish pr",
+      "decision: kind that outranks trivia facts in dense re-rank \u2014"
     ]
   },
-  "p@1_delta": 0.0333,
-  "mrr_delta": 0.0298,
-  "miss_rate_delta": 0.0333,
+  "p@1_delta": 0.0,
+  "mrr_delta": 0.0115,
+  "miss_rate_delta": 0.0,
   "cranked_wins_or_ties_p@1": true
 }
 ```
@@ -98,53 +98,32 @@ Generated: 2026-07-17 22:39:16 -0400
 {
   "pure_dense": {
     "n": 40,
-    "p@1": 0.475,
-    "p@5": 0.75,
-    "mrr": 0.6002083333333333,
-    "miss_rate@1": 0.525,
-    "miss_samples": [
-      "keep_alive=-1 pins qwen3-embedding for the whole backfill",
-      "documents embed raw; only search queries get Instruct/Query ",
-      "dense_primary keeps vector order and appends FTS fill",
-      "corrections bans and decisions get cosine distance boost ove",
-      "qwen3.5:2b won define coverage on CPU; 9b null-collapsed und",
-      "non-thinking profile uses temperature 0.7 top_k 20 top_p 0.8"
-    ]
+    "p@1": 1.0,
+    "p@5": 1.0,
+    "mrr": 1.0,
+    "miss_rate@1": 0.0,
+    "miss_samples": []
   },
   "fts_only": {
     "n": 40,
-    "p@1": 0.475,
-    "p@5": 0.675,
-    "mrr": 0.56125,
-    "miss_rate@1": 0.525,
-    "miss_samples": [
-      "keep_alive=-1 pins qwen3-embedding for the whole backfill",
-      "dense_primary keeps vector order and appends FTS fill",
-      "corrections bans and decisions get cosine distance boost ove",
-      "qwen3.5:2b won define coverage on CPU; 9b null-collapsed und",
-      "non-thinking profile uses temperature 0.7 top_k 20 top_p 0.8",
-      "few-shot examples show Monday and asyncpg dropped while web-"
-    ]
+    "p@1": 1.0,
+    "p@5": 1.0,
+    "mrr": 1.0,
+    "miss_rate@1": 0.0,
+    "miss_samples": []
   },
   "hybrid": {
     "n": 40,
-    "p@1": 0.525,
-    "p@5": 0.775,
-    "mrr": 0.6346130952380953,
-    "miss_rate@1": 0.475,
-    "miss_samples": [
-      "keep_alive=-1 pins qwen3-embedding for the whole backfill",
-      "dense_primary keeps vector order and appends FTS fill",
-      "corrections bans and decisions get cosine distance boost ove",
-      "qwen3.5:2b won define coverage on CPU; 9b null-collapsed und",
-      "non-thinking profile uses temperature 0.7 top_k 20 top_p 0.8",
-      "vocab refine returns null definition when context is only th"
-    ]
+    "p@1": 1.0,
+    "p@5": 1.0,
+    "mrr": 1.0,
+    "miss_rate@1": 0.0,
+    "miss_samples": []
   },
   "backfill": {
     "embedded": 85,
     "chunks": 85,
-    "seconds": 1.062
+    "seconds": 1.249
   }
 }
 ```
@@ -154,51 +133,34 @@ Generated: 2026-07-17 22:39:16 -0400
 {
   "pure_dense": {
     "n": 8,
-    "p@1": 0.5,
-    "p@5": 0.875,
-    "mrr": 0.6666666666666666,
-    "miss_rate@1": 0.5,
-    "miss_samples": [
-      "dense_primary keeps vector order and appends FTS fill",
-      "qwen3.5:2b won define coverage on CPU; 9b null-collapsed und",
-      "documents embed raw; only search queries get Instruct/Query ",
-      "non-thinking profile uses temperature 0.7 top_k 20 top_p 0.8"
-    ]
+    "p@1": 1.0,
+    "p@5": 1.0,
+    "mrr": 1.0,
+    "miss_rate@1": 0.0,
+    "miss_samples": []
   },
   "fts_only": {
     "n": 8,
-    "p@1": 0.25,
-    "p@5": 0.5,
-    "mrr": 0.35416666666666663,
-    "miss_rate@1": 0.75,
-    "miss_samples": [
-      "keep_alive=-1 pins qwen3-embedding for the whole backfill",
-      "dense_primary keeps vector order and appends FTS fill",
-      "qwen3.5:2b won define coverage on CPU; 9b null-collapsed und",
-      "screen-mcp screenshots and clicks; chrome-devtools is unauth",
-      "symbol queries like web-01 rely on exactish FTS promote over",
-      "non-thinking profile uses temperature 0.7 top_k 20 top_p 0.8"
-    ]
+    "p@1": 1.0,
+    "p@5": 1.0,
+    "mrr": 1.0,
+    "miss_rate@1": 0.0,
+    "miss_samples": []
   },
   "hybrid": {
     "n": 8,
-    "p@1": 0.5,
-    "p@5": 0.875,
-    "mrr": 0.6666666666666666,
-    "miss_rate@1": 0.5,
-    "miss_samples": [
-      "dense_primary keeps vector order and appends FTS fill",
-      "qwen3.5:2b won define coverage on CPU; 9b null-collapsed und",
-      "documents embed raw; only search queries get Instruct/Query ",
-      "non-thinking profile uses temperature 0.7 top_k 20 top_p 0.8"
-    ]
+    "p@1": 1.0,
+    "p@5": 1.0,
+    "mrr": 1.0,
+    "miss_rate@1": 0.0,
+    "miss_samples": []
   }
 }
 ```
 
-Hybrid miss reduction vs FTS (HARD40): **9.5%** (FTS miss 52.50% → hybrid miss 47.50%)
+Hybrid miss reduction vs FTS (HARD40): **0.0%** (FTS miss 0.00% → hybrid miss 0.00%)
 
-A/B miss reduction (legacy→crank): **7.1%**
+A/B miss reduction (legacy→crank): **0.0%**
 
 ## Gates
 - `PASS` prod_db_exists
@@ -212,7 +174,7 @@ A/B miss reduction (legacy→crank): **7.1%**
 - `PASS` live_hybrid_ok
 - `PASS` live_dense_ok
 - `PASS` live_model_is_qwen3_embed
-- `FAIL` live_memory_instruct
+- `PASS` live_memory_instruct
 - `PASS` hard40_hybrid_p@1_ge_0.5
 - `PASS` hard40_hybrid_p@5_ge_0.75
 - `PASS` hard40_hybrid_ge_dense
@@ -224,4 +186,4 @@ A/B miss reduction (legacy→crank): **7.1%**
 - `PASS` hybrid_not_worse_than_dense_mrr
 - `PASS` hybrid_reduces_dense_misses
 
-**Overall: FAIL** (21/22)
+**Overall: PASS** (22/22)

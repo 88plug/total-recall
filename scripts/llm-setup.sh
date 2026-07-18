@@ -16,9 +16,11 @@
 # content anywhere. The refinement layer it sets up is local-only by design.
 #
 # Default (no-sudo) path:
-#   - Tries ollama on PATH, /snap/bin/ollama, then fetches the CPU tarball
-#     from https://ollama.com/download/ollama-linux-{amd64,arm64}.tgz into
-#     ${RECALL_DATA_ROOT}/bin/ollama — no sudo, no systemd.
+#   - Tries product-managed ${RECALL_DATA_ROOT}/bin/ollama first (auto-updated
+#     to GitHub latest via tar.zst; OLLAMA_VERSION pins). Falls back to PATH /
+#     snap, then fetches https://ollama.com/download/ollama-linux-{amd64,arm64}
+#     (.tar.zst preferred; .tgz only for old pins) — no sudo, no systemd.
+#   - Requires zstd for current releases (0.32+).
 # Sudo fallback:
 #   - If the no-sudo fetch fails AND sudo is available, offers the official
 #     install.sh as a fallback (writes to /usr/local/bin).
@@ -51,8 +53,11 @@ mkdir -p "$RECALL_DATA_ROOT" "$RECALL_LOG_DIR"
 
 log "model=$MODEL  base_url=$BASE_URL"
 
+# Force a version probe this run (llm-setup is the explicit repair path).
+export RECALL_OLLAMA_FORCE_UPDATE="${RECALL_OLLAMA_FORCE_UPDATE:-1}"
+
 # ----- 1. ollama binary (no-sudo path via shared resolver) -------------------
-log "resolving ollama binary..."
+log "resolving ollama binary (product auto-update on)..."
 OLLAMA_BIN=""
 if OLLAMA_BIN="$(recall::ollama)"; then
   log "ollama resolved: $OLLAMA_BIN ($("$OLLAMA_BIN" --version 2>/dev/null || echo '?'))"

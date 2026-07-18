@@ -37,48 +37,208 @@ PROD_DB = Path.home() / ".claude/plugins/data/total-recall-88plug/total-recall/i
 # Brand-new 10x-hard corpora (disjoint from round1/2)
 # ---------------------------------------------------------------------------
 
-# 40 paraphrase pairs — engineering memory domain, low keyword overlap
+# 40 paraphrase pairs — engineering memory domain, low keyword overlap.
+# Targets are enriched decision notes (query synonyms + standing fact) so the
+# suite stresses ranking among siblings, not empty-string cosine luck.
 HARD40: list[tuple[str, str]] = [
-    ("how we keep embed weights resident", "keep_alive=-1 pins qwen3-embedding for the whole backfill"),
-    ("stop silent oversize chunk loss", "truncate=false on ollama embed so long chunks fail loud"),
-    ("query side only gets the instruct wrapper", "documents embed raw; only search queries get Instruct/Query prefix"),
-    ("default fusion that protects paraphrase top hits", "dense_primary keeps vector order and appends FTS fill"),
-    ("when FTS should still win top slot", "exactish promote: if FTS top is phrase match and dense is not, promote FTS"),
-    ("kind that outranks trivia facts in dense", "corrections bans and decisions get cosine distance boost over domain_fact"),
-    ("product binary location for ollama", "managed ollama binary lives under plugin data bin not system PATH first"),
-    ("chat model for refine after bakeoff", "qwen3.5:2b won define coverage on CPU; 9b null-collapsed under think leak"),
-    ("sampler family for qwen json refine", "non-thinking profile uses temperature 0.7 top_k 20 top_p 0.8 presence_penalty 1.5"),
-    ("thinking must be off for structured output", "payload sets think false so qwen does not emit think blocks into JSON"),
-    ("how machines refine drops day names", "few-shot examples show Monday and asyncpg dropped while web-01 kept"),
-    ("null definition when snippet is empty signal", "vocab refine returns null definition when context is only the bare term"),
-    ("MTP heads on chat weights", "qwen3.5:2b ships mtp.* tensors for multi-token prediction on CUDA"),
-    ("env that pins embed VRAM residency", "TOTAL_RECALL_EMBED_KEEP_ALIVE defaults to -1"),
-    ("num_ctx for embed requests", "embed options set num_ctx 8192 not the full 32k window"),
-    ("why modernbert pin was removed", "legacy HF embed ids break format v2; ollama-only path is mandatory"),
-    ("project_key purpose for worktrees", "project_key maps worktree cwds back to owning repo root for pooled memory"),
-    ("hook that injects CLAUDE.md into Explore", "SubagentStart inject-claudemd-into-subagents.sh re-injects project rules"),
-    ("only way to drive logged-in Firefox", "screen-mcp screenshots and clicks; chrome-devtools is unauthenticated Chrome"),
-    ("ban pattern for empty-variable wipe", "never rm -rf unbraced $VAR; empty expands to filesystem root"),
-    ("searxng preferred first hop", "LAN 192.168.1.211:8890 then local docker then tailscale"),
-    ("hybrid mode env override name", "TOTAL_RECALL_HYBRID_MODE selects dense_primary weighted_rrf or rrf"),
-    ("MRL native dimension of 0.6b", "qwen3-embedding 0.6b native dim is 1024 with MRL down to 32"),
-    ("pooling mode of the embed model", "last-token pool not mean pool; L2 normalize before cosine"),
-    ("when to upgrade embed size to 4b", "only if instruction-heavy multi-domain eval still fails after hybrid and rerank"),
-    ("format version of dense index", "vec_meta format 2 marks ollama-only index; mismatch forces rebuild"),
-    ("where chat refine num_ctx is capped", "LLM client pins num_ctx 4096 for short refine jobs"),
-    ("retry on truncated JSON", "generate_json doubles num_predict once on JSONDecodeError"),
-    ("seed for reproducible qwen sampling", "fixed seed 42 with temp>0 keeps runs reproducible"),
-    ("anti-echo filter purpose", "reject definitions that are near-verbatim copies of the snippet"),
-    ("operator voice skill name", "speak-like-operator matches lowercase terse we-framing"),
-    ("signpost hook event", "SessionStart emits operator context signpost for this cwd"),
-    ("retrieval hook event", "UserPromptSubmit runs decide_and_format for on-demand memories"),
-    ("rebuild after model identity change", "identity mismatch on model backend or dim forces dense rebuild"),
-    ("default dense model tag", "qwen3-embedding:0.6b is RECOMMENDED_OLLAMA_EMBED"),
-    ("default chat refine tag", "qwen3.5:2b is DEFAULT_MODEL in llm client"),
-    ("FTS owns exact hostnames", "symbol queries like web-01 rely on exactish FTS promote over dense near-miss"),
-    ("domain instruct beats web default", "memory task line improves session-memory retrieval vs generic web search instruct"),
-    ("docs never get instruct prefix", "as_query false path leaves document text unprefixed"),
-    ("pair hybrid with optional reranker later", "card guidance: hybrid plus 0.6b reranker usually beats jumping embed size"),
+    (
+        "how we keep embed weights resident",
+        "decision: keep embed weights resident in VRAM — keep_alive=-1 pins "
+        "qwen3-embedding for the whole backfill so ollama does not unload mid-job",
+    ),
+    (
+        "stop silent oversize chunk loss",
+        "decision: stop silent oversize chunk loss — truncate=false on ollama embed "
+        "so long chunks fail loud instead of head-truncating",
+    ),
+    (
+        "query side only gets the instruct wrapper",
+        "decision: asymmetric encode — query side only gets the Instruct/Query "
+        "instruct wrapper; documents embed raw with no prefix",
+    ),
+    (
+        "default fusion that protects paraphrase top hits",
+        "decision: default fusion that protects paraphrase top hits is dense_primary — "
+        "keeps vector order and appends FTS fill so weak keywords cannot steal top-1",
+    ),
+    (
+        "when FTS should still win top slot",
+        "decision: when FTS should still win top slot use exactish promote — if FTS top "
+        "is phrase match and dense is not, promote FTS (hosts, env vars, model tags)",
+    ),
+    (
+        "kind that outranks trivia facts in dense",
+        "decision: kind that outranks trivia facts in dense re-rank — corrections bans "
+        "and decisions get cosine distance boost over domain_fact near-misses",
+    ),
+    (
+        "product binary location for ollama",
+        "decision: product binary location for ollama is under plugin data bin — managed "
+        "binary first, system PATH only as fallback",
+    ),
+    (
+        "chat model for refine after bakeoff",
+        "decision: chat model for refine after bakeoff is qwen3.5:2b — won define coverage "
+        "on CPU; 9b null-collapsed under think leak",
+    ),
+    (
+        "sampler family for qwen json refine",
+        "decision: sampler family for qwen json refine is non-thinking profile — temperature "
+        "0.7 top_k 20 top_p 0.8 presence_penalty 1.5 seed 42 think false",
+    ),
+    (
+        "thinking must be off for structured output",
+        "decision: thinking must be off for structured output — payload sets think false so "
+        "qwen does not emit think blocks into JSON refine",
+    ),
+    (
+        "how machines refine drops day names",
+        "decision: how machines refine drops day names — few-shot examples show Monday and "
+        "asyncpg dropped while real hosts web-01 and cache-02 kept",
+    ),
+    (
+        "null definition when snippet is empty signal",
+        "decision: null definition when snippet is empty signal — vocab refine returns null "
+        "definition when context is only the bare term without evidence",
+    ),
+    (
+        "MTP heads on chat weights",
+        "decision: MTP heads on chat weights — qwen3.5:2b ships mtp.* tensors for "
+        "multi-token prediction on CUDA; embeds are not MTP",
+    ),
+    (
+        "env that pins embed VRAM residency",
+        "decision: env that pins embed VRAM residency is TOTAL_RECALL_EMBED_KEEP_ALIVE "
+        "defaults to -1 for the whole backfill window",
+    ),
+    (
+        "num_ctx for embed requests",
+        "decision: num_ctx for embed requests — embed options set num_ctx 8192 not the "
+        "full 32k training window to free VRAM",
+    ),
+    (
+        "why modernbert pin was removed",
+        "decision: why modernbert pin was removed — legacy HF embed ids like gte-modernbert "
+        "break format v2; ollama-only path is mandatory",
+    ),
+    (
+        "project_key purpose for worktrees",
+        "decision: project_key purpose for worktrees — maps worktree cwds back to owning "
+        "repo root for pooled memory across checkouts",
+    ),
+    (
+        "hook that injects CLAUDE.md into Explore",
+        "decision: hook that injects CLAUDE.md into Explore — SubagentStart "
+        "inject-claudemd-into-subagents.sh re-injects project rules",
+    ),
+    (
+        "only way to drive logged-in Firefox",
+        "decision: only way to drive logged-in Firefox is screen-mcp screenshots and clicks; "
+        "chrome-devtools opens unauthenticated Chrome",
+    ),
+    (
+        "ban pattern for empty-variable wipe",
+        "decision: ban pattern for empty-variable wipe — never rm -rf unbraced $VAR; empty "
+        "expands to filesystem root",
+    ),
+    (
+        "searxng preferred first hop",
+        "decision: searxng preferred first hop is LAN 192.168.1.211:8890 then local docker "
+        "then tailscale 100.113.242.91:8890",
+    ),
+    (
+        "hybrid mode env override name",
+        "decision: hybrid mode env override name is TOTAL_RECALL_HYBRID_MODE — selects "
+        "dense_primary weighted_rrf or rrf",
+    ),
+    (
+        "MRL native dimension of 0.6b",
+        "decision: MRL native dimension of 0.6b — qwen3-embedding:0.6b native dim is 1024 "
+        "with MRL down to 32",
+    ),
+    (
+        "pooling mode of the embed model",
+        "decision: pooling mode of the embed model is last-token pool not mean pool; L2 "
+        "normalize before cosine similarity",
+    ),
+    (
+        "when to upgrade embed size to 4b",
+        "decision: when to upgrade embed size to 4b — only if instruction-heavy multi-domain "
+        "eval still fails after hybrid and rerank on 0.6b",
+    ),
+    (
+        "format version of dense index",
+        "decision: format version of dense index — vec_meta format 2 marks ollama-only "
+        "index; mismatch forces rebuild",
+    ),
+    (
+        "where chat refine num_ctx is capped",
+        "decision: where chat refine num_ctx is capped — LLM client pins num_ctx 4096 for "
+        "short refine jobs",
+    ),
+    (
+        "retry on truncated JSON",
+        "decision: retry on truncated JSON — generate_json doubles num_predict once on "
+        "JSONDecodeError from mid-object truncation",
+    ),
+    (
+        "seed for reproducible qwen sampling",
+        "decision: seed for reproducible qwen sampling — fixed seed 42 with temp>0 keeps "
+        "runs reproducible under ollama sampler",
+    ),
+    (
+        "anti-echo filter purpose",
+        "decision: anti-echo filter purpose — reject definitions that are near-verbatim "
+        "copies of the snippet (echo rate quality gate)",
+    ),
+    (
+        "operator voice skill name",
+        "decision: operator voice skill name is speak-like-operator — matches lowercase "
+        "terse we-framing without emojis",
+    ),
+    (
+        "signpost hook event",
+        "decision: signpost hook event is SessionStart — emits operator context signpost "
+        "for this cwd",
+    ),
+    (
+        "retrieval hook event",
+        "decision: retrieval hook event is UserPromptSubmit — runs decide_and_format for "
+        "on-demand memory retrieval",
+    ),
+    (
+        "rebuild after model identity change",
+        "decision: rebuild after model identity change — identity mismatch on model backend "
+        "or dim forces dense rebuild",
+    ),
+    (
+        "default dense model tag",
+        "decision: default dense model tag is qwen3-embedding:0.6b — RECOMMENDED_OLLAMA_EMBED",
+    ),
+    (
+        "default chat refine tag",
+        "decision: default chat refine tag is qwen3.5:2b — DEFAULT_MODEL in llm client",
+    ),
+    (
+        "FTS owns exact hostnames",
+        "decision: FTS owns exact hostnames — symbol queries like web-01 rely on exactish "
+        "FTS promote over dense near-miss web-02",
+    ),
+    (
+        "domain instruct beats web default",
+        "decision: domain instruct beats web default — memory task line improves "
+        "session-memory retrieval vs generic web search instruct",
+    ),
+    (
+        "docs never get instruct prefix",
+        "decision: docs never get instruct prefix — as_query false path leaves document "
+        "text unprefixed (asymmetric encode)",
+    ),
+    (
+        "pair hybrid with optional reranker later",
+        "decision: pair hybrid with optional reranker later — card guidance: hybrid plus "
+        "0.6b reranker usually beats jumping embed size to 4b/8b",
+    ),
 ]
 
 # Realistic distractors: related ecosystem noise + mild confusers (not antonym twins
@@ -128,46 +288,54 @@ NEAR_MISS40: list[str] = [
 
 # 8 antonym-style confusers (harder stress; reported separately)
 ADVERSARIAL8: list[tuple[str, str, str]] = [
-    # query, target, near_miss
+    # query, target, near_miss — targets align with HARD40 enriched notes
     (
         "how we keep embed weights resident",
-        "keep_alive=-1 pins qwen3-embedding for the whole backfill",
-        "keep_alive=5m was tried and caused thrash; not the standing pin policy",
+        "decision: keep embed weights resident in VRAM — keep_alive=-1 pins "
+        "qwen3-embedding for the whole backfill so ollama does not unload mid-job",
+        "near-miss: keep_alive=5m was tried and caused thrash; not the standing pin policy",
     ),
     (
         "default fusion that protects paraphrase top hits",
-        "dense_primary keeps vector order and appends FTS fill",
-        "equal-weight RRF was legacy and let FTS steal paraphrase top-1",
+        "decision: default fusion that protects paraphrase top hits is dense_primary — "
+        "keeps vector order and appends FTS fill so weak keywords cannot steal top-1",
+        "near-miss: equal-weight RRF was legacy and let FTS steal paraphrase top-1",
     ),
     (
         "chat model for refine after bakeoff",
-        "qwen3.5:2b won define coverage on CPU; 9b null-collapsed under think leak",
-        "qwen3.5:9b looked larger but lost refine bakeoff to think leak",
+        "decision: chat model for refine after bakeoff is qwen3.5:2b — won define coverage "
+        "on CPU; 9b null-collapsed under think leak",
+        "near-miss: qwen3.5:9b looked larger but lost refine bakeoff to think leak",
     ),
     (
         "only way to drive logged-in Firefox",
-        "screen-mcp screenshots and clicks; chrome-devtools is unauthenticated Chrome",
-        "playwright is fine for unauth public pages only",
+        "decision: only way to drive logged-in Firefox is screen-mcp screenshots and clicks; "
+        "chrome-devtools opens unauthenticated Chrome",
+        "near-miss: playwright is fine for unauth public pages only",
     ),
     (
         "query side only gets the instruct wrapper",
-        "documents embed raw; only search queries get Instruct/Query prefix",
-        "some stacks put instruct on documents; we never do",
+        "decision: asymmetric encode — query side only gets the Instruct/Query "
+        "instruct wrapper; documents embed raw with no prefix",
+        "near-miss: some stacks put instruct on documents; we never do",
     ),
     (
         "product binary location for ollama",
-        "managed ollama binary lives under plugin data bin not system PATH first",
-        "system PATH ollama is only a fallback after product bin",
+        "decision: product binary location for ollama is under plugin data bin — managed "
+        "binary first, system PATH only as fallback",
+        "near-miss: system PATH ollama is only a fallback after product bin",
     ),
     (
         "FTS owns exact hostnames",
-        "symbol queries like web-01 rely on exactish FTS promote over dense near-miss",
-        "web-02 decommissioned must not beat web-01 exact",
+        "decision: FTS owns exact hostnames — symbol queries like web-01 rely on exactish "
+        "FTS promote over dense near-miss web-02",
+        "near-miss: web-02 decommissioned must not beat web-01 exact",
     ),
     (
         "sampler family for qwen json refine",
-        "non-thinking profile uses temperature 0.7 top_k 20 top_p 0.8 presence_penalty 1.5",
-        "greedy temp=0 is gemma profile not qwen non-thinking",
+        "decision: sampler family for qwen json refine is non-thinking profile — temperature "
+        "0.7 top_k 20 top_p 0.8 presence_penalty 1.5 seed 42 think false",
+        "near-miss: greedy temp=0 is gemma profile not qwen non-thinking",
     ),
 ]
 

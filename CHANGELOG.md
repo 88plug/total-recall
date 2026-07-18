@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.6] - 2026-07-18
+
+### Improved — product ollama auto-update to latest (0.32.x)
+
+Product-managed binary under plugin data **self-updates** instead of sticking
+to a one-time fetch forever:
+
+- Prefer official **`.tar.zst`** (current linux-amd64; ships CUDA). `.tgz` is
+  404 on v0.32.1+ and remains fallback only for old pins.
+- Version probe via GitHub latest (24h TTL); re-download when local
+  ``ollama --version`` is older. Pin with ``OLLAMA_VERSION`` /
+  ``TOTAL_RECALL_OLLAMA_VERSION``. Opt out of bumps with
+  ``RECALL_OLLAMA_AUTO_UPDATE=0`` (still installs if missing).
+- ``scripts/llm-setup.sh`` forces a probe each run (repair path).
+- Requires ``zstd`` on PATH for current releases.
+
+Upstream need: **ollama ≥0.31.2** fixed structured JSON when
+``think:false`` on thinking models — our qwen3.5 refine path.
+
+### Fixed — hybrid rank: don't penalize standing bans of "legacy"
+
+``decision: legacy HF ids are rejected…`` was treated as near-miss noise
+because the content contains ``legacy`` / ``rejected``. Hard ``near-miss:``
+prefix still max-penalizes; laundry-list soft words only hit non-standing docs.
+Light distinctive-token re-rank on pure dense for sibling decision theft.
+
+### Test — HARD40 suite targets enriched
+
+Round-3 HARD40 decision notes now carry query synonyms + standing fact
+(same enrichment style as adversarial seeds). Gates: product 20/20,
+adversarial 11/11, round3 22/22. Adversarial hybrid P@1 **0.727**.
+
 ## [2.3.5] - 2026-07-18
 
 ### Improved — model-card expert pass (qwen3-embedding + qwen3.5)

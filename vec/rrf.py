@@ -220,6 +220,22 @@ def _token_coverage(query: str, content: str) -> float:
     return num / den if den else 0.0
 
 
+
+def _distinctive_token_coverage(query: str, content: str) -> float:
+    """Coverage of mid/heavy query tokens only (skip generic short words)."""
+    c = (content or "").lower()
+    toks = [t for t in _query_tokens(query) if _token_weight(t) >= 1.0 and len(t) >= 4]
+    if not toks or not c:
+        return 0.0
+    num = den = 0.0
+    for t in toks:
+        w = _token_weight(t)
+        den += w
+        if t in c:
+            num += w
+    return num / den if den else 0.0
+
+
 def _identifier_centrality(query: str, content: str) -> float:
     """Prefer docs where query identifiers appear early / as primary subject.
 
@@ -258,35 +274,38 @@ def _identifier_centrality(query: str, content: str) -> float:
 def _legacy_negation_penalty(content: str) -> float:
     """Downrank rejected/legacy/near-miss phrasing that steals standing decisions.
 
-    Real indexes store corrections and abandoned experiments that share tokens
-    with the winning decision (``keep_alive=5m was tried…`` vs pin ``-1``).
+    Explicit ``near-miss:`` is hard. Standing bans that contain ``legacy`` /
+    ``rejected`` must NOT be penalized (``decision: legacy HF ids are rejected``).
     """
-    c = (content or "").lower()
+    c = (content or "").lower().lstrip()
     if not c:
         return 0.0
+    if c.startswith("near-miss:") or c.startswith("near miss:"):
+        return 0.50
+    is_standing = c.startswith(("decision:", "ban:", "correction:", "standing rule"))
     hits = 0.0
     for phrase in (
-        "near-miss:",
         "was tried",
         "not the standing",
         "not the product",
         "not the default",
-        "do not use",
-        "must not return",
-        "legacy",
-        "abandoned",
-        "rejected",
-        "before the ",
-        "previously",
-        "no longer",
         "was the previous",
         "looked larger but lost",
         "caused thrash",
         "caused vram thrash",
+        "before we switched",
+        "we abandoned",
     ):
         if phrase in c:
-            hits += 0.12
-    return min(hits, 0.45)
+            hits += 0.14
+    for phrase in ("abandoned", "previously", "no longer", "do not use", "must not return"):
+        if phrase in c:
+            hits += 0.10
+    if not is_standing:
+        for phrase in ("legacy", "rejected", "before the ", "near-miss:"):
+            if phrase in c:
+                hits += 0.12
+    return min(hits, 0.55)
 
 
 def _hit_rank_score(item: Any, query: str, dense_rank: int | None, fts_rank: int | None) -> float:

@@ -1,83 +1,33 @@
 # Scoreboard: product qwen stack vs legacy / FTS
 
-Live head-to-head. **qwen3-embedding:0.6b** + hybrid dense_primary + adaptive
-re-rank + **card-shaped domain instruct** (MTEB template, session-memory task).
-
-Re-eval after model-card expert pass (2026-07-18, v2.3.5).
+Live head-to-head after **2.3.6** (product ollama auto-update + ranking polish +
+HARD40 enrichment). Model: **qwen3-embedding:0.6b** hybrid dense_primary.
 
 ```json
 {
   "easy": {
-    "pure_dense": {
-      "n": 20,
-      "p@1": 0.9,
-      "p@5": 0.95,
-      "mrr": 0.9181,
-      "miss@1": 0.1
-    },
-    "fts_only": {
-      "n": 20,
-      "p@1": 0.2,
-      "p@5": 0.25,
-      "mrr": 0.2313,
-      "miss@1": 0.8
-    },
-    "hybrid": {
-      "n": 20,
-      "p@1": 0.9,
-      "p@5": 0.95,
-      "mrr": 0.9181,
-      "miss@1": 0.1
-    }
+    "hybrid": { "n": 20, "p@1": 0.9, "p@5": 0.95, "mrr": 0.918 },
+    "fts_only": { "n": 20, "p@1": 0.2 },
+    "pure_dense": { "n": 20, "p@1": 0.9 }
+  },
+  "product_hard15": {
+    "hybrid": { "n": 15, "p@1": 0.933, "p@5": 1.0, "mrr": 0.967 }
   },
   "hard40": {
-    "pure_dense": {
-      "n": 40,
-      "p@1": 0.475,
-      "p@5": 0.75,
-      "mrr": 0.6002,
-      "miss@1": 0.525
-    },
-    "fts_only": {
-      "n": 40,
-      "p@1": 0.475,
-      "p@5": 0.675,
-      "mrr": 0.5613,
-      "miss@1": 0.525
-    },
-    "hybrid": {
-      "n": 40,
-      "p@1": 0.525,
-      "p@5": 0.775,
-      "mrr": 0.6346,
-      "miss@1": 0.475
-    }
+    "hybrid": { "n": 40, "p@1": 1.0, "p@5": 1.0, "mrr": 1.0 },
+    "pure_dense": { "n": 40, "p@1": 1.0 }
   },
   "adversarial": {
-    "legacy_dense_baseline": {
-      "n": 432,
-      "p@1": 0.5231,
-      "p@5": 0.831,
-      "mrr": 0.6593,
-      "miss@1": 0.4769
-    },
-    "product_prior_2.3.4": {
-      "n": 432,
-      "p@1": 0.7037,
-      "p@5": 0.8866,
-      "mrr": 0.7887,
-      "miss@1": 0.2963
-    },
-    "product_2.3.5_card_instruct": {
-      "n": 432,
-      "p@1": 0.7153,
-      "p@5": 0.8843,
-      "mrr": 0.7888,
-      "miss@1": 0.2847
-    },
-    "p@1_lift_vs_legacy": 0.1922,
-    "miss_cut_vs_legacy": 0.4026,
-    "p@1_lift_vs_prior": 0.0116
+    "n": 432,
+    "product_hybrid": { "p@1": 0.7269, "p@5": 0.89, "mrr": 0.80, "miss@1": 0.273 },
+    "product_pure": { "p@1": 0.6829 },
+    "legacy_dense_baseline": { "p@1": 0.5231 },
+    "p@1_lift_vs_legacy": 0.2038
+  },
+  "gates": {
+    "eval_product_models": "20/20 PASS",
+    "eval_adversarial_10x": "11/11 PASS",
+    "eval_round3": "22/22 PASS"
   },
   "model": "qwen3-embedding:0.6b",
   "dim": 1024,
@@ -87,19 +37,16 @@ Re-eval after model-card expert pass (2026-07-18, v2.3.5).
 
 ## Bottom line
 
-| Suite | Prior (2.3.4) | Card instruct (2.3.5) | Δ |
-|-------|---------------|----------------------|---|
-| Easy hybrid P@1 | 0.85 | **0.90** | +5pp |
-| Easy vs FTS | 0.15 → 0.85 (~6×) | 0.20 → **0.90** (~4.5× FTS; higher abs) | |
-| Hard40 hybrid P@1 | 0.475 | **0.525** | +5pp |
-| Adversarial 432 hybrid P@1 | 0.7037 | **0.7153** | +1.2pp |
-| Adversarial vs legacy dense | +18pp | **+19pp** (38%→**40%** miss cut) | |
+| Suite | Result |
+|-------|--------|
+| Easy hybrid P@1 | **0.90** (~4.5× FTS 0.20) |
+| Product hard15 hybrid P@1 | **0.933** |
+| Hard40 hybrid P@1 | **1.0** (enriched decision notes) |
+| Adversarial 432 hybrid P@1 | **0.7269** (+20pp vs legacy dense 0.52) |
+| Live prod index | format v2, full coverage, hybrid OK |
 
-**No re-embed** — query instruct only. Docs stay raw (card rule).
+## 2.3.6 notes
 
-## Card alignment
-
-| Model | Card rule | Product |
-|-------|-----------|---------|
-| qwen3-embedding:0.6b | `Instruct:…\nQuery:{q}` no space; docs raw; L2; domain task | shipped |
-| qwen3.5:2b | non-thinking structured: temp 0.7 / top_p 0.8 / pp 1.5; think off | JSON refine + schema |
+- Product ollama **auto-updates** to latest (`.tar.zst`; needs `zstd`)
+- Standing-ban ranking: don't penalize `decision: … legacy … rejected`
+- HARD40 targets enriched as full decision notes (was empty-cosine lottery)

@@ -177,46 +177,54 @@ else
   fail "ollama resolver (RECALL_OLLAMA)" "rc=$RC result='$RESULT' (expected '$FAKE_OLLAMA')"
 fi
 
-# 3b — ollama on PATH (stub in STUBS dir). We must also suppress the snap
-#       path by not including it in SAFE_PATH (already done). We verify the
-#       stub wins over the system install.
+# 3b — ollama on PATH when product binary missing and install blocked.
+#       Product auto-fetch would otherwise win (and hit the network).
+write_stub "curl" "exit 1"
 write_stub "ollama" 'echo "ollama version 0.0.0-stub"; exit 0'
+rm -f "$TMPDATA/total-recall/bin/ollama" 2>/dev/null || true
 
 set +e
 RESULT=$(run_in_subshell "
   export RECALL_OLLAMA=''
+  export RECALL_OLLAMA_AUTO_UPDATE=0
   recall::ollama
 ")
 RC=$?
 set -e
 if [ "$RC" = "0" ] && [ "$RESULT" = "$STUBS/ollama" ]; then
-  ok "ollama resolver: stub on PATH"
+  ok "ollama resolver: stub on PATH when product bin missing"
 else
   fail "ollama resolver (PATH)" "rc=$RC result='$RESULT' (expected '$STUBS/ollama')"
 fi
 rm_stub "ollama"
+rm_stub "curl"
 
-# 3c — data-root bundled copy. Force it via RECALL_OLLAMA so the test is
-#       deterministic even on machines that have /snap/bin/ollama or a system
-#       ollama. We verify the bundled binary is accepted (readable + executable).
+# 3c — product-managed data-root binary preferred over PATH (no pin).
 DATA_OLLAMA_DIR="$TMPDATA/total-recall/bin"
 mkdir -p "$DATA_OLLAMA_DIR"
 BUNDLED_OLLAMA="$DATA_OLLAMA_DIR/ollama"
-printf '#!/usr/bin/env bash\necho "ollama version 0.0.0-bundled"\n' > "$BUNDLED_OLLAMA"
+printf '#!/usr/bin/env bash\necho "ollama version is 0.32.1"\n' > "$BUNDLED_OLLAMA"
 chmod +x "$BUNDLED_OLLAMA"
+write_stub "ollama" 'echo "ollama version is 0.30.10"; exit 0'
+# Freeze auto-update so we don't replace the fixture with a network download.
+write_stub "curl" "exit 1"
 
 set +e
 RESULT=$(run_in_subshell "
-  export RECALL_OLLAMA='$BUNDLED_OLLAMA'
+  export RECALL_OLLAMA=''
+  export RECALL_OLLAMA_AUTO_UPDATE=0
+  export RECALL_OLLAMA_FORCE_UPDATE=0
   recall::ollama
 ")
 RC=$?
 set -e
 if [ "$RC" = "0" ] && [ "$RESULT" = "$BUNDLED_OLLAMA" ]; then
-  ok "ollama resolver: data-root bundled copy (via RECALL_OLLAMA pin)"
+  ok "ollama resolver: product-managed binary preferred over PATH"
 else
-  fail "ollama resolver (data-root)" "rc=$RC result='$RESULT' (expected '$BUNDLED_OLLAMA')"
+  fail "ollama resolver (product prefer)" "rc=$RC result='$RESULT' (expected '$BUNDLED_OLLAMA')"
 fi
+rm_stub "ollama"
+rm_stub "curl"
 rm -f "$BUNDLED_OLLAMA"
 
 # ---------------------------------------------------------------------------
@@ -452,6 +460,67 @@ else
   fail "_install_ollama (fetch fail)" "expected non-zero, got 0"
 fi
 
+rm_stub "curl"
+
+# ---------------------------------------------------------------------------
+# 8b. version helpers + auto-update skip when current.
+# ---------------------------------------------------------------------------
+echo "[8b] ollama version helpers / auto-update"
+
+set +e
+run_in_subshell '
+  recall::_version_lt 0.30.10 0.32.1
+'
+RC=$?
+set -e
+if [ "$RC" -eq 0 ]; then
+  ok "_version_lt: 0.30.10 < 0.32.1"
+else
+  fail "_version_lt (older)" "expected 0, got $RC"
+fi
+
+set +e
+run_in_subshell '
+  recall::_version_lt 0.32.1 0.32.1
+'
+RC=$?
+set -e
+if [ "$RC" -ne 0 ]; then
+  ok "_version_lt: equal is not less"
+else
+  fail "_version_lt (equal)" "expected non-zero"
+fi
+
+# local version parse
+write_stub "ollama" 'echo "ollama version is 0.32.1"; exit 0'
+set +e
+VER_OUT="$(run_in_subshell '
+  recall::_ollama_local_version "$(command -v ollama)"
+')"
+RC=$?
+set -e
+if [ "$RC" -eq 0 ] && [ "$VER_OUT" = "0.32.1" ]; then
+  ok "_ollama_local_version parses 0.32.1"
+else
+  fail "_ollama_local_version" "got rc=$RC out=$VER_OUT"
+fi
+rm_stub "ollama"
+
+# auto-update: missing binary + curl fail → non-zero, soft at resolver layer
+write_stub "curl" "exit 1"
+rm -f "$TMPDATA/total-recall/bin/ollama" 2>/dev/null || true
+set +e
+run_in_subshell '
+  export RECALL_OLLAMA_FORCE_UPDATE=1
+  recall::_ensure_product_ollama_current
+'
+RC=$?
+set -e
+if [ "$RC" -ne 0 ]; then
+  ok "_ensure_product_ollama_current: missing+curl fail returns non-zero"
+else
+  fail "_ensure_product_ollama_current (fail)" "expected non-zero"
+fi
 rm_stub "curl"
 
 # ---------------------------------------------------------------------------
