@@ -21,24 +21,129 @@ from pathlib import Path
 
 __all__ = [
     "DEFAULT_DB_PATH",
+    "resolve_data_dir",
+    "resolve_db_path",
+    "list_index_candidates",
     "connect",
     "apply_schema",
     "vacuum",
 ]
 
 
-def _default_db_path() -> Path:
-    """Compute the on-disk DB path.
+def _xdg_data_dir() -> Path:
+    return Path("~/.local/share/total-recall").expanduser()
 
-    Honors ``$CLAUDE_PLUGIN_DATA`` when set (Claude Code sets this for plugins).
-    Falls back to ``~/.local/share/total-recall/`` (XDG-ish).
+
+def _plugin_data_candidates() -> list[Path]:
+    """Existing plugin-data index dirs under ~/.claude/plugins/data/.
+
+    Marketplace installs land at
+    ``~/.claude/plugins/data/<plugin-id>/total-recall/index.db`` when the
+    harness sets ``CLAUDE_PLUGIN_DATA`` to ``…/<plugin-id>``. Without env,
+    we still *discover* those so CLI/hooks don't silently open a second XDG DB.
     """
-    base_env = os.environ.get("CLAUDE_PLUGIN_DATA")
-    if base_env:
-        base = Path(base_env).expanduser() / "total-recall"
-    else:
-        base = Path("~/.local/share/total-recall").expanduser()
-    return base / "index.db"
+    root = Path("~/.claude/plugins/data").expanduser()
+    if not root.is_dir():
+        return []
+    found: list[Path] = []
+    # …/data/total-recall-88plug/total-recall/index.db  (marketplace id)
+    # …/data/total-recall/index.db                       (legacy bare fallback)
+    for child in sorted(root.iterdir()) if root.exists() else []:
+        if not child.is_dir():
+            continue
+        nested = child / "total-recall" / "index.db"
+        if nested.is_file():
+            found.append(nested.parent)
+        # bare: …/data/total-recall/index.db (hooks old fallback)
+        if child.name == "total-recall" and (child / "index.db").is_file():
+            found.append(child)
+    # de-dupe preserve order
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for p in found:
+        rp = p.resolve()
+        if rp not in seen:
+            seen.add(rp)
+            out.append(p)
+    return out
+
+
+def list_index_candidates() -> list[Path]:
+    """Every ``index.db`` we know about (plugin data + XDG), existing only."""
+    paths: list[Path] = []
+    for d in _plugin_data_candidates():
+        p = d / "index.db"
+        if p.is_file():
+            paths.append(p)
+    xdg = _xdg_data_dir() / "index.db"
+    if xdg.is_file():
+        paths.append(xdg)
+    # unique by resolve
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for p in paths:
+        try:
+            r = p.resolve()
+        except OSError:
+            r = p
+        if r not in seen:
+            seen.add(r)
+            out.append(p)
+    return out
+
+
+def resolve_data_dir() -> Path:
+    """Single canonical data directory for the index (and sibling state).
+
+    Precedence (highest first):
+
+    1. ``$TOTAL_RECALL_DB_DIR`` — explicit dir override (``.mcp.json`` sets this).
+    2. ``$TOTAL_RECALL_DB`` parent — file override from CLI/env.
+    3. ``$CLAUDE_PLUGIN_DATA/total-recall`` — harness-set plugin data (users).
+    4. Largest existing plugin-data index under ``~/.claude/plugins/data/`` —
+       so bare ``total-recall`` CLI matches the plugin instead of inventing XDG.
+    5. ``~/.local/share/total-recall`` — XDG fallback (fresh dev / no plugin).
+
+    Plugin-only installs always hit (3) via the harness — one DB, no dual path.
+    Dual DBs only appear if something ran without env *and* without discovery
+    (legacy); (4) stops that going forward.
+    """
+    explicit_dir = (os.environ.get("TOTAL_RECALL_DB_DIR") or "").strip()
+    if explicit_dir:
+        return Path(explicit_dir).expanduser().resolve()
+
+    explicit_file = (os.environ.get("TOTAL_RECALL_DB") or "").strip()
+    if explicit_file:
+        return Path(explicit_file).expanduser().resolve().parent
+
+    plugin_data = (os.environ.get("CLAUDE_PLUGIN_DATA") or "").strip()
+    if plugin_data:
+        return (Path(plugin_data).expanduser() / "total-recall").resolve()
+
+    # No harness env: prefer an already-populated plugin index over empty XDG.
+    plugin_dirs = _plugin_data_candidates()
+    if plugin_dirs:
+        def _sz(d: Path) -> int:
+            try:
+                return (d / "index.db").stat().st_size
+            except OSError:
+                return 0
+
+        best = max(plugin_dirs, key=_sz)
+        if _sz(best) > 0:
+            return best.resolve()
+
+    return _xdg_data_dir().resolve()
+
+
+def resolve_db_path() -> Path:
+    """Canonical ``index.db`` path (see :func:`resolve_data_dir`)."""
+    return resolve_data_dir() / "index.db"
+
+
+def _default_db_path() -> Path:
+    """Import-time default; prefer :func:`resolve_db_path` at call sites."""
+    return resolve_db_path()
 
 
 DEFAULT_DB_PATH: Path = _default_db_path()
@@ -60,7 +165,7 @@ def _ensure_parent_dir(db_path: Path) -> None:
 
 
 def connect(
-    db_path: Path | str = DEFAULT_DB_PATH,
+    db_path: Path | str | None = None,
     read_only: bool = False,
 ) -> sqlite3.Connection:
     """Open a connection to the total-recall index.
@@ -71,7 +176,11 @@ def connect(
     * ``read_only=True`` opens the URI in ``mode=ro`` — schema apply is
       skipped and writes will fail (use for query-only consumers like the MCP
       server).
+    * ``db_path is None`` → :func:`resolve_db_path` (re-evaluated each call so
+      env / discovery stay correct).
     """
+    if db_path is None:
+        db_path = resolve_db_path()
     db_path = Path(db_path).expanduser()
     _ensure_parent_dir(db_path)
 

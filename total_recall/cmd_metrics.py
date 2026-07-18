@@ -309,6 +309,32 @@ def health_cmd(ctx: click.Context) -> None:
         return
 
     click.echo("total-recall health")
+    click.echo(f"  db:                 {db_path}")
+    # Dual-DB footgun: plugin path + XDG leftover from CLI without env.
+    try:
+        from index.db import list_index_candidates, resolve_db_path as _canon
+
+        canon = _canon().resolve()
+        others = []
+        for p in list_index_candidates():
+            try:
+                if p.resolve() != canon:
+                    others.append(p)
+            except OSError:
+                others.append(p)
+        if others:
+            click.echo(
+                "  WARNING: multiple index.db files found — only the canonical "
+                "path is used. Orphans are ignored (safe to archive/delete after backup):"
+            )
+            for p in others:
+                try:
+                    sz = p.stat().st_size
+                    click.echo(f"    orphan {p} ({sz // (1024 * 1024)} MB)")
+                except OSError:
+                    click.echo(f"    orphan {p}")
+    except Exception:
+        pass
     boot = data.get("bootstrap")
     if boot:
         if boot.get("in_progress"):

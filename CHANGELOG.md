@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [2.3.4] - 2026-07-18
 
+### Fixed — single canonical DB path (no dual index for plugin users)
+
+Plugin installs always used ``$CLAUDE_PLUGIN_DATA/total-recall/index.db``.
+Bare CLI / MCP launcher without that env previously fell back to
+``~/.local/share/total-recall/`` (and hooks sometimes to
+``~/.claude/plugins/data/total-recall/``), creating a **second** empty or
+divergent index. Power users who also ran CLI without env got two DBs.
+
+- **One resolver** (`index.db.resolve_data_dir` / `resolve_db_path`): env →
+  plugin data → discover largest existing plugin install index → XDG.
+- Hooks ``recall::data_root`` and MCP launcher match that order; **stop
+  inventing** ``CLAUDE_PLUGIN_DATA=~/.claude/plugins/data`` (parent of all
+  plugins).
+- ``total-recall metrics health`` prints canonical ``db:`` and **warns on
+  orphan indexes**.
+
+Normal marketplace installs never needed two DBs; they still don't. This
+stops accidental second DBs and surfaces leftovers.
+
 ### Fixed — total recall means total (hybrid on all free-text paths)
 
 - **UserPromptSubmit / `cmd_prompt_relevant`** used FTS only; now tries

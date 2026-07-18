@@ -2,9 +2,45 @@
 # Shared helpers for total-recall hooks.
 # Source from each hook script. Caller is responsible for `set -euo pipefail`.
 
-# Resolve plugin-data root. CLAUDE_PLUGIN_DATA is set by the harness when the
-# plugin runs; fall back to a sane default for ad-hoc runs and tests.
-RECALL_DATA_ROOT="${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugins/data}/total-recall"
+# Resolve plugin-data root. MUST match index.db.resolve_data_dir():
+#   TOTAL_RECALL_DB_DIR → CLAUDE_PLUGIN_DATA/total-recall → largest existing
+#   plugin index under ~/.claude/plugins/data → XDG ~/.local/share/total-recall
+# Never invent a second DB when a plugin install already has one.
+recall::data_root() {
+  if [ -n "${TOTAL_RECALL_DB_DIR:-}" ]; then
+    printf '%s' "${TOTAL_RECALL_DB_DIR}"
+    return 0
+  fi
+  if [ -n "${CLAUDE_PLUGIN_DATA:-}" ]; then
+    printf '%s' "${CLAUDE_PLUGIN_DATA%/}/total-recall"
+    return 0
+  fi
+  local best="" best_sz=0 d sz
+  # marketplace: …/data/total-recall-88plug/total-recall/index.db
+  for d in "${HOME}/.claude/plugins/data"/total-recall*/total-recall; do
+    [ -f "${d}/index.db" ] || continue
+    sz=$(stat -c%s "${d}/index.db" 2>/dev/null || echo 0)
+    if [ "${sz:-0}" -gt "${best_sz:-0}" ]; then
+      best="$d"
+      best_sz="$sz"
+    fi
+  done
+  # legacy bare: …/data/total-recall/index.db
+  d="${HOME}/.claude/plugins/data/total-recall"
+  if [ -f "${d}/index.db" ]; then
+    sz=$(stat -c%s "${d}/index.db" 2>/dev/null || echo 0)
+    if [ "${sz:-0}" -gt "${best_sz:-0}" ]; then
+      best="$d"
+      best_sz="$sz"
+    fi
+  fi
+  if [ -n "$best" ]; then
+    printf '%s' "$best"
+    return 0
+  fi
+  printf '%s' "${HOME}/.local/share/total-recall"
+}
+RECALL_DATA_ROOT="$(recall::data_root)"
 RECALL_LOG_DIR="${RECALL_DATA_ROOT}/logs"
 RECALL_LOG_FILE="${RECALL_LOG_DIR}/hooks.log"
 RECALL_LOG_MAX_BYTES="${RECALL_LOG_MAX_BYTES:-1048576}"  # 1 MiB

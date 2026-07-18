@@ -25,8 +25,10 @@ fi
 #    sourcing is unsafe. Mirrors scripts/recall-cli.sh exactly.
 COMMON_SH="${PLUGIN_ROOT}/hooks/lib/common.sh"
 if [ -f "$COMMON_SH" ]; then
-  CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugins/data}"
-  export CLAUDE_PLUGIN_DATA
+  # Do NOT invent CLAUDE_PLUGIN_DATA=~/.claude/plugins/data — that is the
+  # multi-plugin *parent*, not this plugin's data dir, and forces a second
+  # empty …/data/total-recall/ index. Harness sets CLAUDE_PLUGIN_DATA correctly;
+  # without it, recall::data_root discovers the real install DB.
   # shellcheck source=../hooks/lib/common.sh
   source "$COMMON_SH"
   UV="$(recall::uv)" || {
@@ -35,7 +37,24 @@ if [ -f "$COMMON_SH" ]; then
   }
 else
   # ---- inline fallback (common.sh absent) --------------------------------- #
-  RECALL_DATA_ROOT="${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugins/data}/total-recall"
+  # inline: same discovery as recall::data_root (common.sh absent)
+  if [ -n "${TOTAL_RECALL_DB_DIR:-}" ]; then
+    RECALL_DATA_ROOT="${TOTAL_RECALL_DB_DIR}"
+  elif [ -n "${CLAUDE_PLUGIN_DATA:-}" ]; then
+    RECALL_DATA_ROOT="${CLAUDE_PLUGIN_DATA%/}/total-recall"
+  else
+    RECALL_DATA_ROOT=""
+    best_sz=0
+    for d in "${HOME}/.claude/plugins/data"/total-recall*/total-recall; do
+      [ -f "${d}/index.db" ] || continue
+      sz=$(stat -c%s "${d}/index.db" 2>/dev/null || echo 0)
+      if [ "${sz:-0}" -gt "${best_sz:-0}" ]; then
+        RECALL_DATA_ROOT="$d"
+        best_sz="$sz"
+      fi
+    done
+    [ -n "$RECALL_DATA_ROOT" ] || RECALL_DATA_ROOT="${HOME}/.local/share/total-recall"
+  fi
   _can_run_uv() { [ -x "$1" ] && "$1" --version >/dev/null 2>&1; }
   UV=""
   if [ -n "${RECALL_UV:-}" ] && _can_run_uv "$RECALL_UV"; then

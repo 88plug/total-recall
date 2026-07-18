@@ -31,13 +31,19 @@ from pathlib import Path
 
 def _db_path() -> Path | None:
     """Resolve the index DB path the same way index/db.py does."""
-    base_env = os.environ.get("CLAUDE_PLUGIN_DATA")
-    if base_env:
-        base = Path(base_env).expanduser() / "total-recall"
-    else:
-        base = Path("~/.local/share/total-recall").expanduser()
-    p = base / "index.db"
-    return p if p.exists() else None
+    try:
+        from index.db import resolve_db_path
+
+        p = resolve_db_path()
+        return p if p.exists() else None
+    except Exception:
+        base_env = os.environ.get("CLAUDE_PLUGIN_DATA")
+        if base_env:
+            base = Path(base_env).expanduser() / "total-recall"
+        else:
+            base = Path("~/.local/share/total-recall").expanduser()
+        p = base / "index.db"
+        return p if p.exists() else None
 
 
 def _open_ro() -> sqlite3.Connection | None:

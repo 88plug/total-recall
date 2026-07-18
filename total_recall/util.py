@@ -42,22 +42,19 @@ def resolve_db_path(cli_value: str | os.PathLike[str] | None) -> Path:
     Precedence (highest first):
 
     1. ``--db`` CLI flag (``cli_value``).
-    2. ``$TOTAL_RECALL_DB``.
-    3. :data:`index.db.DEFAULT_DB_PATH` (lazy import; falls back to
-       ``~/.local/share/total-recall/index.db`` when the index module isn't
-       importable yet — useful during the parallel build before everyone has
-       merged).
+    2. :func:`index.db.resolve_db_path` (``TOTAL_RECALL_DB`` /
+       ``TOTAL_RECALL_DB_DIR`` / ``CLAUDE_PLUGIN_DATA`` / plugin discovery / XDG).
     """
     if cli_value:
         return Path(cli_value).expanduser()
-    env = os.environ.get("TOTAL_RECALL_DB")
-    if env:
-        return Path(env).expanduser()
     try:
-        from index.db import DEFAULT_DB_PATH  # type: ignore[import-not-found]
+        from index.db import resolve_db_path as _resolve  # type: ignore[import-not-found]
 
-        return Path(DEFAULT_DB_PATH)
+        return Path(_resolve())
     except Exception:
+        env = os.environ.get("TOTAL_RECALL_DB")
+        if env:
+            return Path(env).expanduser()
         base_env = os.environ.get("CLAUDE_PLUGIN_DATA")
         if base_env:
             return Path(base_env).expanduser() / "total-recall" / "index.db"

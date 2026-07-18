@@ -51,20 +51,22 @@ log = logging.getLogger(__name__)
 def _resolve_db_dir() -> Path:
     """Resolve the directory the SQLite index lives in.
 
-    See module docstring for precedence. Always returns an expanded absolute
-    path; does not create the directory (read-only consumer).
+    Delegates to :func:`index.db.resolve_data_dir` so MCP, CLI, and hooks
+    never disagree (dual-DB footgun when one path had no CLAUDE_PLUGIN_DATA).
     """
-    explicit = os.environ.get("TOTAL_RECALL_DB_DIR")
-    if explicit:
-        # An explicit dir override (what .mcp.json sets, already
-        # ``${CLAUDE_PLUGIN_DATA}/total-recall``) is used verbatim.
-        return Path(explicit).expanduser().resolve()
-    plugin_data = os.environ.get("CLAUDE_PLUGIN_DATA")
-    if plugin_data:
-        # CLAUDE_PLUGIN_DATA is the plugin data *root*; the index lives in the
-        # total-recall/ subdir within it. Must match index.db._default_db_path.
-        return (Path(plugin_data).expanduser() / "total-recall").resolve()
-    return Path("~/.local/share/total-recall").expanduser().resolve()
+    try:
+        from index.db import resolve_data_dir
+
+        return resolve_data_dir()
+    except Exception:
+        # Import-time / broken install: keep historical fallbacks.
+        explicit = os.environ.get("TOTAL_RECALL_DB_DIR")
+        if explicit:
+            return Path(explicit).expanduser().resolve()
+        plugin_data = os.environ.get("CLAUDE_PLUGIN_DATA")
+        if plugin_data:
+            return (Path(plugin_data).expanduser() / "total-recall").resolve()
+        return Path("~/.local/share/total-recall").expanduser().resolve()
 
 
 DB_DIR: Path = _resolve_db_dir()
