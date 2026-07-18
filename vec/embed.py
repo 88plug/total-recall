@@ -10,9 +10,13 @@ Product contract (format v2, 2026-07):
   * Base URL: ``TOTAL_RECALL_LLM_BASE_URL`` (default ``http://localhost:11434``).
 
 Qwen3-embedding query convention (``as_query=True``):
-  Instruct: Given a web search query, retrieve relevant passages that answer the query
-  Query:{query}
+  Instruct: {domain task — not generic web search}\nQuery:{query}
 Documents: raw text (no prefix).
+
+Official card (Qwen/Qwen3-Embedding-0.6B): last-token pool, L2 normalize,
+cosine similarity, instruct on queries only, English task text, ~1–5% gain
+from instructions; **domain-specific task lines beat the generic web-search
+default** for non-web corpora (session memory, decisions, code notes).
 """
 
 from __future__ import annotations
@@ -26,10 +30,40 @@ from typing import Any
 
 RECOMMENDED_OLLAMA_EMBED = "qwen3-embedding:0.6b"
 
-QWEN3_QUERY_INSTRUCT = (
+# Official generic default (HF / ST prompt_name="query") — kept for A/B only.
+QWEN3_QUERY_INSTRUCT_WEB = (
     "Instruct: Given a web search query, retrieve relevant passages that answer the query\n"
     "Query:"
 )
+
+# Product default: total-recall is session memory, not open-web search.
+# Card guidance: custom English task descriptions improve domain retrieval.
+# Documents stay raw (no instruct). Override with TOTAL_RECALL_EMBED_INSTRUCT
+# (full "Instruct: …\nQuery:" string or bare task sentence).
+QWEN3_QUERY_INSTRUCT_MEMORY = (
+    "Instruct: Retrieve relevant past engineering decisions, corrections, "
+    "tool preferences, and session notes that answer the query\n"
+    "Query:"
+)
+
+QWEN3_QUERY_INSTRUCT = QWEN3_QUERY_INSTRUCT_MEMORY
+
+
+def _qwen3_query_instruct() -> str:
+    """Resolve query instruct prefix (env override → product memory default)."""
+    raw = (os.environ.get("TOTAL_RECALL_EMBED_INSTRUCT") or "").strip()
+    if not raw:
+        return QWEN3_QUERY_INSTRUCT_MEMORY
+    if raw.lower() in {"web", "default", "generic"}:
+        return QWEN3_QUERY_INSTRUCT_WEB
+    if raw.lower() in {"memory", "product"}:
+        return QWEN3_QUERY_INSTRUCT_MEMORY
+    # Bare task sentence → wrap; full prefix if already formatted.
+    if raw.startswith("Instruct:"):
+        return raw if raw.endswith("Query:") or raw.endswith("Query:\n") else (
+            raw if "\nQuery:" in raw else raw.rstrip() + "\nQuery:"
+        )
+    return f"Instruct: {raw}\nQuery:"
 
 _OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
 _OLLAMA_PROBE_TIMEOUT_S = 10.0
@@ -75,14 +109,9 @@ _KNOWN_DIMS: dict[str, int] = {
     "all-minilm": 384,
 }
 
-_QUERY_PREFIX: dict[str, str] = {
+_QUERY_PREFIX_STATIC: dict[str, str] = {
     "nomic-embed-text": "search_query: ",
     "nomic-embed-text:latest": "search_query: ",
-    "qwen3-embedding:0.6b": QWEN3_QUERY_INSTRUCT,
-    "qwen3-embedding:4b": QWEN3_QUERY_INSTRUCT,
-    "qwen3-embedding:8b": QWEN3_QUERY_INSTRUCT,
-    "qwen3-embedding:latest": QWEN3_QUERY_INSTRUCT,
-    "qwen3-embedding": QWEN3_QUERY_INSTRUCT,
 }
 
 _DOC_PREFIX: dict[str, str] = {
@@ -92,15 +121,35 @@ _DOC_PREFIX: dict[str, str] = {
 
 
 def _query_prefix_for(model: str) -> str:
-    if model in _QUERY_PREFIX:
-        return _QUERY_PREFIX[model]
-    if model.startswith("qwen3-embedding"):
-        return QWEN3_QUERY_INSTRUCT
+    if model in _QUERY_PREFIX_STATIC:
+        return _QUERY_PREFIX_STATIC[model]
+    if model.startswith("qwen3-embedding") or model in {
+        "qwen3-embedding:0.6b",
+        "qwen3-embedding:4b",
+        "qwen3-embedding:8b",
+        "qwen3-embedding:latest",
+        "qwen3-embedding",
+    }:
+        return _qwen3_query_instruct()
+    if model and "qwen3-embedding" in model:
+        return _qwen3_query_instruct()
     return ""
 
 
 def _doc_prefix_for(model: str) -> str:
     return _DOC_PREFIX.get(model, "")
+
+
+def _l2_normalize(vec: list[float]) -> list[float]:
+    """L2-normalize (card: always normalize; cosine ≡ IP after). Safe no-op if ||v||≈1."""
+    s = sum(x * x for x in vec)
+    if s <= 0.0:
+        return vec
+    inv = 1.0 / (s ** 0.5)
+    # Skip rewrite when already unit (ollama Qwen path returns ||v||=1).
+    if abs(s - 1.0) < 1e-6:
+        return vec
+    return [x * inv for x in vec]
 
 
 # ----------------------------------------------------------------------------
@@ -251,7 +300,9 @@ def _ollama_embed(base_url: str, model: str, texts: list[str]) -> list[list[floa
     embeddings = data.get("embeddings")
     if not isinstance(embeddings, list):
         raise RuntimeError(f"ollama embed response missing 'embeddings': {data!r}")
-    return [[float(x) for x in row] for row in embeddings]
+    # Card: L2-normalize before cosine/IP. Ollama already unit-norms for Qwen;
+    # re-normalize so non-unit backends / future MRL client slices stay correct.
+    return [_l2_normalize([float(x) for x in row]) for row in embeddings]
 
 
 class Embedder:

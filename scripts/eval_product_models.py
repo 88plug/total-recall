@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Real eval: product ollama embeds + chat on live daemon.
 
-Measures accuracy and latency of the v2.3.2 path (qwen3-embedding:0.6b dense,
-hybrid FTS+RRF, qwen3.5:2b JSON refine). Writes a markdown report.
+Measures accuracy and latency of the product path (qwen3-embedding:0.6b dense,
+hybrid FTS+dense_primary, qwen3.5:2b JSON refine). Includes:
+  * easy paraphrase set
+  * hard near-miss / zero-overlap set (card-crank stress)
+  * instruct A/B (generic web vs domain memory)
+  * card-aligned LLM sampling (no forced greedy on Qwen)
 
 Usage:
   cd total-recall
@@ -15,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import statistics
 import sys
 import tempfile
@@ -28,7 +33,7 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 # ---------------------------------------------------------------------------
-# Labeled paraphrase set (stresses keyword retrievers; rewards semantics)
+# Easy paraphrase set (keyword-poor queries → semantic targets)
 # ---------------------------------------------------------------------------
 
 CORPUS: list[tuple[str, str]] = [
@@ -54,6 +59,90 @@ CORPUS: list[tuple[str, str]] = [
     ("how we handle secrets rotation", "vault agent injects rotated creds every hour"),
 ]
 
+# Hard: near-miss distractors share vocabulary; targets need semantics / exactness.
+# Also zero-lexical-overlap paraphrases and confusable tech twins.
+HARD_CORPUS: list[tuple[str, str]] = [
+    (
+        "what broke login after the oauth refactor",
+        "session notes: OAuth callback state mismatch after SameSite cookie change; fixed by aligning redirect cookie flags",
+    ),
+    (
+        "which postgres client library did we lock",
+        "decision: standardize on asyncpg for all database access, not psycopg2",
+    ),
+    (
+        "do not use the old python formatter",
+        "correction: run ruff for linting and formatting, drop black — never reintroduce black",
+    ),
+    (
+        "where do rotated credentials come from at runtime",
+        "vault agent injects rotated creds every hour into the pod",
+    ),
+    (
+        "how background work is scheduled without threads",
+        "use a task queue with celery workers, not threads or asyncio fire-and-forget",
+    ),
+    (
+        "prod cluster scheduler not docker compose",
+        "we run everything on kubernetes in production; local docker-compose is dev only",
+    ),
+    (
+        "event bus not rabbit",
+        "services talk over nats jetstream, not rabbitmq or kafka",
+    ),
+    (
+        "package manager that replaced pip",
+        "use uv for installs and lockfiles, not pip or poetry",
+    ),
+    (
+        "gitops path that applies manifests",
+        "argocd syncs manifests to the cluster on merge to main",
+    ),
+    (
+        "who owns runtime toggles",
+        "launchdarkly owns all runtime feature toggles; no ad-hoc env flags",
+    ),
+    (
+        "where exceptions go in production",
+        "exceptions are reported to sentry in prod; do not email stack traces",
+    ),
+    (
+        "container push destination",
+        "push containers to ghcr not docker hub",
+    ),
+    (
+        "operator meaning of harness in this repo",
+        "in our setup harness means the Claude Code / Grok plugin runner, not livestock or test harnesses",
+    ),
+    (
+        "how project keys pool worktree memory",
+        "project_key collapses git worktree cwds back to the owning repository root for memory pooling",
+    ),
+    (
+        "dense embed model we ship",
+        "product dense embeds use qwen3-embedding 0.6b via managed ollama, not fastembed",
+    ),
+]
+
+# Near-miss rows: share tokens with HARD targets but are wrong answers.
+HARD_NEAR_MISS: list[str] = [
+    "we evaluated psycopg2 for legacy scripts but did not standardize on it",
+    "black is still allowed in one abandoned experiment branch",
+    "rabbitmq was the previous bus before the nats migration",
+    "docker hub was used historically before ghcr",
+    "poetry was considered then rejected in favor of uv",
+    "env files are only for local throwaway demos, not secrets management policy",
+    "kafka is used by the analytics team, not our product services",
+    "kubernetes local kind clusters are not production",
+    "pytest plugins for coverage are optional; runner is still pytest",
+    "sentry is disabled in local dev to cut noise",
+    "OAuth login UI copy was redesigned last quarter unrelated to cookie flags",
+    "harness also means a horse collar in the style guide joke channel",
+    "worktrees are fine; we just map them via project_key",
+    "fastembed was removed; do not re-enable ONNX embeds",
+    "celery beat schedules periodic tasks; not a substitute for the worker pool decision",
+]
+
 DISTRACTORS: list[str] = [
     "the standup is at 10am daily",
     "the office wifi password rotates monthly",
@@ -63,63 +152,137 @@ DISTRACTORS: list[str] = [
     "the dog is allowed in the office on fridays",
     "parking validation is at the front desk",
     "holiday party is the second week of december",
+    "the coffee machine needs descaling weekly",
+    "team offsite is in austin this year",
 ]
 
-# LLM JSON micro-tasks (product qwen3.5:2b) — clear extraction prompts
+# LLM JSON micro-tasks — card-aligned: schema + few-shot, family sampling (not temp=0)
 LLM_TASKS: list[dict] = [
     {
         "name": "extract_decision",
         "system": (
-            "You extract software engineering decisions from a user sentence. "
-            'Reply with JSON only: {"decision": string (what was chosen), '
-            '"topic": string (short topic)}. '
-            "Copy technical identifiers (library/tool names) into decision."
+            "Extract a software decision from the user sentence.\n"
+            "JSON only. Copy library/tool names exactly.\n"
+            'Schema: {"decision": string, "topic": string}\n'
+            "Example: 'We picked redis for cache' -> "
+            '{"decision":"redis for cache","topic":"caching"}'
         ),
         "user": "We decided to use asyncpg for all postgres access going forward.",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "decision": {"type": "string"},
+                "topic": {"type": "string"},
+            },
+            "required": ["decision", "topic"],
+        },
         "require_keys": ["decision", "topic"],
         "must_contain_any": ["asyncpg", "postgres", "database"],
+        "temperature": None,  # Qwen non-thinking card defaults
     },
     {
         "name": "extract_ban",
         "system": (
-            "You extract a ban/forbidden practice from a user sentence. "
-            'Reply with JSON only: {"banned": string (what is forbidden), '
-            '"reason": string}. Quote the forbidden artifact if named.'
+            "Extract a ban/forbidden practice.\n"
+            'JSON only: {"banned": string, "reason": string}\n'
+            "Example: 'Never force-push main' -> "
+            '{"banned":"force-push main","reason":"protects shared history"}'
         ),
         "user": "Never commit .env files with secrets. Always use vault.",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "banned": {"type": "string"},
+                "reason": {"type": "string"},
+            },
+            "required": ["banned", "reason"],
+        },
         "require_keys": ["banned", "reason"],
         "must_contain_any": ["env", "secret", "vault"],
+        "temperature": None,
     },
     {
         "name": "classify_correction",
         "system": (
-            "Does this user message correct the assistant? "
-            'Reply with JSON only: {"is_correction": boolean, "summary": string}.'
+            "Does the user correct the assistant?\n"
+            'JSON only: {"is_correction": boolean, "summary": string}\n'
+            "Examples:\n"
+            '  "No, use ruff not black" -> {"is_correction": true, "summary":"prefer ruff over black"}\n'
+            '  "Thanks, that works" -> {"is_correction": false, "summary":"acceptance"}'
         ),
         "user": "No, use ruff not black for formatting.",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "is_correction": {"type": "boolean"},
+                "summary": {"type": "string"},
+            },
+            "required": ["is_correction", "summary"],
+        },
         "require_keys": ["is_correction", "summary"],
         "bool_key": "is_correction",
         "bool_expect": True,
+        "temperature": None,
     },
     {
         "name": "machine_ner",
         "system": (
-            "Extract hostnames and services. "
-            'Reply with JSON only: {"hosts": [string], "services": [string]}.'
+            "Extract hostnames and services explicitly named as hosts/services.\n"
+            "Do not invent. Prefer empty lists over guesses.\n"
+            'JSON: {"hosts": [string], "services": [string]}\n'
+            'Example: "ssh web-01" -> {"hosts":["web-01"],"services":[]}'
         ),
         "user": "Restarted nginx on web-01 and redis on cache-02 after the deploy.",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "hosts": {"type": "array", "items": {"type": "string"}},
+                "services": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["hosts", "services"],
+        },
         "require_keys": ["hosts", "services"],
         "must_contain_any": ["web-01", "web", "nginx", "cache"],
+        "temperature": None,
     },
     {
         "name": "vocab_def",
         "system": (
-            "Extract the defined term and its definition. "
-            'Reply with JSON only: {"term": string, "definition": string}.'
+            "Extract the defined term and definition from the sentence only.\n"
+            "Do not use world knowledge. If unclear return null definition.\n"
+            'JSON: {"term": string, "definition": string|null}\n'
+            "Example: \"'sharechain' means linked p2pool shares\" -> "
+            '{"term":"sharechain","definition":"linked p2pool shares"}'
         ),
         "user": "In our setup, 'harness' means the Claude Code / Grok plugin runner, not livestock.",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "term": {"type": "string"},
+                "definition": {"type": ["string", "null"]},
+            },
+            "required": ["term", "definition"],
+        },
         "require_keys": ["term", "definition"],
         "must_contain_any": ["harness", "plugin", "claude", "grok"],
+        "temperature": None,
+    },
+    {
+        "name": "null_when_missing",
+        "system": (
+            "Extract hostname if any. If none, hosts must be empty.\n"
+            'JSON: {"hosts": [string]}\n'
+            'Example: "restarted the wifi" -> {"hosts":[]}'
+        ),
+        "user": "The logo uses brand teal and lunch is catered on Fridays.",
+        "schema": {
+            "type": "object",
+            "properties": {"hosts": {"type": "array", "items": {"type": "string"}}},
+            "required": ["hosts"],
+        },
+        "require_keys": ["hosts"],
+        "expect_empty_list_key": "hosts",
+        "temperature": None,
     },
 ]
 
@@ -187,103 +350,215 @@ def _stamp_row(conn, kind: str, content: str, cwd: str, ts: int, uuid: str, scor
         )
 
 
-def eval_embeds() -> dict:
-    from index.db import connect
-    from vec.embed import Embedder
+def _hit_contents(hits) -> list[str]:
+    out: list[str] = []
+    for h in hits:
+        c = getattr(h, "content", None)
+        if c is None and isinstance(h, dict):
+            c = h.get("content")
+        if c is not None:
+            out.append(c)
+    return out
+
+
+def _run_retrieval_suite(
+    conn,
+    embedder,
+    pairs: list[tuple[str, str]],
+    cwd: str,
+    *,
+    label: str,
+) -> dict:
+    pure = RankMetrics()
+    fts = RankMetrics()
+    hyb = RankMetrics()
+    pairwise_ok = 0
+    pairwise_n = 0
+    misses_at_1: list[str] = []
+
     from vec.rrf import hybrid_search
-    from vec.runtime import ensure_product_ollama
-    from vec.store import apply_vec_schema, backfill_all, vec_search
+    from vec.store import vec_search
 
-    status = ensure_product_ollama(embed=True, chat=False, pull=True)
-    embedder = Embedder()
-    # force load
-    _ = embedder.dim()
+    for query, target in pairs:
+        t0 = time.perf_counter()
+        vhits = vec_search(conn, query, embedder=embedder, limit=10, cwd=cwd)
+        pure.add(_hit_contents(vhits), target, (time.perf_counter() - t0) * 1000)
 
-    cwd = "/proj/eval"
+        t0 = time.perf_counter()
+        fhits = hybrid_search(conn, query, embedder=None, limit=10, cwd=cwd)
+        fts.add(_hit_contents(fhits), target, (time.perf_counter() - t0) * 1000)
+
+        t0 = time.perf_counter()
+        hhits = hybrid_search(conn, query, embedder=embedder, limit=10, cwd=cwd)
+        hyb_ranks = _hit_contents(hhits)
+        hyb.add(hyb_ranks, target, (time.perf_counter() - t0) * 1000)
+        if target not in hyb_ranks[:1]:
+            misses_at_1.append(query[:60])
+
+        qv = embedder.embed([query], as_query=True)[0]
+        tv = embedder.embed([target], as_query=False)[0]
+        dv = embedder.embed([DISTRACTORS[0]], as_query=False)[0]
+        pairwise_n += 1
+        if _cos(qv, tv) > _cos(qv, dv):
+            pairwise_ok += 1
+
+    pf, ff, hf = pure.finalize(), fts.finalize(), hyb.finalize()
+    return {
+        "label": label,
+        "n": len(pairs),
+        "pure_dense": pf,
+        "fts_only": ff,
+        "hybrid": hf,
+        "pairwise_target_beats_distractor": pairwise_ok / max(pairwise_n, 1),
+        "hybrid_miss_at_1": misses_at_1,
+        "hybrid_miss_rate_at_1": len(misses_at_1) / max(len(pairs), 1),
+    }
+
+
+def _pairwise_instruct_ab(easy_pairs: list[tuple[str, str]]) -> dict:
+    """Compare generic web instruct vs product memory instruct (query-only).
+
+    Documents are raw either way — no re-index needed. Measures pure cosine
+    ranking quality on the easy set under each query prefix.
+    """
+    from vec.embed import Embedder, QWEN3_QUERY_INSTRUCT_MEMORY, QWEN3_QUERY_INSTRUCT_WEB
+
+    def score_with(prefix: str) -> dict:
+        emb = Embedder()
+        emb._load()
+        emb._query_prefix = prefix
+        pure = RankMetrics()
+        # In-memory rank over full easy targets + distractors
+        docs = [t for _, t in easy_pairs] + DISTRACTORS
+        dvecs = emb.embed(docs, as_query=False)
+        for query, target in easy_pairs:
+            t0 = time.perf_counter()
+            qv = emb.embed([query], as_query=True)[0]
+            scored = sorted(
+                ((_cos(qv, dv), docs[i]) for i, dv in enumerate(dvecs)),
+                key=lambda x: -x[0],
+            )
+            ranks = [c for _, c in scored[:10]]
+            pure.add(ranks, target, (time.perf_counter() - t0) * 1000)
+        return pure.finalize()
+
+    web = score_with(QWEN3_QUERY_INSTRUCT_WEB)
+    mem = score_with(QWEN3_QUERY_INSTRUCT_MEMORY)
+    return {
+        "web_instruct": web,
+        "memory_instruct": mem,
+        "memory_p@1_delta": round(mem["p@1"] - web["p@1"], 4),
+        "memory_mrr_delta": round(mem["mrr"] - web["mrr"], 4),
+        "memory_wins_or_ties_p@1": mem["p@1"] + 1e-9 >= web["p@1"],
+    }
+
+
+def _build_eval_db(
+    embedder,
+    cwd: str,
+    targets: list[tuple[str, str]],
+    *,
+    near_miss: list[str] | None = None,
+    soft: list[str] | None = None,
+    target_kind: str = "decision",
+):
+    """Fresh DB + backfill. Easy and hard suites use separate indexes."""
+    from index.db import connect
+    from vec.store import apply_vec_schema, backfill_all
+
     tmp = Path(tempfile.mkdtemp()) / "eval.db"
     conn = connect(tmp)
+    ts = 1_700_000_000
+    for i, (_q, content) in enumerate(targets):
+        _stamp_row(conn, target_kind, content, cwd, ts + i, f"t{i}", 0.75)
+    j = 0
+    for d in near_miss or []:
+        _stamp_row(conn, "domain_fact", d, cwd, ts + 400 + j, f"n{j}", 0.45)
+        j += 1
+    for d in soft or []:
+        _stamp_row(conn, "domain_fact", d, cwd, ts + 800 + j, f"s{j}", 0.4)
+        j += 1
+    conn.commit()
+    apply_vec_schema(
+        conn,
+        dim=embedder.dim(),
+        model=embedder.model or "qwen3-embedding:0.6b",
+        backend=embedder.backend or "ollama",
+    )
+    t0 = time.perf_counter()
+    report = backfill_all(conn, embedder=embedder)
+    backfill_s = time.perf_counter() - t0
+    return conn, report, backfill_s
+
+
+def eval_embeds() -> dict:
+    from vec.embed import Embedder, _qwen3_query_instruct
+    from vec.runtime import ensure_product_ollama
+
+    status = ensure_product_ollama(embed=True, chat=False, pull=True)
+    # Ensure product memory instruct (not leftover env from prior A/B)
+    os.environ.pop("TOTAL_RECALL_EMBED_INSTRUCT", None)
+    embedder = Embedder()
+    _ = embedder.dim()
+    instruct = _qwen3_query_instruct()
+
+    cwd = "/proj/eval"
+    # Easy: comparable to prior 2.3.3 baseline (no hard-target clones)
+    easy_conn, easy_rep, easy_bf = _build_eval_db(
+        embedder, cwd, CORPUS, soft=DISTRACTORS,
+    )
     try:
-        ts = 1_700_000_000
-        for i, (_q, content) in enumerate(CORPUS):
-            _stamp_row(conn, "decision", content, cwd, ts + i, f"t{i}", 0.7)
-        for j, d in enumerate(DISTRACTORS):
-            _stamp_row(conn, "domain_fact", d, cwd, ts + 100 + j, f"d{j}", 0.5)
-        conn.commit()
-
-        apply_vec_schema(
-            conn, dim=embedder.dim(), model=embedder.model or "qwen3-embedding:0.6b",
-            backend=embedder.backend or "ollama",
-        )
-        t0 = time.perf_counter()
-        report = backfill_all(conn, embedder=embedder)
-        backfill_s = time.perf_counter() - t0
-
-        pure = RankMetrics()
-        fts = RankMetrics()
-        hyb = RankMetrics()
-        pairwise_ok = 0
-        pairwise_n = 0
-
-        for query, target in CORPUS:
-            # pure dense
-            t0 = time.perf_counter()
-            vhits = vec_search(conn, query, embedder=embedder, limit=10, cwd=cwd)
-            pure.add([h.content for h in vhits], target, (time.perf_counter() - t0) * 1000)
-
-            # FTS only
-            t0 = time.perf_counter()
-            fhits = hybrid_search(conn, query, embedder=None, limit=10, cwd=cwd)
-            fts.add(
-                [getattr(h, "content", None) or (h.get("content") if isinstance(h, dict) else None)
-                 for h in fhits],
-                target,
-                (time.perf_counter() - t0) * 1000,
-            )
-
-            # hybrid
-            t0 = time.perf_counter()
-            hhits = hybrid_search(conn, query, embedder=embedder, limit=10, cwd=cwd)
-            hyb.add(
-                [getattr(h, "content", None) or (h.get("content") if isinstance(h, dict) else None)
-                 for h in hhits],
-                target,
-                (time.perf_counter() - t0) * 1000,
-            )
-
-            # pairwise: target should outrank a random distractor under pure cosine
-            qv = embedder.embed([query], as_query=True)[0]
-            tv = embedder.embed([target], as_query=False)[0]
-            dv = embedder.embed([DISTRACTORS[0]], as_query=False)[0]
-            pairwise_n += 1
-            if _cos(qv, tv) > _cos(qv, dv):
-                pairwise_ok += 1
-
-        return {
-            "runtime": status,
-            "model": embedder.model,
-            "backend": embedder.backend,
-            "dim": embedder.dim(),
-            "backfill": {
-                "embedded": report.extractions_embedded,
-                "chunks": report.chunks_written,
-                "seconds": round(backfill_s, 3),
-            },
-            "pure_dense": pure.finalize(),
-            "fts_only": fts.finalize(),
-            "hybrid": hyb.finalize(),
-            "pairwise_target_beats_distractor": pairwise_ok / max(pairwise_n, 1),
-            "gates": {
-                "hybrid_not_worse_than_fts_p@5": hyb.finalize()["p@5"] >= fts.finalize()["p@5"],
-                # dense_primary must not regress pure dense top-1 (was 0.40 vs 0.80)
-                "hybrid_p@1_near_dense": hyb.finalize()["p@1"] + 0.05 >= pure.finalize()["p@1"],
-                "hybrid_p@1_ge_0.75": hyb.finalize()["p@1"] >= 0.75,
-                "pure_dense_p@1_ge_0.5": pure.finalize()["p@1"] >= 0.5,
-                "pure_dense_mrr_ge_0.6": pure.finalize()["mrr"] >= 0.6,
-                "pairwise_ge_0.9": (pairwise_ok / max(pairwise_n, 1)) >= 0.9,
-            },
-        }
+        easy = _run_retrieval_suite(easy_conn, embedder, CORPUS, cwd, label="easy")
     finally:
-        conn.close()
+        easy_conn.close()
+
+    # Hard: targets + near-miss domain_facts that share vocabulary
+    hard_conn, hard_rep, hard_bf = _build_eval_db(
+        embedder, cwd, HARD_CORPUS, near_miss=HARD_NEAR_MISS, soft=DISTRACTORS,
+    )
+    try:
+        hard = _run_retrieval_suite(hard_conn, embedder, HARD_CORPUS, cwd, label="hard")
+    finally:
+        hard_conn.close()
+
+    instruct_ab = _pairwise_instruct_ab(CORPUS)
+
+    easy_h, hard_h = easy["hybrid"], hard["hybrid"]
+    easy_p, hard_p = easy["pure_dense"], hard["pure_dense"]
+
+    return {
+        "runtime": status,
+        "model": embedder.model,
+        "backend": embedder.backend,
+        "dim": embedder.dim(),
+        "query_instruct": instruct[:120],
+        "backfill": {
+            "easy_embedded": easy_rep.extractions_embedded,
+            "easy_seconds": round(easy_bf, 3),
+            "hard_embedded": hard_rep.extractions_embedded,
+            "hard_seconds": round(hard_bf, 3),
+        },
+        "easy": easy,
+        "hard": hard,
+        "instruct_ab": instruct_ab,
+        "pure_dense": easy_p,
+        "fts_only": easy["fts_only"],
+        "hybrid": easy_h,
+        "pairwise_target_beats_distractor": easy["pairwise_target_beats_distractor"],
+        "gates": {
+            "hybrid_not_worse_than_fts_p@5": easy_h["p@5"] >= easy["fts_only"]["p@5"],
+            "hybrid_p@1_near_dense": easy_h["p@1"] + 0.05 >= easy_p["p@1"],
+            "easy_hybrid_p@1_ge_0.75": easy_h["p@1"] >= 0.75,
+            "easy_pure_dense_p@1_ge_0.7": easy_p["p@1"] >= 0.7,
+            "easy_pure_dense_mrr_ge_0.75": easy_p["mrr"] >= 0.75,
+            "easy_pairwise_ge_0.9": easy["pairwise_target_beats_distractor"] >= 0.9,
+            "hard_hybrid_p@1_ge_0.6": hard_h["p@1"] >= 0.6,
+            "hard_hybrid_p@5_ge_0.85": hard_h["p@5"] >= 0.85,
+            "hard_pure_dense_p@1_ge_0.55": hard_p["p@1"] >= 0.55,
+            "hard_miss_rate_at_1_le_0.4": hard["hybrid_miss_rate_at_1"] <= 0.4,
+            "memory_instruct_not_worse_than_web": instruct_ab["memory_wins_or_ties_p@1"],
+        },
+    }
 
 
 def eval_llm() -> dict:
@@ -299,11 +574,13 @@ def eval_llm() -> dict:
     ok = 0
     for task in LLM_TASKS:
         t0 = time.perf_counter()
+        # Card: Qwen non-thinking uses temp≈0.7 + schema — not greedy temp=0.
+        temp = task.get("temperature", None)
         out = client.generate_json(
             system=task["system"],
             user=task["user"],
-            schema=None,
-            temperature=0.0,
+            schema=task.get("schema"),
+            temperature=temp,
         )
         ms = (time.perf_counter() - t0) * 1000
         passed = True
@@ -326,10 +603,16 @@ def eval_llm() -> dict:
                     passed = False
                     reasons.append(f"missing_text:{needle}")
             bk = task.get("bool_key")
-            if bk is not None and out is not None:
+            if bk is not None:
                 if bool(out.get(bk)) is not bool(task.get("bool_expect")):
                     passed = False
                     reasons.append(f"bool_mismatch:{bk}")
+            ek = task.get("expect_empty_list_key")
+            if ek is not None:
+                val = out.get(ek)
+                if not isinstance(val, list) or len(val) != 0:
+                    passed = False
+                    reasons.append(f"expected_empty_list:{ek}")
         if passed:
             ok += 1
         results.append({
@@ -340,8 +623,14 @@ def eval_llm() -> dict:
             "reasons": reasons,
         })
 
-    # Production refine paths (machines filter + vocab definitions)
     prod = eval_production_refine(client)
+    # Harder production gate: drop day-name + library false positives
+    machines = prod.get("machines") or {}
+    precision_ok = (
+        prod.get("machines_ok", False)
+        and machines.get("dropped_monday", False)
+        and machines.get("dropped_asyncpg", False)
+    )
 
     return {
         "runtime": status,
@@ -351,9 +640,10 @@ def eval_llm() -> dict:
         "tasks": results,
         "production_refine": prod,
         "gates": {
-            "json_task_pass_rate_ge_0.6": (ok / len(LLM_TASKS)) >= 0.6,
+            "json_task_pass_rate_ge_0.8": (ok / len(LLM_TASKS)) >= 0.8,
             "mean_latency_ms_lt_15000": statistics.fmean(r["latency_ms"] for r in results) < 15000,
             "machines_refine_keeps_real_hosts": prod.get("machines_ok", False),
+            "machines_refine_precision": precision_ok,
             "vocab_refine_defines_term": prod.get("vocab_ok", False),
         },
     }
@@ -494,13 +784,35 @@ def render_md(report: dict) -> str:
         "```",
         "",
         "## Dense embeds (qwen3-embedding:0.6b)",
+        f"Query instruct (truncated): `{(report.get('embeds') or {}).get('query_instruct', '')}`",
+        "",
+        "### Easy / hard / instruct A/B",
         "```json",
-        json.dumps(report["embeds"], indent=2, default=str),
+        json.dumps(
+            {
+                "easy": (report.get("embeds") or {}).get("easy"),
+                "hard": (report.get("embeds") or {}).get("hard"),
+                "instruct_ab": (report.get("embeds") or {}).get("instruct_ab"),
+                "backfill": (report.get("embeds") or {}).get("backfill"),
+                "model": (report.get("embeds") or {}).get("model"),
+                "dim": (report.get("embeds") or {}).get("dim"),
+            },
+            indent=2,
+            default=str,
+        ),
         "```",
         "",
         "## LLM refine (qwen3.5:2b)",
         "```json",
-        json.dumps(report["llm"], indent=2, default=str),
+        json.dumps(
+            {
+                k: v
+                for k, v in (report.get("llm") or {}).items()
+                if k not in ("runtime",)
+            },
+            indent=2,
+            default=str,
+        ),
         "```",
         "",
         "## Gate summary",

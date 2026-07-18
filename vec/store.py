@@ -541,5 +541,30 @@ def vec_search(
         if prev is None or hit.cosine_distance < prev.cosine_distance:
             seen[hit.extraction_id] = hit
 
-    out = sorted(seen.values(), key=lambda h: h.cosine_distance)
+    # Kind-aware re-rank (matches FTS composite philosophy in index.query):
+    # decisions/corrections/bans outrank domain_fact near-misses when cosine is
+    # close. Pure distance alone lets "we tried X before Y" steal top-1 from the
+    # actual decision. Boost is subtracted from distance (lower = better).
+    out = sorted(seen.values(), key=lambda h: _dense_rank_key(h))
     return out[:limit]
+
+
+# Align with index.query._KIND_PRIORITY — high-value memory kinds win ties.
+_DENSE_KIND_BOOST: dict[str, float] = {
+    "correction": 0.14,
+    "ban": 0.14,
+    "decision": 0.12,
+    "goal": 0.10,
+    "self_correction": 0.08,
+    "truth_assertion": 0.08,
+    "progress": 0.06,
+    "domain_fact": 0.0,
+    "model_correction": 0.04,
+    "away_summary": 0.0,
+}
+
+
+def _dense_rank_key(hit: VecHit) -> float:
+    """Sort key: cosine distance minus kind boost (lower is better)."""
+    boost = _DENSE_KIND_BOOST.get(hit.kind, 0.02)
+    return hit.cosine_distance - boost

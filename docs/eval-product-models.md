@@ -1,6 +1,6 @@
 # total-recall product model eval
 
-Generated: 2026-07-17 20:31:12 -0400
+Generated: 2026-07-17 20:41:09 -0400
 
 ## Product runtime
 ```json
@@ -50,90 +50,134 @@ Generated: 2026-07-17 20:31:12 -0400
 ```
 
 ## Dense embeds (qwen3-embedding:0.6b)
+Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisions, corrections, tool preferences, and session notes that answer the`
+
+### Easy / hard / instruct A/B
 ```json
 {
-  "runtime": {
-    "base_url": "http://localhost:11434",
-    "embed": true,
-    "chat": false,
-    "daemon": true,
-    "embed_model": "qwen3-embedding:0.6b",
-    "chat_model": null,
-    "embed_ready": true,
-    "chat_ready": false,
-    "bin": "/usr/local/bin/ollama"
+  "easy": {
+    "label": "easy",
+    "n": 20,
+    "pure_dense": {
+      "n": 20,
+      "p@1": 0.85,
+      "p@5": 0.9,
+      "mrr": 0.8821428571428571,
+      "latency_ms_p50": 275.0484310090542,
+      "latency_ms_p95": 330.8732900186442,
+      "latency_ms_mean": 294.2612450075103
+    },
+    "fts_only": {
+      "n": 20,
+      "p@1": 0.2,
+      "p@5": 0.25,
+      "mrr": 0.23125,
+      "latency_ms_p50": 0.7504950044676661,
+      "latency_ms_p95": 0.9673759923316538,
+      "latency_ms_mean": 0.7689593068789691
+    },
+    "hybrid": {
+      "n": 20,
+      "p@1": 0.85,
+      "p@5": 0.9,
+      "mrr": 0.8821428571428571,
+      "latency_ms_p50": 290.370239992626,
+      "latency_ms_p95": 374.2661669966765,
+      "latency_ms_mean": 299.7586076904554
+    },
+    "pairwise_target_beats_distractor": 1.0,
+    "hybrid_miss_at_1": [
+      "database migration tool",
+      "ci pipeline runner",
+      "how do we deploy"
+    ],
+    "hybrid_miss_rate_at_1": 0.15
+  },
+  "hard": {
+    "label": "hard",
+    "n": 15,
+    "pure_dense": {
+      "n": 15,
+      "p@1": 0.8,
+      "p@5": 1.0,
+      "mrr": 0.9,
+      "latency_ms_p50": 244.11773699102923,
+      "latency_ms_p95": 339.4356649951078,
+      "latency_ms_mean": 277.2653060072723
+    },
+    "fts_only": {
+      "n": 15,
+      "p@1": 0.7333333333333333,
+      "p@5": 0.8666666666666667,
+      "mrr": 0.8,
+      "latency_ms_p50": 0.9044960024766624,
+      "latency_ms_p95": 1.387408992741257,
+      "latency_ms_mean": 0.9467614038536946
+    },
+    "hybrid": {
+      "n": 15,
+      "p@1": 0.8,
+      "p@5": 1.0,
+      "mrr": 0.9,
+      "latency_ms_p50": 241.2854129797779,
+      "latency_ms_p95": 371.5451050084084,
+      "latency_ms_mean": 265.26670320114744
+    },
+    "pairwise_target_beats_distractor": 1.0,
+    "hybrid_miss_at_1": [
+      "what broke login after the oauth refactor",
+      "event bus not rabbit",
+      "package manager that replaced pip"
+    ],
+    "hybrid_miss_rate_at_1": 0.2
+  },
+  "instruct_ab": {
+    "web_instruct": {
+      "n": 20,
+      "p@1": 0.8,
+      "p@5": 0.95,
+      "mrr": 0.86875,
+      "latency_ms_p50": 244.04119298560545,
+      "latency_ms_p95": 316.2671070313081,
+      "latency_ms_mean": 254.21270855003968
+    },
+    "memory_instruct": {
+      "n": 20,
+      "p@1": 0.85,
+      "p@5": 0.9,
+      "mrr": 0.88125,
+      "latency_ms_p50": 204.71891103079543,
+      "latency_ms_p95": 237.07058699801564,
+      "latency_ms_mean": 206.81498409830965
+    },
+    "memory_p@1_delta": 0.05,
+    "memory_mrr_delta": 0.0125,
+    "memory_wins_or_ties_p@1": true
+  },
+  "backfill": {
+    "easy_embedded": 30,
+    "easy_seconds": 1.541,
+    "hard_embedded": 40,
+    "hard_seconds": 1.738
   },
   "model": "qwen3-embedding:0.6b",
-  "backend": "ollama",
-  "dim": 1024,
-  "backfill": {
-    "embedded": 28,
-    "chunks": 28,
-    "seconds": 0.627
-  },
-  "pure_dense": {
-    "n": 20,
-    "p@1": 0.8,
-    "p@5": 0.95,
-    "mrr": 0.8729166666666668,
-    "latency_ms_p50": 275.4541980102658,
-    "latency_ms_p95": 370.4859220306389,
-    "latency_ms_mean": 276.7624404077651
-  },
-  "fts_only": {
-    "n": 20,
-    "p@1": 0.2,
-    "p@5": 0.25,
-    "mrr": 0.23125,
-    "latency_ms_p50": 0.633572053629905,
-    "latency_ms_p95": 1.0545109980739653,
-    "latency_ms_mean": 0.6904487469000742
-  },
-  "hybrid": {
-    "n": 20,
-    "p@1": 0.8,
-    "p@5": 0.95,
-    "mrr": 0.8729166666666668,
-    "latency_ms_p50": 270.01538599142805,
-    "latency_ms_p95": 384.22725995769724,
-    "latency_ms_mean": 278.49626915121917
-  },
-  "pairwise_target_beats_distractor": 1.0,
-  "gates": {
-    "hybrid_not_worse_than_fts_p@5": true,
-    "hybrid_p@1_near_dense": true,
-    "hybrid_p@1_ge_0.75": true,
-    "pure_dense_p@1_ge_0.5": true,
-    "pure_dense_mrr_ge_0.6": true,
-    "pairwise_ge_0.9": true
-  }
+  "dim": 1024
 }
 ```
 
 ## LLM refine (qwen3.5:2b)
 ```json
 {
-  "runtime": {
-    "base_url": "http://localhost:11434",
-    "embed": false,
-    "chat": true,
-    "daemon": true,
-    "embed_model": null,
-    "chat_model": "qwen3.5:2b",
-    "embed_ready": false,
-    "chat_ready": true,
-    "bin": "/usr/local/bin/ollama"
-  },
   "model": "qwen3.5:2b",
-  "n": 5,
+  "n": 6,
   "pass_rate": 1.0,
   "tasks": [
     {
       "name": "extract_decision",
       "pass": true,
-      "latency_ms": 1386.6,
+      "latency_ms": 1179.8,
       "output": {
-        "decision": "use asyncpg",
+        "decision": "asyncpg for postgres",
         "topic": "database connection"
       },
       "reasons": []
@@ -141,27 +185,27 @@ Generated: 2026-07-17 20:31:12 -0400
     {
       "name": "extract_ban",
       "pass": true,
-      "latency_ms": 1611.4,
+      "latency_ms": 1625.9,
       "output": {
-        "banned": "committing .env files with secrets",
-        "reason": "Always use a secret management vault instead"
+        "banned": "commit .env files with secrets",
+        "reason": "prevents accidental exposure of sensitive credentials in version control"
       },
       "reasons": []
     },
     {
       "name": "classify_correction",
       "pass": true,
-      "latency_ms": 1641.3,
+      "latency_ms": 1247.1,
       "output": {
         "is_correction": true,
-        "summary": "User requested switching from Black to Ruff for code formatting."
+        "summary": "prefer ruff over black"
       },
       "reasons": []
     },
     {
       "name": "machine_ner",
       "pass": true,
-      "latency_ms": 2456.7,
+      "latency_ms": 1266.7,
       "output": {
         "hosts": [
           "web-01",
@@ -177,28 +221,36 @@ Generated: 2026-07-17 20:31:12 -0400
     {
       "name": "vocab_def",
       "pass": true,
-      "latency_ms": 2338.0,
+      "latency_ms": 1159.0,
       "output": {
         "term": "harness",
-        "definition": "the Claude Code / Grok plugin runner"
+        "definition": "Claude Code / Grok plugin runner"
+      },
+      "reasons": []
+    },
+    {
+      "name": "null_when_missing",
+      "pass": true,
+      "latency_ms": 859.4,
+      "output": {
+        "hosts": []
       },
       "reasons": []
     }
   ],
   "production_refine": {
-    "machines_ms": 2079.6,
+    "machines_ms": 1205.0,
     "machines": {
       "kept": [
-        "asyncpg",
         "cache-02",
         "web-01"
       ],
       "kept_real_hosts": true,
       "dropped_monday": true,
-      "dropped_asyncpg": false
+      "dropped_asyncpg": true
     },
     "machines_ok": true,
-    "vocab_ms": 2824.3,
+    "vocab_ms": 2601.4,
     "vocab_definitions": {
       "harness": "A plugin runner that manages Claude Code and Grok sessions by loading associated MCP servers and skills.",
       "project_key": "A mechanism used to collapse Git worktrees back to the repository root, which helps manage memory pooling."
@@ -206,9 +258,10 @@ Generated: 2026-07-17 20:31:12 -0400
     "vocab_ok": true
   },
   "gates": {
-    "json_task_pass_rate_ge_0.6": true,
+    "json_task_pass_rate_ge_0.8": true,
     "mean_latency_ms_lt_15000": true,
     "machines_refine_keeps_real_hosts": true,
+    "machines_refine_precision": true,
     "vocab_refine_defines_term": true
   }
 }
@@ -221,13 +274,19 @@ Generated: 2026-07-17 20:31:12 -0400
 - `PASS` mtp.has_mtp_tensors
 - `PASS` embeds.hybrid_not_worse_than_fts_p@5
 - `PASS` embeds.hybrid_p@1_near_dense
-- `PASS` embeds.hybrid_p@1_ge_0.75
-- `PASS` embeds.pure_dense_p@1_ge_0.5
-- `PASS` embeds.pure_dense_mrr_ge_0.6
-- `PASS` embeds.pairwise_ge_0.9
-- `PASS` llm.json_task_pass_rate_ge_0.6
+- `PASS` embeds.easy_hybrid_p@1_ge_0.75
+- `PASS` embeds.easy_pure_dense_p@1_ge_0.7
+- `PASS` embeds.easy_pure_dense_mrr_ge_0.75
+- `PASS` embeds.easy_pairwise_ge_0.9
+- `PASS` embeds.hard_hybrid_p@1_ge_0.6
+- `PASS` embeds.hard_hybrid_p@5_ge_0.85
+- `PASS` embeds.hard_pure_dense_p@1_ge_0.55
+- `PASS` embeds.hard_miss_rate_at_1_le_0.4
+- `PASS` embeds.memory_instruct_not_worse_than_web
+- `PASS` llm.json_task_pass_rate_ge_0.8
 - `PASS` llm.mean_latency_ms_lt_15000
 - `PASS` llm.machines_refine_keeps_real_hosts
+- `PASS` llm.machines_refine_precision
 - `PASS` llm.vocab_refine_defines_term
 
-**Overall: PASS** (14/14 gates)
+**Overall: PASS** (20/20 gates)

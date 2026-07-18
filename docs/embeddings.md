@@ -39,20 +39,32 @@ total-recall rebuild --yes
 
 ## Query vs document (qwen3-embedding)
 
-- **Queries** (search): official instruct form (applied by total-recall):
+Card rules (Qwen3-Embedding-0.6B): **last-token pool**, **L2 normalize**, **cosine**,
+instruct on **queries only**, documents raw, English task text.
+
+- **Queries** (search) — product **domain** instruct (not generic web search):
 
   ```text
-  Instruct: Given a web search query, retrieve relevant passages that answer the query
+  Instruct: Retrieve relevant past engineering decisions, corrections, tool preferences, and session notes that answer the query
   Query:{your query}
   ```
 
-- **Documents** (index): raw text, no prefix.
+  Generic web-search instruct is available via `TOTAL_RECALL_EMBED_INSTRUCT=web`
+  for A/B only. Domain task lines match the corpus better (HF/paper: custom
+  instructs help; ~1–5% retrieval gain from instructions at all).
+
+- **Documents** (index): raw text, no prefix. Changing query instruct does
+  **not** require re-embed (docs never get the prefix).
+
+- API knobs total-recall sets: `truncate=false`, `num_ctx=8192`, `keep_alive=-1`,
+  client L2 normalize if the backend is non-unit.
 
 ## Environment
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `TOTAL_RECALL_EMBED_MODEL` | `qwen3-embedding:0.6b` | Ollama embed tag (not HF ids) |
+| `TOTAL_RECALL_EMBED_INSTRUCT` | product memory task | `web` / `memory` / full `Instruct:…\nQuery:` / bare task sentence |
 | `TOTAL_RECALL_LLM_BASE_URL` | `http://localhost:11434` | Product daemon URL |
 | `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Chat refine tag |
 | `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `none` disables **chat only** |

@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.4] - 2026-07-18
+
+### Improved — model-card crank (embed + refine)
+
+- **Domain query instruct** for `qwen3-embedding:0.6b` (session memory /
+  decisions / corrections), not the generic web-search default. Override with
+  `TOTAL_RECALL_EMBED_INSTRUCT`. Docs stay raw — no re-index on instruct change.
+- Client **L2 re-normalize** after embed (no-op when Ollama already unit-norms).
+- **Dense kind re-rank**: corrections/bans/decisions beat `domain_fact`
+  near-misses when cosine is close (aligned with FTS kind priority).
+- **`refine_machines`**: few-shot keep/drop examples for qwen3.5:2b IF quality.
+- **Eval suite** (`scripts/eval_product_models.py`): hard near-miss corpus on a
+  separate index, instruct A/B (web vs memory), card-aligned LLM sampling +
+  schemas (no forced temp=0), stricter machines precision gate.
+
 ## [2.3.3] - 2026-07-18
 
 ### Hybrid retrieval: dense-primary (fix top-1 regression)

@@ -49,33 +49,27 @@ _KEEP_SCHEMA: dict = {
     "required": ["keep"],
 }
 
+# Few-shot + null-escape style (Qwen3.5-2B card / small-model IF: examples beat
+# long rule lists). Schema mirrored in format= constrained decode.
 _SYSTEM_PROMPT = """\
-You are a hostname classifier. You will be given a list of tokens that were \
-extracted from shell-command transcripts as potential machine hostnames. Your \
-job is to decide which tokens are REAL machine hostnames (server names, VPS \
-hostnames, relay nodes, workstation names, NAS boxes, VM names, container \
-names, etc.) and which are NOISE (ordinary English words, product names, \
-vendor names, error messages, concepts, adjectives, gerunds, or any other \
-non-hostname token).
+You classify candidate tokens as REAL machine hostnames vs NOISE.
+Real: server/VPS/VM/container/NAS/workstation hostnames used as hosts.
+Noise: English words, product/library names, vendors, concepts, days, gerunds.
 
-Respond ONLY with a JSON object matching this schema:
-  {"keep": ["host1", "host2", ...]}
-
+Respond ONLY with JSON: {"keep": ["host1", ...]}
 Rules:
-- "keep" must be a STRICT SUBSET of the input keys — do NOT invent new names.
-- Include a token only when you are confident it is a real machine identifier.
-- Tokens that look like English words describing actions or concepts \
-  (e.g. "hardening", "brute-force", "timeouts", "cloudflare", "add-on") \
-  should be EXCLUDED.
-- Tokens with typical hostname patterns (hyphens between words, datacenter \
-  abbreviations, numeric suffixes, relay/node/srv/vps/box/host in the name, \
-  subdomain-style labels) are more likely to be real machines.
-- A bare single word (no dot, no hyphen) CAN still be a real hostname if the \
-  context shows it used as a machine: e.g. "ssh <name>", "on <name>", \
-  "deploy to <name>", "<name> is up/down/rebooted". KEEP it when context \
-  supports it; DROP it only when it is clearly a common English word with no \
-  machine context.
-- When in doubt, EXCLUDE.
+- keep is a STRICT SUBSET of input keys — never invent names.
+- Prefer empty keep over guesses. When in doubt, EXCLUDE.
+
+EXAMPLES:
+  candidates: web-01 (ssh web-01), cache-02 (redis on cache-02), Monday (see you Monday), asyncpg (switched driver to asyncpg)
+  -> {"keep": ["web-01", "cache-02"]}
+
+  candidates: hardening (security hardening), cloudflare (cdn), db-primary (pg on db-primary)
+  -> {"keep": ["db-primary"]}
+
+  candidates: timeouts, brute-force, nginx
+  -> {"keep": []}
 """
 
 
