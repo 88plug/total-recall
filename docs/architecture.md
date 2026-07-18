@@ -82,13 +82,13 @@ and writes them directly via `index/`):
 - `implicit_preferences.py` (v0.8) — behavior-derived preferences (Edit vs Write, shell-command dominance, absence patterns, format prefs, recurring vocab) → `implicit_preferences`.
 - `satisfaction.py` (v0.8) — bidirectional praise/frustration × prior-assistant-turn shape → `satisfaction_profile` (+ `satisfaction_meta`).
 
-**Optional refinement lane** (v0.9+, `extractors/llm/`). Auto-provisioned on first install
-when `TOTAL_RECALL_LLM_PROVIDER=auto` (default). Bootstrap can fetch a local ollama binary
-and pull `qwen3.5:2b`. When a daemon is reachable and the model is pulled, `cmd_rebuild`
-invokes refinement AFTER heuristic consolidation: machines NER filter, vocabulary
-definitions, project narratives. Local-only via ollama (cloud APIs deliberately excluded —
-would break the no-reupload-transcripts privacy guarantee). Heuristic baseline always wins
-on disagreement; set `TOTAL_RECALL_LLM_PROVIDER=none` to disable.
+**Product ollama** (managed binary under plugin data; embeds + optional chat). On
+first bootstrap hooks fetch ollama, start it on localhost, and pull
+`qwen3-embedding:0.6b` (dense) plus `qwen3.5:2b` (chat refine unless
+`TOTAL_RECALL_LLM_PROVIDER=none`). Rebuild / Embedder also call
+`vec.runtime.ensure_product_ollama`. LLM refine (`extractors/llm/`) runs on cold
+rebuild after heuristics when the chat model is available. Local-only (cloud
+APIs deliberately excluded). Heuristic baseline always wins on disagreement.
 
 **Universal scrubber.** `secrets.py` runs over every emitted row's `content` plus every string
 field in `context` (recursive). It is invoked from the orchestrator, not the extractors, so a
@@ -109,10 +109,11 @@ the walker or the index.
 
 - `index/` owns `index.db`: SQLite with FTS5 virtual tables for keyword recall plus relational
   tables for sessions, cwds, and extracted rows.
-- `vec/` owns dense vectors in the shared index: `sqlite-vec` + **ollama embeddings only**
-  (format v2, default `qwen3-embedding:0.6b`). Core install — no extra pip extras.
-  Requires a local ollama daemon with an embedding model pulled. Vector recall is a
-  query-time augmentation, not a replacement, for FTS5.
+- `vec/` owns dense vectors in the shared index: `sqlite-vec` + **product-owned
+  ollama** (format v2, default `qwen3-embedding:0.6b`). The plugin auto-fetches
+  a managed `ollama` binary, starts it on localhost, and pulls the embed model
+  (same stack as LLM refine). Vector recall is a query-time augmentation, not a
+  replacement, for FTS5.
 
 **Dependencies.** Layer (b) rows in, query API out. Knows nothing about hooks, MCP, or skills.
 

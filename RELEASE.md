@@ -50,11 +50,10 @@ python -m venv /tmp/cr-release-test
 /tmp/cr-release-test/bin/total-recall-mcp --help 2>/dev/null || echo "(runs as server, no --help)"
 ```
 
-Dense embeds need a **local ollama** daemon (not a pip extra):
+Dense embeds use **product-owned ollama** (auto-provisioned; not a pip extra):
 
 ```bash
-ollama pull qwen3-embedding:0.6b   # hybrid recall
-ollama pull qwen3.5:2b             # optional LLM refine
+bash scripts/llm-setup.sh   # managed binary + serve + embed/chat models
 ```
 
 ## Publish to PyPI

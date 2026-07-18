@@ -1,10 +1,10 @@
 """Dense-retrieval companion for total-recall.
 
-Embeddings via **local ollama** (default ``qwen3-embedding:0.6b``). Vectors
+Embeddings via **product-owned ollama** (default ``qwen3-embedding:0.6b``). Vectors
 stored with ``sqlite-vec``. Combined with FTS5 at query time via RRF.
 
-FTS5 works without dense. Dense requires a running ollama daemon with an
-embedding-capable model pulled. ``import vec`` stays cheap (lazy sqlite-vec).
+FTS5 works without dense. Dense uses product-owned ollama (auto-provisioned
+under the plugin data dir). ``import vec`` stays cheap (lazy sqlite-vec).
 """
 
 from __future__ import annotations

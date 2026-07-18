@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.2] - 2026-07-17
+
+### Product-owned ollama for embeds (design fix)
+
+Dense embeds now use the **same managed ollama** as LLM refine — not “bring
+your own system daemon” as the primary path.
+
+- **`hooks/lib/common.sh`**: `provision_llm` always pulls
+  **`qwen3-embedding:0.6b`** (unless `TOTAL_RECALL_VEC=0`) and chat model unless
+  `TOTAL_RECALL_LLM_PROVIDER=none`. Full opt-out = both off. No longer skips
+  on `.ollama_ready` alone (re-ensures models).
+- **`vec/runtime.py`**: Python `ensure_product_ollama()` — resolve managed
+  binary, start serve, pull models; used by rebuild + Embedder load.
+- Docs: embeddings/ollama-gpu reframe product-first; systemd is optional.
+
+### MTP on all product ollama serves
+
+- Product `ollama serve` (bash + Python) exports **GPU + MTP** env:
+  flash attention, keep-alive, parallel load, `OLLAMA_MLX_MTP_*_DRAFT_TOKENS=4`.
+- Default chat **`qwen3.5:2b`** ships built-in `mtp.*` tensors — CUDA auto-MTP.
+- Embed models unchanged (MTP is decode-only).
+- Optional systemd drop-in gets the same MTP knobs.
+
+### Upgrade
+
+Plugin refresh is enough for auto-provision on next session. CLI-only:
+
+```bash
+bash scripts/llm-setup.sh
+total-recall rebuild --yes   # if dense index empty / wrong format
+```
+
+
 ## [2.3.1] - 2026-07-17
 
 ### Fixed (user footguns after ollama-only embeds)

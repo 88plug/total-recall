@@ -217,10 +217,10 @@ All subcommands support `--json`.
 
 ## Storage and privacy
 
-Everything stays under `${CLAUDE_PLUGIN_DATA}/total-recall/` (env-resolved by Claude Code; do not hardcode the path). It holds the SQLite index (`index.db`, FTS5 keyword recall + dense vectors via sqlite-vec when ollama has an embed model), `state.json` offsets, and rotating logs. The session JSONLs themselves are never written to.
+Everything stays under `${CLAUDE_PLUGIN_DATA}/total-recall/` (env-resolved by Claude Code; do not hardcode the path). It holds the SQLite index (`index.db`, FTS5 + dense vectors), optional managed `bin/ollama`, `state.json` offsets, and rotating logs. The session JSONLs themselves are never written to.
 
 > [!NOTE]
-> Read-only on `~/.claude/projects/*.jsonl`, local-only, and no re-uploading. Transcripts contain secrets, internal URLs, and private code, so they never leave the machine. Dense embeddings use the **local ollama** daemon only (`qwen3-embedding:0.6b`); no cloud embed APIs and no in-process ONNX/fastembed path.
+> Read-only on `~/.claude/projects/*.jsonl`, local-only, and no re-uploading. Transcripts contain secrets, internal URLs, and private code, so they never leave the machine. Dense embeddings use **product-owned ollama** (auto-provisioned binary under the plugin data dir, `qwen3-embedding:0.6b`); no cloud embed APIs and no in-process ONNX/fastembed path.
 
 ## Optional local-LLM refinement
 

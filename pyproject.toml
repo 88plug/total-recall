@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "total-recall"
-version = "2.3.1"
+version = "2.3.2"
 description = "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 10 supported CLI clients; surfaces operator identity / decisions / bans / corrections via MCP."
 readme = "README.md"
 license = "LicenseRef-FSL-1.1-ALv2"
@@ -52,12 +52,12 @@ dependencies = [
     "mcp>=1.28.0",
     "click>=8",
     "sqlite-vec>=0.1.6",
-    # Dense embeds: local ollama daemon only (no fastembed / ONNX).
+    # Dense embeds: product-owned ollama (managed binary; no fastembed / ONNX).
 ]
 
 [project.optional-dependencies]
 vec = []  # bundled in core since v2.3.0; kept for backwards compatibility
-llm = []  # ollama is an external daemon binary, not a Python package; no pip dep needed
+llm = []  # ollama is a managed external binary, not a Python package dep
 dev = [
     "tomli; python_version < '3.11'",
     "pytest>=9",

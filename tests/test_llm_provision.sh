@@ -97,10 +97,9 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 1. Opt-out: TOTAL_RECALL_LLM_PROVIDER=none → provision_llm returns 0
-#    and does not call curl or ollama.
+# 1. Full opt-out: LLM_PROVIDER=none AND VEC=0 → no ollama at all.
 # ---------------------------------------------------------------------------
-echo "[1] opt-out via TOTAL_RECALL_LLM_PROVIDER=none"
+echo "[1] full opt-out via TOTAL_RECALL_LLM_PROVIDER=none + TOTAL_RECALL_VEC=0"
 
 CURL_CALL_LOG="$TMPDATA/curl_calls.txt"
 rm -f "$CURL_CALL_LOG"
@@ -111,30 +110,31 @@ write_stub "ollama" "echo OLLAMA_CALLED >> '$CURL_CALL_LOG'; exit 0"
 set +e
 run_in_subshell "
   export TOTAL_RECALL_LLM_PROVIDER=none
+  export TOTAL_RECALL_VEC=0
   recall::provision_llm
 "
 RC=$?
 set -e
 
 if [ "$RC" = "0" ]; then
-  ok "opt-out: provision_llm returns 0"
+  ok "full opt-out: provision_llm returns 0"
 else
-  fail "opt-out" "expected rc=0 got $RC"
+  fail "full opt-out" "expected rc=0 got $RC"
 fi
 
 if [ ! -f "$CURL_CALL_LOG" ]; then
-  ok "opt-out: curl/ollama not called"
+  ok "full opt-out: curl/ollama not called"
 else
-  fail "opt-out" "curl or ollama was called: $(cat "$CURL_CALL_LOG")"
+  fail "full opt-out" "curl or ollama was called: $(cat "$CURL_CALL_LOG")"
 fi
 
 rm_stub "curl"
 rm_stub "ollama"
 
 # ---------------------------------------------------------------------------
-# 2. start_llm_provision is a no-op when provider=none
+# 2. start_llm_provision is a no-op when both layers disabled
 # ---------------------------------------------------------------------------
-echo "[2] start_llm_provision no-op when provider=none"
+echo "[2] start_llm_provision no-op when LLM=none and VEC=0"
 
 SIDECAR_LOG="$TMPDATA/sidecar.txt"
 rm -f "$SIDECAR_LOG"
@@ -142,15 +142,14 @@ rm -f "$SIDECAR_LOG"
 set +e
 run_in_subshell "
   export TOTAL_RECALL_LLM_PROVIDER=none
+  export TOTAL_RECALL_VEC=0
   recall::start_llm_provision
   wait
 " > "$SIDECAR_LOG" 2>&1
 set -e
 
-# With provider=none the function should early-return without touching curl/ollama.
-# Any content in the log should NOT contain "ollama" or failure messages.
 if [ ! -s "$SIDECAR_LOG" ] || ! grep -qi "ollama" "$SIDECAR_LOG" 2>/dev/null; then
-  ok "start_llm_provision: no-op when provider=none"
+  ok "start_llm_provision: no-op when both layers off"
 else
   fail "start_llm_provision" "unexpected output: $(cat "$SIDECAR_LOG")"
 fi
@@ -265,36 +264,96 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Sentinel guard: second call to provision_llm is a no-op.
+# 5. Idempotent re-provision: daemon up + both models listed → no pull.
+#    (sentinel alone no longer skips — must still ensure models.)
 # ---------------------------------------------------------------------------
-echo "[5] sentinel guard (idempotency)"
+echo "[5] idempotent re-provision when models already present"
 
-SENTINEL_DIR="$TMPDATA/total-recall"
-mkdir -p "$SENTINEL_DIR"
-SENTINEL="$SENTINEL_DIR/.ollama_ready"
-touch "$SENTINEL"
+PULL_LOG="$TMPDATA/pull_idempotent.txt"
+rm -f "$PULL_LOG"
 
-# Wire stubs that would error if called — any call means sentinel check failed.
-write_stub "curl"   "exit 1"
-write_stub "ollama" "exit 1"
+write_stub "curl" 'exit 0'  # daemon reachable
+write_stub "ollama" "
+case \"\$1\" in
+  --version) echo 'ollama version 0.0.0-stub'; exit 0;;
+  list)  printf 'NAME\nid\nsize\nqwen3-embedding:0.6b\tx\t1B\nqwen3.5:2b\ty\t1B\n'; exit 0;;
+  pull)  echo pull_called >> '$PULL_LOG'; exit 0;;
+  serve) exit 0;;
+  *)     exit 0;;
+esac
+"
 
 set +e
 run_in_subshell "
   export TOTAL_RECALL_LLM_PROVIDER=auto
+  export TOTAL_RECALL_VEC=1
+  export RECALL_OLLAMA='$STUBS/ollama'
   recall::provision_llm
 "
 RC=$?
 set -e
 
 if [ "$RC" = "0" ]; then
-  ok "sentinel: provision_llm is a no-op when .ollama_ready exists"
+  ok "idempotent: provision_llm returns 0 when models present"
 else
-  fail "sentinel" "expected rc=0 got $RC"
+  fail "idempotent" "expected rc=0 got $RC"
 fi
 
-rm -f "$SENTINEL"
+if [ ! -f "$PULL_LOG" ]; then
+  ok "idempotent: ollama pull not invoked when models listed"
+else
+  fail "idempotent" "unexpected pull: $(cat "$PULL_LOG")"
+fi
+
 rm_stub "curl"
 rm_stub "ollama"
+rm -f "$PULL_LOG"
+
+# ---------------------------------------------------------------------------
+# 5b. LLM_PROVIDER=none still pulls embed model (product dense path).
+# ---------------------------------------------------------------------------
+echo "[5b] LLM=none still provisions embed model"
+
+PULL_LOG="$TMPDATA/pull_embed_only.txt"
+rm -f "$PULL_LOG"
+write_stub "curl" 'exit 0'
+write_stub "ollama" "
+case \"\$1\" in
+  --version) echo 'ollama version 0.0.0-stub'; exit 0;;
+  list)  printf 'NAME\nid\n'; exit 0;;
+  pull)
+    echo \"\$2\" >> '$PULL_LOG'
+    exit 0;;
+  serve) exit 0;;
+  *) exit 0;;
+esac
+"
+
+set +e
+run_in_subshell "
+  export TOTAL_RECALL_LLM_PROVIDER=none
+  export TOTAL_RECALL_VEC=1
+  export RECALL_OLLAMA='$STUBS/ollama'
+  recall::provision_llm
+"
+RC=$?
+set -e
+
+if [ "$RC" = "0" ] && grep -q 'qwen3-embedding:0.6b' "$PULL_LOG" 2>/dev/null; then
+  ok "LLM=none: embed model still pulled"
+else
+  fail "LLM=none embed" "rc=$RC pulls='$(cat "$PULL_LOG" 2>/dev/null)'"
+fi
+
+if ! grep -q 'qwen3.5:2b' "$PULL_LOG" 2>/dev/null; then
+  ok "LLM=none: chat model not pulled"
+else
+  fail "LLM=none chat" "chat model was pulled: $(cat "$PULL_LOG")"
+fi
+
+rm_stub "curl"
+rm_stub "ollama"
+rm -f "$PULL_LOG"
 
 # ---------------------------------------------------------------------------
 # 6. recall::ollama_serve — no-op when daemon already reachable.

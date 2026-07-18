@@ -221,8 +221,8 @@ SQLite index (`index.db` + FTS5), optional embeddings, `state.json`, rotating lo
 Transcripts are never rewritten or re-uploaded.
 
 !!! note
-    Read-only on session JSONL. Dense embeddings use local **ollama only**
-    (`qwen3-embedding:0.6b`). Same daemon as LLM refine (`qwen3.5:2b`).
+    Read-only on session JSONL. Dense embeddings use **product-owned ollama**
+    (`qwen3-embedding:0.6b`). Same managed daemon as LLM refine (`qwen3.5:2b`).
 
 ## Optional local-LLM refinement
 

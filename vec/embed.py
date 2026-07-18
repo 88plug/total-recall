@@ -1,11 +1,13 @@
-"""Embedding wrapper — **ollama only**.
+"""Embedding wrapper — **product-owned ollama only**.
 
 Product contract (format v2, 2026-07):
-  * Dense vectors come from the local ollama daemon (same as LLM refinement).
+  * Dense vectors via total-recall's managed ollama (bundled binary under the
+    plugin data dir → ``ollama serve`` → HTTP). Not in-process ONNX/fastembed.
   * Default model: ``qwen3-embedding:0.6b`` (not chat ``qwen3.5:2b``).
+  * Auto-ensure: first embed/rebuild starts the product daemon + pulls the
+    embed model when missing (see :mod:`vec.runtime`).
   * Override: ``TOTAL_RECALL_EMBED_MODEL`` (ollama tag) or ``Embedder(model=tag)``.
   * Base URL: ``TOTAL_RECALL_LLM_BASE_URL`` (default ``http://localhost:11434``).
-  * No fastembed / ONNX path. No pip ollama package — stdlib HTTP only.
 
 Qwen3-embedding query convention (``as_query=True``):
   Instruct: Given a web search query, retrieve relevant passages that answer the query
@@ -275,12 +277,26 @@ class Embedder:
 
         base_url = _ollama_base_url()
         want = self._forced_model or os.environ.get("TOTAL_RECALL_EMBED_MODEL")
+        # Product-owned runtime: start our daemon + pull embed model if needed.
+        if want is None or not _looks_like_legacy_hf_embed(want):
+            try:
+                from vec.runtime import ensure_product_ollama
+
+                ensure_product_ollama(embed=True, chat=False, pull=True)
+            except Exception as exc:  # noqa: BLE001
+                # Soft: still try HTTP in case daemon is up but ensure failed mid-pull.
+                if not _ollama_list_models(base_url):
+                    raise RuntimeError(
+                        f"Product ollama not ready for embeds: {exc}"
+                    ) from exc
+
         chosen = _pick_ollama_embed_model(base_url, want)
         if chosen is None:
             raise RuntimeError(
-                f"No embedding-capable ollama model at {base_url}. Pull one:\n"
-                f"    ollama pull {RECOMMENDED_OLLAMA_EMBED}\n"
-                f"Or set TOTAL_RECALL_EMBED_MODEL to a pulled embedding tag."
+                f"No embedding-capable ollama model at {base_url}. "
+                f"total-recall auto-provisions product ollama; if this persists:\n"
+                f"    bash scripts/llm-setup.sh\n"
+                f"    # or: ollama pull {RECOMMENDED_OLLAMA_EMBED}"
             )
         self._load_ollama(chosen, base_url)
 

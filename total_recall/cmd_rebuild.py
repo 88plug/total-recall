@@ -58,7 +58,17 @@ def _backfill_vectors(db_path: str | Path, verbose: bool) -> None:
     try:
         from index.db import connect  # type: ignore[import-not-found]
         from vec.embed import Embedder  # type: ignore[import-not-found]
+        from vec.runtime import ensure_product_ollama  # type: ignore[import-not-found]
         from vec.store import apply_vec_schema, backfill_all  # type: ignore[import-not-found]
+
+        # Product-owned ollama: fetch/serve/pull embed model before backfill.
+        status = ensure_product_ollama(embed=True, chat=False, pull=True)
+        if verbose:
+            click.echo(
+                f"[rebuild] product ollama ready at {status.get('base_url')} "
+                f"(embed={status.get('embed_model')}, bin={status.get('bin')})",
+                err=True,
+            )
 
         embedder = Embedder()
         conn = connect(db_path)
@@ -83,16 +93,15 @@ def _backfill_vectors(db_path: str | Path, verbose: bool) -> None:
         if verbose:
             click.echo(
                 f"[rebuild] vec import failed ({exc}); skipping dense backfill "
-                "(recall stays FTS5-only). Install: pip install total-recall "
-                f"and ensure ollama has {os.environ.get('TOTAL_RECALL_EMBED_MODEL') or 'qwen3-embedding:0.6b'}",
+                "(recall stays FTS5-only). Install: pip install total-recall",
                 err=True,
             )
     except Exception as exc:  # noqa: BLE001
         click.echo(
             f"total-recall: vec backfill failed (recall stays FTS5-only): {exc}\n"
-            "  Fix: ollama pull qwen3-embedding:0.6b  # then re-run rebuild\n"
-            "  Legacy TOTAL_RECALL_EMBED_MODEL (HF ids like Alibaba-NLP/...) "
-            "must be unset — embeds are ollama-only now.",
+            "  Product ollama should auto-provision on first session / llm-setup.\n"
+            "  Repair: bash scripts/llm-setup.sh   # or /total-recall:llm-setup\n"
+            "  Unset legacy TOTAL_RECALL_EMBED_MODEL HF ids (Alibaba-NLP/...).",
             err=True,
         )
 

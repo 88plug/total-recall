@@ -1,67 +1,79 @@
-# How Ollama uses the GPU (and how we hammer it)
+# Ollama GPU notes (optional host tuning)
 
-## Mental model
+**Default product path:** total-recall auto-provisions a managed ollama binary
+under the plugin data dir and starts it — no systemd required. See
+[embeddings.md](embeddings.md).
 
-Ollama is a **local model server**. You pull GGUF models; on each request it
-loads weights into **VRAM (GPU)** and/or **RAM (CPU)** and runs inference.
+This page is **optional** host-level tuning when you already run a system
+ollama unit and want hard GPU pin.
 
-| Concept | Meaning |
-|---------|---------|
-| **Same model tag** | No separate “GPU model” vs “CPU model.” Offload decides where layers live. |
-| **`num_gpu`** | How many **layers** go to GPU (not “which GPU id”). Large value ≈ all layers. |
-| **`100% GPU`** (`ollama ps`) | Entire model in VRAM — this is what you want. |
-| **`48%/52% CPU/GPU`** | Split — model too big for free VRAM; slower. |
-| **Multi-GPU** | If the model **fits one GPU**, ollama prefers that (best). If not, it spreads. |
-| **`CUDA_VISIBLE_DEVICES`** | Which physical GPUs the daemon may see. |
+## What “100% GPU” means
+
+| Signal | Meaning |
+|--------|---------|
+| **`100% GPU`** (`ollama ps`) | Entire model in VRAM |
+| **Multi-GPU** | Fits one GPU → prefer that; else spread |
+| **`CUDA_VISIBLE_DEVICES`** | Which physical GPUs the daemon may see |
 
 Docs: [Hardware support](https://docs.ollama.com/gpu), [FAQ](https://docs.ollama.com/faq).
 
-## total-recall defaults (code)
+## What total-recall already sends
 
-| Surface | Model | GPU knobs |
-|---------|-------|-----------|
+| Role | Model | Request options |
+|------|-------|-----------------|
 | Dense embed | `qwen3-embedding:0.6b` | `num_gpu=999`, `keep_alive=-1`, `num_ctx=8192`, `num_batch=512` |
-| LLM refine | `qwen3.5:2b` | `num_gpu=999`, `keep_alive=-1` |
+| Chat refine | `qwen3.5:2b` | `num_gpu=999`, `keep_alive=-1` (+ model-native **MTP**) |
 
-Env overrides:
+Env overrides: `TOTAL_RECALL_OLLAMA_NUM_GPU`, `TOTAL_RECALL_EMBED_KEEP_ALIVE`,
+`TOTAL_RECALL_EMBED_NUM_CTX`, `TOTAL_RECALL_EMBED_NUM_BATCH`.
 
-- `TOTAL_RECALL_OLLAMA_NUM_GPU` (default `999`)
-- `TOTAL_RECALL_EMBED_KEEP_ALIVE` / `TOTAL_RECALL_LLM_KEEP_ALIVE` (default `-1`)
-- `TOTAL_RECALL_EMBED_NUM_CTX` (default `8192`)
-- `TOTAL_RECALL_EMBED_NUM_BATCH` (default `512`)
+## Multi-token prediction (MTP)
 
-## Daemon hardening (host)
+| Model | MTP? | How |
+|-------|------|-----|
+| **`qwen3.5:2b`** (default chat) | **Yes** | Built-in `mtp.*` tensors in the GGUF; ollama CUDA/llama-server auto-engages |
+| **`qwen3-embedding:*`** | N/A | Embed path is not autoregressive decode |
+| Gemma 4 library tags with `-mtp` | Yes | Pull the MTP-tagged model (separate drafter) |
+| Other chat models | Only if GGUF ships MTP heads or a draft model is paired |
 
-Soft defaults on this box were: single GPU UUID, `OLLAMA_NUM_PARALLEL=1`,
-`OLLAMA_KEEP_ALIVE=5m`. That **unloads** models and serializes work.
+Product `ollama serve` (hooks + `vec.runtime`) always sets:
 
-Hard profile (repo): `scripts/ollama-gpu-hard.conf` → install as systemd drop-in.
+- `OLLAMA_FLASH_ATTENTION=1`
+- `OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS=4`
+- `OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS=4`
+- `OLLAMA_KEEP_ALIVE=-1`, `OLLAMA_MAX_LOADED_MODELS=4`, `OLLAMA_NUM_PARALLEL=4`
+
+MLX runners honor the `OLLAMA_MLX_MTP_*` knobs. CUDA runners use built-in heads
+on Qwen3.5 (no separate draft model required).
+
+## Optional: system systemd drop-in
+
+Only if you prefer a **system** `ollama.service` over the product-managed binary:
 
 ```bash
+sudo mkdir -p /etc/systemd/system/ollama.service.d
 sudo cp scripts/ollama-gpu-hard.conf /etc/systemd/system/ollama.service.d/99-gpu-hard.conf
-# Optional: remove older soft drop-in if it fights:
-# sudo rm /etc/systemd/system/ollama.service.d/mosi.conf
 sudo systemctl daemon-reload
 sudo systemctl restart ollama
-ollama pull qwen3-embedding:0.6b
-ollama pull qwen3.5:2b
-# Preload + pin
-curl -s http://127.0.0.1:11434/api/embed -d '{"model":"qwen3-embedding:0.6b","input":"warmup","keep_alive":-1,"options":{"num_gpu":999}}' >/dev/null
-curl -s http://127.0.0.1:11434/api/generate -d '{"model":"qwen3.5:2b","prompt":"hi","keep_alive":-1,"options":{"num_gpu":999,"num_predict":1}}' >/dev/null
-ollama ps
-nvidia-smi
+# Point product at that daemon (default URL already matches):
+# export TOTAL_RECALL_LLM_BASE_URL=http://127.0.0.1:11434
 ```
 
-Expect `PROCESSOR` → **100% GPU** for loaded models.
+Or pin the product binary: `export RECALL_OLLAMA=/usr/bin/ollama`.
+
+Verify:
+
+```bash
+ollama ps          # PROCESSOR → 100% GPU
+```
 
 ## Concurrent embed + chat
 
-Both models small enough for one 20 GB Ada. With `OLLAMA_MAX_LOADED_MODELS≥2`
-and enough free VRAM, both stay resident. If VRAM fights, ollama **evicts** the
-idle model — longer `keep_alive` and smaller `num_ctx` on embeds reduce thrash.
+With `OLLAMA_MAX_LOADED_MODELS` ≥ 2 and free VRAM, both stay resident. If VRAM
+fights, ollama may evict the idle model — long `keep_alive` helps.
 
-## What “hammer” does *not* mean
+## Not required
 
-- Not “use 8B embed always” (slower, more VRAM, rebuild cost).
-- Not MTP (chat decode speedup; irrelevant to `/api/embed`).
-- Not disabling safety on the host — only removing artificial throttles.
+- Not “install ollama yourself first” for normal plugin users
+- Not “use 8B embed always”
+- Not MTP (chat decode; irrelevant to `/api/embed`)

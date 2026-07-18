@@ -775,6 +775,20 @@ recall::ollama() {
   return 1
 }
 
+# Product defaults for every ollama serve we start (GPU + MTP).
+# Safe on runners that ignore unknown knobs. Qwen3.5 GGUFs ship built-in MTP
+# heads; CUDA/llama-server auto-engages them. MLX uses the OLLAMA_MLX_MTP_* envs.
+recall::_ollama_product_env() {
+  export OLLAMA_FLASH_ATTENTION="${OLLAMA_FLASH_ATTENTION:-1}"
+  export OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:--1}"
+  export OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAX_LOADED_MODELS:-4}"
+  export OLLAMA_NUM_PARALLEL="${OLLAMA_NUM_PARALLEL:-4}"
+  export OLLAMA_MAX_QUEUE="${OLLAMA_MAX_QUEUE:-2048}"
+  # Multi-token prediction (MTP) draft depth — applied where the runner supports it.
+  export OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS="${OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS:-4}"
+  export OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS="${OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS:-4}"
+}
+
 # Start the ollama daemon if not already reachable. Detaches via setsid/nohup
 # (same pattern as recall::start_bootstrap). Idempotent — no-op if port up.
 # Logs to ${RECALL_LOG_DIR}/llm-provision.log.
@@ -789,8 +803,17 @@ recall::ollama_serve() {
   mkdir -p "$RECALL_LOG_DIR" 2>/dev/null || true
   local launcher="nohup"
   if command -v setsid >/dev/null 2>&1; then launcher="setsid nohup"; fi
-  recall::log "ollama_serve: starting daemon (log: $log_file)"
-  $launcher "$ollama_bin" serve >>"$log_file" 2>&1 < /dev/null &
+  recall::_ollama_product_env
+  recall::log "ollama_serve: starting daemon GPU+MTP (log: $log_file)"
+  $launcher env \
+    OLLAMA_FLASH_ATTENTION="${OLLAMA_FLASH_ATTENTION}" \
+    OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE}" \
+    OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAX_LOADED_MODELS}" \
+    OLLAMA_NUM_PARALLEL="${OLLAMA_NUM_PARALLEL}" \
+    OLLAMA_MAX_QUEUE="${OLLAMA_MAX_QUEUE}" \
+    OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS="${OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS}" \
+    OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS="${OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS}" \
+    "$ollama_bin" serve >>"$log_file" 2>&1 < /dev/null &
   local daemon_pid=$!
   disown 2>/dev/null || true
   # Wait up to 10s for the port to open.
@@ -820,74 +843,112 @@ recall::ollama_pull() {
   "$ollama_bin" pull "${model}" >> "$log_file" 2>&1
 }
 
-# Orchestrator: respects opt-out, calls ollama→serve→pull, drops sentinel.
-# Safe to call repeatedly — exits immediately if sentinel exists.
-# NEVER fatal: every failure path returns 0 (LLM is optional).
+# Product-owned ollama defaults (embed = hybrid dense; chat = optional refine).
+recall::embed_model() {
+  local m="${TOTAL_RECALL_EMBED_MODEL:-qwen3-embedding:0.6b}"
+  # Reject legacy HF ids — fall back to recommended ollama tag.
+  case "$m" in
+    */*|*"gte-modernbert"*|*"bge-small-en"*)
+      m="qwen3-embedding:0.6b"
+      ;;
+  esac
+  printf '%s' "$m"
+}
+
+# True if dense embeds are wanted (default-on). TOTAL_RECALL_VEC=0 opts out.
+recall::_want_embed() {
+  case "${TOTAL_RECALL_VEC:-1}" in
+    0|false|no|off|FALSE|NO|OFF) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# True if LLM chat refine is wanted. TOTAL_RECALL_LLM_PROVIDER=none opts out
+# of *chat only* — embeds still use product ollama unless VEC=0 too.
+recall::_want_llm_chat() {
+  [ "${TOTAL_RECALL_LLM_PROVIDER:-auto}" = "none" ] && return 1
+  return 0
+}
+
+# Orchestrator: product-owned ollama → serve → pull embed (+ chat if wanted).
+# Idempotent. NEVER fatal: every failure path returns 0 (layers fail soft).
+# Does NOT early-exit on .ollama_ready alone — must re-ensure models so a
+# machine that only ever pulled chat still gets the embed model.
 recall::provision_llm() {
   local log_file="${RECALL_LOG_DIR}/llm-provision.log"
   mkdir -p "$RECALL_LOG_DIR" 2>/dev/null || true
 
-  # Opt-out: TOTAL_RECALL_LLM_PROVIDER=none means "user doesn't want LLM".
-  local provider="${TOTAL_RECALL_LLM_PROVIDER:-auto}"
-  if [ "$provider" = "none" ]; then
+  local want_embed=0 want_chat=0
+  recall::_want_embed && want_embed=1
+  recall::_want_llm_chat && want_chat=1
+
+  if [ "$want_embed" -eq 0 ] && [ "$want_chat" -eq 0 ]; then
     return 0
   fi
 
+  local chat_model="${TOTAL_RECALL_LLM_MODEL:-qwen3.5:2b}"
+  local embed_model
+  embed_model="$(recall::embed_model)"
   local sentinel="${RECALL_DATA_ROOT}/.ollama_ready"
-  if [ -f "$sentinel" ]; then
-    return 0
-  fi
-
-  local model="${TOTAL_RECALL_LLM_MODEL:-qwen3.5:2b}"
 
   {
-    printf '[llm-provision] %s starting (model=%s)\n' "$(date -Iseconds 2>/dev/null || date)" "$model"
+    printf '[ollama-provision] %s start embed=%s chat=%s embed_model=%s chat_model=%s\n' \
+      "$(date -Iseconds 2>/dev/null || date)" "$want_embed" "$want_chat" "$embed_model" "$chat_model"
 
-    # Step 1: resolve (or fetch) ollama.
     local ollama_bin
     if ! ollama_bin="$(recall::ollama)"; then
-      printf '[llm-provision] WARN: could not resolve or fetch ollama; LLM refinement disabled\n'
+      printf '[ollama-provision] WARN: could not resolve or fetch ollama binary\n'
       return 0
     fi
-    printf '[llm-provision] ollama binary: %s\n' "$ollama_bin"
+    printf '[ollama-provision] binary: %s\n' "$ollama_bin"
 
-    # Step 2: start daemon if needed.
     if ! recall::ollama_serve; then
-      printf '[llm-provision] WARN: daemon start failed; LLM refinement disabled\n'
+      printf '[ollama-provision] WARN: daemon start failed\n'
       return 0
     fi
 
-    # Step 3: pull model if needed.
-    if ! recall::ollama_pull "$model"; then
-      printf '[llm-provision] WARN: model pull failed; LLM refinement disabled\n'
-      return 0
+    local ok=1
+    if [ "$want_embed" -eq 1 ]; then
+      if ! recall::ollama_pull "$embed_model"; then
+        printf '[ollama-provision] WARN: embed model pull failed: %s\n' "$embed_model"
+        ok=0
+      fi
+    fi
+    if [ "$want_chat" -eq 1 ]; then
+      if ! recall::ollama_pull "$chat_model"; then
+        printf '[ollama-provision] WARN: chat model pull failed: %s\n' "$chat_model"
+        ok=0
+      fi
     fi
 
-    # Step 4: sentinel.
-    touch "$sentinel" 2>/dev/null || true
-    printf '[llm-provision] done — sentinel written: %s\n' "$sentinel"
+    if [ "$ok" -eq 1 ]; then
+      touch "$sentinel" 2>/dev/null || true
+      printf '[ollama-provision] done — sentinel %s\n' "$sentinel"
+    else
+      printf '[ollama-provision] incomplete — sentinel not written\n'
+    fi
   } >> "$log_file" 2>&1
 
-  recall::log "provision_llm: complete (model=$model)"
+  recall::log "provision_llm: complete (embed=$want_embed chat=$want_chat)"
   return 0
 }
 
-# Launch recall::provision_llm as a fully-detached sidecar process. Returns
-# immediately — the LLM provision cannot slow or block the caller.
+# Launch recall::provision_llm as a fully-detached sidecar. Returns immediately.
+# Fires when embed and/or chat are wanted — not skipped solely by .ollama_ready
+# (provision itself is cheap when models are already present).
 recall::start_llm_provision() {
-  local provider="${TOTAL_RECALL_LLM_PROVIDER:-auto}"
-  [ "$provider" = "none" ] && return 0
-
-  local sentinel="${RECALL_DATA_ROOT}/.ollama_ready"
-  [ -f "$sentinel" ] && return 0
+  local want_embed=0 want_chat=0
+  recall::_want_embed && want_embed=1
+  recall::_want_llm_chat && want_chat=1
+  if [ "$want_embed" -eq 0 ] && [ "$want_chat" -eq 0 ]; then
+    return 0
+  fi
 
   mkdir -p "$RECALL_DATA_ROOT" "$RECALL_LOG_DIR" 2>/dev/null || return 0
 
   local launcher="nohup"
   if command -v setsid >/dev/null 2>&1; then launcher="setsid nohup"; fi
 
-  # Re-run this script (common.sh) is not executable — we need a small inline
-  # bash wrapper that sources common.sh and calls provision_llm.
   local script_path="${BASH_SOURCE[0]}"
   $launcher bash -c "
     source $(printf '%q' "$script_path") 2>/dev/null || exit 0
