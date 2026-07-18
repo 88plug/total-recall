@@ -73,19 +73,38 @@ _DISTRACTORS: list[str] = [
 
 
 def _build_corpus(conn: sqlite3.Connection) -> None:
+    # hybrid_search/vec_search filter by project_key when cwd is set — must stamp it.
+    cwd = "/proj/eval"
+    pk = cwd  # plain path → project_key is identity
     ts = 1_700_000_000
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(extractions)").fetchall()}
+    has_pk = "project_key" in cols
     for i, (_q, content) in enumerate(_CORPUS):
-        conn.execute(
-            "INSERT INTO extractions(kind, content, session_id, cwd, ts, source_uuid, "
-            "score, scope) VALUES (?,?,?,?,?,?,?,?)",
-            ("decision", content, "s", "/proj/eval", ts + i, f"t{i}", 0.7, "project"),
-        )
+        if has_pk:
+            conn.execute(
+                "INSERT INTO extractions(kind, content, session_id, cwd, ts, source_uuid, "
+                "score, scope, project_key) VALUES (?,?,?,?,?,?,?,?,?)",
+                ("decision", content, "s", cwd, ts + i, f"t{i}", 0.7, "project", pk),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO extractions(kind, content, session_id, cwd, ts, source_uuid, "
+                "score, scope) VALUES (?,?,?,?,?,?,?,?)",
+                ("decision", content, "s", cwd, ts + i, f"t{i}", 0.7, "project"),
+            )
     for j, d in enumerate(_DISTRACTORS):
-        conn.execute(
-            "INSERT INTO extractions(kind, content, session_id, cwd, ts, source_uuid, "
-            "score, scope) VALUES (?,?,?,?,?,?,?,?)",
-            ("domain_fact", d, "s", "/proj/eval", ts + 100 + j, f"d{j}", 0.5, "project"),
-        )
+        if has_pk:
+            conn.execute(
+                "INSERT INTO extractions(kind, content, session_id, cwd, ts, source_uuid, "
+                "score, scope, project_key) VALUES (?,?,?,?,?,?,?,?,?)",
+                ("domain_fact", d, "s", cwd, ts + 100 + j, f"d{j}", 0.5, "project", pk),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO extractions(kind, content, session_id, cwd, ts, source_uuid, "
+                "score, scope) VALUES (?,?,?,?,?,?,?,?)",
+                ("domain_fact", d, "s", cwd, ts + 100 + j, f"d{j}", 0.5, "project"),
+            )
     conn.commit()
 
 
