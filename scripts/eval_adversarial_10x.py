@@ -46,7 +46,9 @@ if str(_REPO) not in sys.path:
 _SEEDS: list[tuple[str, str, str, list[str]]] = [
     (
         "keep_alive",
-        "decision: pin embed with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whole backfill window",
+        "decision: standing rule for embed model unload — pin embed weights resident "
+        "in VRAM with TOTAL_RECALL_EMBED_KEEP_ALIVE=-1 for the whole backfill window; "
+        "stop ollama unloading the embed model mid-backfill; env that pins embed residency",
         "near-miss: keep_alive=5m was tried and caused VRAM thrash; not the standing pin policy",
         [
             "how we keep embed weights resident in VRAM",

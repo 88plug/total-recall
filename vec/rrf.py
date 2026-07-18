@@ -249,11 +249,46 @@ def _identifier_centrality(query: str, content: str) -> float:
     return best
 
 
+def _legacy_negation_penalty(content: str) -> float:
+    """Downrank rejected/legacy/near-miss phrasing that steals standing decisions.
+
+    Real indexes store corrections and abandoned experiments that share tokens
+    with the winning decision (``keep_alive=5m was tried…`` vs pin ``-1``).
+    """
+    c = (content or "").lower()
+    if not c:
+        return 0.0
+    hits = 0.0
+    for phrase in (
+        "near-miss:",
+        "was tried",
+        "not the standing",
+        "not the product",
+        "not the default",
+        "do not use",
+        "must not return",
+        "legacy",
+        "abandoned",
+        "rejected",
+        "before the ",
+        "previously",
+        "no longer",
+        "was the previous",
+        "looked larger but lost",
+        "caused thrash",
+        "caused vram thrash",
+    ):
+        if phrase in c:
+            hits += 0.12
+    return min(hits, 0.45)
+
+
 def _hit_rank_score(item: Any, query: str, dense_rank: int | None, fts_rank: int | None) -> float:
     """Higher is better. Blends cosine, weighted lexical coverage, identifiers.
 
     Adversarial 10×: related product facts share vocabulary — identifier
     centrality + weighted coverage beat pure cosine on symbol/env/model queries.
+    Legacy/near-miss phrasing is penalized so standing decisions win.
     """
     content = _hit_content(item)
     cov = _token_coverage(query, content)
@@ -274,14 +309,24 @@ def _hit_rank_score(item: Any, query: str, dense_rank: int | None, fts_rank: int
         kind_s = float(_DENSE_KIND_BOOST.get(str(kind or ""), 0.02)) / 0.14
     except Exception:  # noqa: BLE001
         kind_s = 0.0
+    # Prefer affirmative standing language
+    stand = 0.0
+    cl = content.lower()
+    if cl.startswith("decision:") or cl.startswith("ban:") or cl.startswith("correction:"):
+        stand = 0.35
+    elif "standing rule" in cl or "standing decision" in cl:
+        stand = 0.25
+    neg = _legacy_negation_penalty(content)
     return (
-        0.28 * sim
-        + 0.26 * cov
-        + 0.16 * phrase
-        + 0.14 * ident
-        + 0.08 * dense_s
-        + 0.05 * fts_s
-        + 0.03 * kind_s
+        0.26 * sim
+        + 0.24 * cov
+        + 0.14 * phrase
+        + 0.12 * ident
+        + 0.08 * kind_s
+        + 0.06 * stand
+        + 0.06 * dense_s
+        + 0.04 * fts_s
+        - neg
     )
 
 
