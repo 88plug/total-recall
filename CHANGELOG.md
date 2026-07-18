@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.5] - 2026-07-18
+
+### Improved — model-card expert pass (qwen3-embedding + qwen3.5)
+
+HF cards re-read; live instruct A/B on product easy/hard hybrid:
+
+- **Query instruct** (no re-embed): MTEB-shaped domain task
+  `Given a query, retrieve relevant past engineering session passages…`
+  beat the long laundry-list memory line and generic web on hybrid
+  (easy P@1 0.85→**0.90**, hard hybrid P@1 0.87→**0.93** on product suite).
+- Prior memory line kept as `TOTAL_RECALL_EMBED_INSTRUCT=memory_v1`.
+- **qwen3.5:2b** sampling: document card split free-form text
+  (temp 1.0 / top_p 1.0 / pp 2.0) vs structured non-thinking (temp 0.7 /
+  top_p 0.8 / pp 1.5) — product JSON refine stays on structured +
+  `think:false` + schema (not free-form).
+
 ## [2.3.4] - 2026-07-18
 
 ### Fixed — single canonical DB path (no dual index for plugin users)

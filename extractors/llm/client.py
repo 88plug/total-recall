@@ -60,15 +60,16 @@ _PROBE_BACKOFF_S = 1.5
 #
 # * gemma / default: greedy deterministic (temp 0, top_k 1). Verified good
 #   for gemma's classification + (weak) generation; what we shipped first.
-# * qwen3 / qwen3.5: the official model-card recommendations (non-thinking /
-#   instruct mode, general text). Greedy (top_k=1, temp=0) is NOT recommended
-#   for qwen — it wants temp 0.7, top_k 20, top_p 0.8, presence_penalty 1.5.
-#   We keep a fixed ``seed`` so runs stay reproducible despite temp>0 (ollama
-#   pins the sampler RNG to the seed), and disable thinking via the top-level
-#   ``think: false`` so it doesn't emit <think> blocks that break JSON.
+# * qwen3 / qwen3.5: HF Qwen3.5-2B card (2026) non-thinking modes:
+#     text free-form:  temp=1.0 top_p=1.0 top_k=20 presence_penalty=2.0
+#     VL / structured: temp=0.7 top_p=0.8 top_k=20 presence_penalty=1.5
+#   We use the VL/structured non-thinking set for JSON refine (format=schema).
+#   Free-form text sampling is too hot for constrained JSON. Greedy
+#   (top_k=1, temp=0) is NOT recommended — hurts instruction following.
+#   Fixed ``seed`` keeps runs reproducible; top-level ``think: false`` stops
+#   <think> blocks from breaking JSON (ollama >= 0.9).
 #
-# Source: HuggingFace Qwen/Qwen3.5-4B + Qwen3.5-2B model cards (non-thinking
-# text-task recommendations); ollama api.md (think param, >= 0.9).
+# Source: HuggingFace Qwen/Qwen3.5-2B model card; ollama api.md.
 _SAMPLING_PROFILES: dict[str, dict[str, Any]] = {
     "gemma": {
         "temperature": 0.0,
@@ -79,6 +80,7 @@ _SAMPLING_PROFILES: dict[str, dict[str, Any]] = {
         "think": None,
     },
     "qwen": {
+        # Card non-thinking structured (VL-class); not free-form text (temp 1.0).
         "temperature": 0.7,
         "top_k": 20,
         "top_p": 0.8,

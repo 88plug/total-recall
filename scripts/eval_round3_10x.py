@@ -424,7 +424,13 @@ def live_smoke(embedder) -> dict:
                 "live_hybrid_ok": len(hyb) >= 1,
                 "live_dense_ok": len(den) >= 1,
                 "live_model_is_qwen3_embed": (embedder.model or "").startswith("qwen3-embedding"),
-                "live_memory_instruct": "engineering decisions" in (embedder._query_prefix or ""),
+                "live_memory_instruct": any(
+                    s in (embedder._query_prefix or "")
+                    for s in (
+                        "engineering session passages",  # current product default
+                        "engineering decisions",  # memory_v1
+                    )
+                ),
             },
         }
     finally:

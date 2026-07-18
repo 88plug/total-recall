@@ -36,11 +36,20 @@ QWEN3_QUERY_INSTRUCT_WEB = (
     "Query:"
 )
 
-# Product default: total-recall is session memory, not open-web search.
-# Card guidance: custom English task descriptions improve domain retrieval.
-# Documents stay raw (no instruct). Override with TOTAL_RECALL_EMBED_INSTRUCT
-# (full "Instruct: …\nQuery:" string or bare task sentence).
+# Product default: session-memory retrieval (not open-web search).
+# Card: English task line; custom domain > generic web (~1–5% instruct gain).
+# Live A/B 2026-07-17 (easy hybrid P@1/MRR + hard hybrid): MTEB-shaped domain
+# task beat long laundry-list memory and shipped v1 — keeps card template
+# "Given a … query, retrieve … that answer the query" with product corpus.
+# Documents stay raw (no instruct). Override TOTAL_RECALL_EMBED_INSTRUCT.
 QWEN3_QUERY_INSTRUCT_MEMORY = (
+    "Instruct: Given a query, retrieve relevant past engineering session "
+    "passages that answer the query\n"
+    "Query:"
+)
+
+# Previous default (kept for env=memory_v1 A/B). Weaker on hard hybrid.
+QWEN3_QUERY_INSTRUCT_MEMORY_V1 = (
     "Instruct: Retrieve relevant past engineering decisions, corrections, "
     "tool preferences, and session notes that answer the query\n"
     "Query:"
@@ -56,8 +65,10 @@ def _qwen3_query_instruct() -> str:
         return QWEN3_QUERY_INSTRUCT_MEMORY
     if raw.lower() in {"web", "default", "generic"}:
         return QWEN3_QUERY_INSTRUCT_WEB
-    if raw.lower() in {"memory", "product"}:
+    if raw.lower() in {"memory", "product", "memory_v2", "v5"}:
         return QWEN3_QUERY_INSTRUCT_MEMORY
+    if raw.lower() in {"memory_v1", "legacy_memory"}:
+        return QWEN3_QUERY_INSTRUCT_MEMORY_V1
     # Bare task sentence → wrap; full prefix if already formatted.
     if raw.startswith("Instruct:"):
         return raw if raw.endswith("Query:") or raw.endswith("Query:\n") else (

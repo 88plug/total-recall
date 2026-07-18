@@ -1,6 +1,6 @@
 # total-recall product model eval
 
-Generated: 2026-07-17 21:00:58 -0400
+Generated: 2026-07-17 22:36:03 -0400
 
 ## Product runtime
 ```json
@@ -50,7 +50,8 @@ Generated: 2026-07-17 21:00:58 -0400
 ```
 
 ## Dense embeds (qwen3-embedding:0.6b)
-Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisions, corrections, tool preferences, and session notes that answer the`
+Query instruct (truncated): `Instruct: Given a query, retrieve relevant past engineering session passages that answer the query
+Query:`
 
 ### Easy / hard / instruct A/B
 ```json
@@ -60,76 +61,73 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     "n": 20,
     "pure_dense": {
       "n": 20,
-      "p@1": 0.85,
-      "p@5": 0.9,
-      "mrr": 0.8821428571428571,
-      "latency_ms_p50": 247.85696802427992,
-      "latency_ms_p95": 328.7716280319728,
-      "latency_ms_mean": 251.49336074537132
+      "p@1": 0.9,
+      "p@5": 0.95,
+      "mrr": 0.9180555555555555,
+      "latency_ms_p50": 170.7130359718576,
+      "latency_ms_p95": 224.29389803437516,
+      "latency_ms_mean": 172.5700234004762
     },
     "fts_only": {
       "n": 20,
       "p@1": 0.2,
       "p@5": 0.25,
       "mrr": 0.23125,
-      "latency_ms_p50": 0.6527060177177191,
-      "latency_ms_p95": 0.8382070227526128,
-      "latency_ms_mean": 0.6198359944391996
+      "latency_ms_p50": 0.4775490378960967,
+      "latency_ms_p95": 0.8272590348497033,
+      "latency_ms_mean": 0.4977263597538695
     },
     "hybrid": {
       "n": 20,
-      "p@1": 0.85,
-      "p@5": 0.9,
-      "mrr": 0.8821428571428571,
-      "latency_ms_p50": 256.02550100302324,
-      "latency_ms_p95": 345.6179589848034,
-      "latency_ms_mean": 251.41611070430372
+      "p@1": 0.9,
+      "p@5": 0.95,
+      "mrr": 0.9180555555555555,
+      "latency_ms_p50": 159.9972689873539,
+      "latency_ms_p95": 218.24196400120854,
+      "latency_ms_mean": 167.59815319092013
     },
     "pairwise_target_beats_distractor": 1.0,
     "hybrid_miss_at_1": [
-      "database migration tool",
       "ci pipeline runner",
       "how do we deploy"
     ],
-    "hybrid_miss_rate_at_1": 0.15
+    "hybrid_miss_rate_at_1": 0.1
   },
   "hard": {
     "label": "hard",
     "n": 15,
     "pure_dense": {
       "n": 15,
-      "p@1": 0.8,
+      "p@1": 0.8666666666666667,
       "p@5": 1.0,
-      "mrr": 0.9,
-      "latency_ms_p50": 236.82788899168372,
-      "latency_ms_p95": 274.34368897229433,
-      "latency_ms_mean": 235.037018925262
+      "mrr": 0.9333333333333333,
+      "latency_ms_p50": 147.93182304129004,
+      "latency_ms_p95": 191.74257898703218,
+      "latency_ms_mean": 157.17618520138785
     },
     "fts_only": {
       "n": 15,
       "p@1": 0.7333333333333333,
       "p@5": 0.8666666666666667,
       "mrr": 0.8,
-      "latency_ms_p50": 0.7088310085237026,
-      "latency_ms_p95": 1.1250689858570695,
-      "latency_ms_mean": 0.7757883906985322
+      "latency_ms_p50": 0.5835409974679351,
+      "latency_ms_p95": 1.0476669995114207,
+      "latency_ms_mean": 0.6459032728647193
     },
     "hybrid": {
       "n": 15,
-      "p@1": 0.8,
+      "p@1": 0.9333333333333333,
       "p@5": 1.0,
-      "mrr": 0.9,
-      "latency_ms_p50": 221.24680900014937,
-      "latency_ms_p95": 278.59093697043136,
-      "latency_ms_mean": 228.7107519999457
+      "mrr": 0.9666666666666667,
+      "latency_ms_p50": 147.69869000883773,
+      "latency_ms_p95": 181.5881030051969,
+      "latency_ms_mean": 155.7400970098873
     },
     "pairwise_target_beats_distractor": 1.0,
     "hybrid_miss_at_1": [
-      "what broke login after the oauth refactor",
-      "event bus not rabbit",
-      "package manager that replaced pip"
+      "what broke login after the oauth refactor"
     ],
-    "hybrid_miss_rate_at_1": 0.2
+    "hybrid_miss_rate_at_1": 0.06666666666666667
   },
   "instruct_ab": {
     "web_instruct": {
@@ -137,28 +135,28 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
       "p@1": 0.8,
       "p@5": 0.95,
       "mrr": 0.86875,
-      "latency_ms_p50": 238.38170297676697,
-      "latency_ms_p95": 281.47068101679906,
-      "latency_ms_mean": 233.8946486939676
+      "latency_ms_p50": 155.41989699704573,
+      "latency_ms_p95": 223.05179998511449,
+      "latency_ms_mean": 167.9995365004288
     },
     "memory_instruct": {
       "n": 20,
       "p@1": 0.85,
-      "p@5": 0.9,
-      "mrr": 0.88125,
-      "latency_ms_p50": 229.65535102412105,
-      "latency_ms_p95": 259.4395630294457,
-      "latency_ms_mean": 219.23377754283138
+      "p@5": 0.95,
+      "mrr": 0.8899999999999999,
+      "latency_ms_p50": 175.02151301596314,
+      "latency_ms_p95": 210.8892630203627,
+      "latency_ms_mean": 177.65051924798172
     },
     "memory_p@1_delta": 0.05,
-    "memory_mrr_delta": 0.0125,
+    "memory_mrr_delta": 0.0212,
     "memory_wins_or_ties_p@1": true
   },
   "backfill": {
     "easy_embedded": 30,
-    "easy_seconds": 0.848,
+    "easy_seconds": 0.47,
     "hard_embedded": 40,
-    "hard_seconds": 0.775
+    "hard_seconds": 0.551
   },
   "model": "qwen3-embedding:0.6b",
   "dim": 1024
@@ -175,7 +173,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "extract_decision",
       "pass": true,
-      "latency_ms": 1092.1,
+      "latency_ms": 973.6,
       "output": {
         "decision": "asyncpg for postgres",
         "topic": "database connection"
@@ -185,7 +183,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "extract_ban",
       "pass": true,
-      "latency_ms": 1404.3,
+      "latency_ms": 1213.9,
       "output": {
         "banned": "commit .env files with secrets",
         "reason": "prevents accidental exposure of sensitive credentials in version control"
@@ -195,7 +193,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "classify_correction",
       "pass": true,
-      "latency_ms": 1300.9,
+      "latency_ms": 943.0,
       "output": {
         "is_correction": true,
         "summary": "prefer ruff over black"
@@ -205,7 +203,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "machine_ner",
       "pass": true,
-      "latency_ms": 1299.2,
+      "latency_ms": 1160.3,
       "output": {
         "hosts": [
           "web-01",
@@ -221,7 +219,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "vocab_def",
       "pass": true,
-      "latency_ms": 1160.7,
+      "latency_ms": 1099.8,
       "output": {
         "term": "harness",
         "definition": "Claude Code / Grok plugin runner"
@@ -231,7 +229,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     {
       "name": "null_when_missing",
       "pass": true,
-      "latency_ms": 762.5,
+      "latency_ms": 657.7,
       "output": {
         "hosts": []
       },
@@ -239,7 +237,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
     }
   ],
   "production_refine": {
-    "machines_ms": 1390.5,
+    "machines_ms": 1060.4,
     "machines": {
       "kept": [
         "cache-02",
@@ -250,7 +248,7 @@ Query instruct (truncated): `Instruct: Retrieve relevant past engineering decisi
       "dropped_asyncpg": true
     },
     "machines_ok": true,
-    "vocab_ms": 2832.0,
+    "vocab_ms": 2604.5,
     "vocab_definitions": {
       "harness": "A plugin runner that manages Claude Code and Grok sessions by loading associated MCP servers and skills.",
       "project_key": "A mechanism used to collapse Git worktrees back to the repository root, which helps manage memory pooling."
