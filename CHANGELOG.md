@@ -23,6 +23,11 @@ All notable changes to this project will be documented in this file.
   session notes, zero-overlap paraphrase, confusable twins, corrections, symbol
   IDs, kind stress, reject memory, cwd isolation, new LLM tasks. Macro hybrid
   P@1 ≈ 0.87, P@5 = 1.0, LLM 6/6 after exactish promote.
+- **Hybrid lexical re-rank**: after dense_primary merge, re-score candidates by
+  cosine + token coverage + rank signals so query-token matches beat dense
+  near-misses. Round-3: production index **11 358/11 358** vectors (format v2,
+  qwen3-embedding:0.6b); HARD40 hybrid best-of-three (P@1 0.525 > dense/FTS);
+  adversarial8 hybrid P@1 0.625 / P@5 1.0.
 
 ## [2.3.3] - 2026-07-18
 

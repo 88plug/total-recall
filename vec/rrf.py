@@ -163,6 +163,49 @@ def _merge_primary(primary: list[Any], secondary: list[Any], limit: int) -> list
     return out
 
 
+def _token_coverage(query: str, content: str) -> float:
+    """Fraction of significant query tokens present in content (0..1)."""
+    import re
+
+    q = (query or "").strip().lower()
+    c = (content or "").lower()
+    if not q or not c:
+        return 0.0
+    stop = {
+        "in", "on", "the", "a", "an", "to", "for", "of", "we", "how", "do",
+        "did", "is", "are", "was", "what", "which", "when", "with", "from",
+        "that", "this", "our", "and", "or", "not", "only", "get", "got",
+    }
+    toks = [
+        t
+        for t in re.findall(r"[a-z0-9][a-z0-9:._/-]{1,}", q)
+        if len(t) >= 2 and t not in stop
+    ]
+    if not toks:
+        return 0.0
+    return sum(1 for t in toks if t in c) / len(toks)
+
+
+def _hit_rank_score(item: Any, query: str, dense_rank: int | None, fts_rank: int | None) -> float:
+    """Higher is better. Blends RRF-ish rank with lexical coverage.
+
+    Lets hybrid recover when dense near-misses outrank a doc that actually
+    contains the query's distinctive tokens (env vars, model tags, hosts).
+    """
+    content = _hit_content(item)
+    cov = _token_coverage(query, content)
+    # Dense rank signal (rank 0 → ~1.0)
+    dense_s = 0.0 if dense_rank is None else 1.0 / (1.0 + dense_rank)
+    fts_s = 0.0 if fts_rank is None else 1.0 / (1.0 + fts_rank)
+    # Cosine distance when present (VecHit): convert to similarity
+    sim = 0.0
+    dist = getattr(item, "cosine_distance", None)
+    if isinstance(dist, (int, float)):
+        sim = max(0.0, 1.0 - float(dist))
+    # Weights: semantics first, then coverage, then each ranker
+    return 0.45 * sim + 0.25 * cov + 0.20 * dense_s + 0.10 * fts_s
+
+
 def _dense_primary_merge(
     vec_hits: list[Any],
     fts_hits: list[Any],
@@ -171,9 +214,11 @@ def _dense_primary_merge(
 ) -> list[Any]:
     """Dense rank order first; FTS only appends novel exact-keyword hits.
 
-    Exception: when FTS top-1 is an exactish match for the query and dense
-    top-1 is not (symbol/id queries like ``web-01``, ``qwen3-embedding:0.6b``),
-    promote FTS order so dense near-misses cannot bury the true hit.
+    Exceptions:
+      * FTS exactish top-1 + dense not exactish → FTS primary (symbol queries).
+      * Otherwise merge dense-first then **re-rank** the candidate pool by a
+        blend of cosine / RRF ranks / token coverage so near-miss domain_facts
+        that lack query tokens fall below true hits.
     """
     if (
         query
@@ -183,7 +228,25 @@ def _dense_primary_merge(
         and not _exactish_match(query, _hit_content(vec_hits[0]))
     ):
         return _merge_primary(list(fts_hits), list(vec_hits), limit)
-    return _merge_primary(list(vec_hits), list(fts_hits), limit)
+
+    # Build candidate pool (dense-first order, FTS fill) then coverage re-rank.
+    pool = _merge_primary(list(vec_hits), list(fts_hits), max(limit * 3, limit))
+    if not query or len(pool) <= 1:
+        return pool[:limit]
+
+    dense_rank = {_extraction_id(h): i for i, h in enumerate(vec_hits)}
+    fts_rank = {_extraction_id(h): i for i, h in enumerate(fts_hits)}
+    scored = sorted(
+        pool,
+        key=lambda h: _hit_rank_score(
+            h,
+            query,
+            dense_rank.get(_extraction_id(h)),
+            fts_rank.get(_extraction_id(h)),
+        ),
+        reverse=True,
+    )
+    return scored[:limit]
 
 
 def hybrid_search(
