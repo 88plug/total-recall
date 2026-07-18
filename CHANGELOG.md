@@ -28,6 +28,10 @@ All notable changes to this project will be documented in this file.
   near-misses. Round-3: production index **11 358/11 358** vectors (format v2,
   qwen3-embedding:0.6b); HARD40 hybrid best-of-three (P@1 0.525 > dense/FTS);
   adversarial8 hybrid P@1 0.625 / P@5 1.0.
+- **Adversarial 10× eval** (`scripts/eval_adversarial_10x.py`): **432** labeled
+  queries (84 seeds × 5 paraphrases + 12 symbols), antonym near-misses per
+  seed, polluted index. Macro hybrid P@1 **0.63** / P@5 **0.88** / MRR **0.74**
+  — best of three vs dense (0.60) and FTS (0.55). All gates PASS.
 
 ## [2.3.3] - 2026-07-18
 
