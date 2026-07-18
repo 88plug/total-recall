@@ -58,20 +58,38 @@ _PROBE_BACKOFF_S = 1.5
 # Per-model-family sampling profiles. Different model families need very
 # different sampling settings — what's right for one actively hurts another.
 #
-# * gemma / default: greedy deterministic (temp 0, top_k 1). Verified good
-#   for gemma's classification + (weak) generation; what we shipped first.
-# * qwen3 / qwen3.5: HF Qwen3.5-2B card (2026) non-thinking modes:
-#     text free-form:  temp=1.0 top_p=1.0 top_k=20 presence_penalty=2.0
-#     VL / structured: temp=0.7 top_p=0.8 top_k=20 presence_penalty=1.5
-#   We use the VL/structured non-thinking set for JSON refine (format=schema).
-#   Free-form text sampling is too hot for constrained JSON. Greedy
-#   (top_k=1, temp=0) is NOT recommended — hurts instruction following.
-#   Fixed ``seed`` keeps runs reproducible; top-level ``think: false`` stops
-#   <think> blocks from breaking JSON (ollama >= 0.9).
+# Research sweep 2026-07-18 (HF cards + Ollama docs + structured-output practice):
 #
-# Source: HuggingFace Qwen/Qwen3.5-2B model card; ollama api.md.
+# * qwen3 / qwen3.5: HF Qwen3.5-2B card non-thinking:
+#     free-form text: temp=1.0 top_p=1.0 top_k=20 presence_penalty=2.0
+#     VL/no-thinking benchmarks: temp=0.7 top_p=0.8 top_k=20 presence_penalty=1.5
+#   Product JSON refine keeps the cooler VL/structured set (format=schema).
+#   Free-form 1.0 is too hot for extraction. Always top-level think:false
+#   (ollama ≥0.31.2 for think:false + format on all thinking parsers).
+#
+# * gemma4: Google card all-use-cases is temp=1.0 top_p=0.95 top_k=64, but
+#   that is open-ended chat. For short schema JSON / NER, Ollama structured-
+#   outputs practice + community consensus is temp 0.0–0.2 (we use 0.1 —
+#   pure 0 can loop on E2B/E4B). think:false disables reasoning channel.
+#   Match gemma4 BEFORE generic gemma (name contains "gemma").
+#
+# * gemma (pre-4): greedy empiricism kept for legacy tags only.
+#
+# Sources: HF Qwen/Qwen3.5-2B; ollama.com/library/gemma4; Ollama structured-
+# outputs docs; ollama#15260/#15901 (think+format).
 _SAMPLING_PROFILES: dict[str, dict[str, Any]] = {
+    "gemma4": {
+        # Structured JSON refine (not card free-form 1.0/0.95/64).
+        "temperature": 0.1,
+        "top_k": 64,
+        "top_p": 0.95,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "seed": 42,
+        "think": False,
+    },
     "gemma": {
+        # Legacy pre-gemma4 greedy classification path.
         "temperature": 0.0,
         "top_k": 1,
         "top_p": 1.0,
@@ -80,7 +98,7 @@ _SAMPLING_PROFILES: dict[str, dict[str, Any]] = {
         "think": None,
     },
     "qwen": {
-        # Card non-thinking structured (VL-class); not free-form text (temp 1.0).
+        # Card non-thinking structured (VL/no-thinking bench set).
         "temperature": 0.7,
         "top_k": 20,
         "top_p": 0.8,
@@ -127,6 +145,9 @@ def _resolve_sampling(
         profile = _SAMPLING_PROFILES["qwen"]
     elif "nemotron" in name:
         profile = _SAMPLING_PROFILES["nemotron"]
+    elif "gemma4" in name or name.startswith("gemma-4"):
+        # Must run before generic "gemma" — "gemma4" contains "gemma".
+        profile = _SAMPLING_PROFILES["gemma4"]
     elif "gemma" in name:
         profile = _SAMPLING_PROFILES["gemma"]
     else:
@@ -321,7 +342,11 @@ class LLMClient:
         opts, think = _resolve_sampling(self._model, temperature)
         opts["num_ctx"] = num_ctx
         # Hammer GPU: offload all layers (ollama treats large values as "all").
+        # TOTAL_RECALL_OLLAMA_NUM_GPU=0 forces pure CPU (fair bakeoffs).
         opts["num_gpu"] = int(os.environ.get("TOTAL_RECALL_OLLAMA_NUM_GPU") or "999")
+        thr = (os.environ.get("TOTAL_RECALL_OLLAMA_NUM_THREAD") or "").strip()
+        if thr.isdigit() and int(thr) > 0:
+            opts["num_thread"] = int(thr)
         keep_alive_raw = (os.environ.get("TOTAL_RECALL_LLM_KEEP_ALIVE") or "-1").strip()
         keep_alive: str | int = (
             int(keep_alive_raw) if keep_alive_raw.lstrip("-").isdigit() else keep_alive_raw
