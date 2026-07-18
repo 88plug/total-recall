@@ -259,6 +259,13 @@ class TestOllamaEmbedder:
         with pytest.raises(RuntimeError, match="not pulled"):
             embed._pick_ollama_embed_model("http://x", "does-not-exist")
 
+    def test_legacy_hf_model_id_raises_migration(self, monkeypatch) -> None:
+        from vec import embed
+
+        monkeypatch.setattr(embed, "_ollama_list_models", lambda base_url: self._MODELS)
+        with pytest.raises(RuntimeError, match="legacy fastembed"):
+            embed._pick_ollama_embed_model("http://x", "Alibaba-NLP/gte-modernbert-base")
+
     def test_embed_uses_ollama(self, monkeypatch) -> None:
         from vec import embed
 

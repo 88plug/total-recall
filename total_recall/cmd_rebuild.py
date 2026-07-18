@@ -79,16 +79,20 @@ def _backfill_vectors(db_path: str | Path, verbose: bool) -> None:
                 f"embedded {report.extractions_embedded} extraction(s)",
                 err=True,
             )
-    except ImportError:
+    except ImportError as exc:
         if verbose:
             click.echo(
-                "[rebuild] vec deps not installed; skipping dense backfill "
-                "(recall stays FTS5-only)",
+                f"[rebuild] vec import failed ({exc}); skipping dense backfill "
+                "(recall stays FTS5-only). Install: pip install total-recall "
+                f"and ensure ollama has {os.environ.get('TOTAL_RECALL_EMBED_MODEL') or 'qwen3-embedding:0.6b'}",
                 err=True,
             )
     except Exception as exc:  # noqa: BLE001
         click.echo(
-            f"total-recall: vec backfill failed (recall stays FTS5-only): {exc}",
+            f"total-recall: vec backfill failed (recall stays FTS5-only): {exc}\n"
+            "  Fix: ollama pull qwen3-embedding:0.6b  # then re-run rebuild\n"
+            "  Legacy TOTAL_RECALL_EMBED_MODEL (HF ids like Alibaba-NLP/...) "
+            "must be unset — embeds are ollama-only now.",
             err=True,
         )
 

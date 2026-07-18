@@ -50,10 +50,11 @@ python -m venv /tmp/cr-release-test
 /tmp/cr-release-test/bin/total-recall-mcp --help 2>/dev/null || echo "(runs as server, no --help)"
 ```
 
-Also verify the `[vec]` extras install:
+Dense embeds need a **local ollama** daemon (not a pip extra):
 
 ```bash
-/tmp/cr-release-test/bin/pip install "dist/total_recall-X.Y.Z.tar.gz[vec]"
+ollama pull qwen3-embedding:0.6b   # hybrid recall
+ollama pull qwen3.5:2b             # optional LLM refine
 ```
 
 ## Publish to PyPI
@@ -73,8 +74,8 @@ PYPI_TOKEN=pypi-... bash scripts/publish-pypi.sh
 
 ```bash
 uvx total-recall-mcp           # uvx auto-installs from PyPI
-pip install total-recall       # plain install
-pip install "total-recall[vec]"  # with fastembed + sqlite-vec extras
+pip install total-recall       # core (includes sqlite-vec; embeds via ollama)
+# optional empty extras still install: total-recall[vec] total-recall[llm]
 ```
 
 ## Push the tag

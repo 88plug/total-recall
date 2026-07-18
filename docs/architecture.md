@@ -109,9 +109,10 @@ the walker or the index.
 
 - `index/` owns `index.db`: SQLite with FTS5 virtual tables for keyword recall plus relational
   tables for sessions, cwds, and extracted rows.
-- `vec/` owns dense vectors in the shared index: `sqlite-vec` + **ollama embeddings only** (format v2, default `qwen3-embedding:0.6b`)
-  enabled only when the `[vec]` extra is installed. Vector recall is a query-time augmentation,
-  not a replacement, for FTS5.
+- `vec/` owns dense vectors in the shared index: `sqlite-vec` + **ollama embeddings only**
+  (format v2, default `qwen3-embedding:0.6b`). Core install — no extra pip extras.
+  Requires a local ollama daemon with an embedding model pulled. Vector recall is a
+  query-time augmentation, not a replacement, for FTS5.
 
 **Dependencies.** Layer (b) rows in, query API out. Knows nothing about hooks, MCP, or skills.
 

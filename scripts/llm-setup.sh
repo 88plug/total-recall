@@ -89,13 +89,31 @@ else
   }
 fi
 
-# ----- 3. model (shared function) -------------------------------------------
-log "checking model ${MODEL}..."
+# ----- 3. models (shared function) ------------------------------------------
+# Chat refine model (optional layer) + dense embed model (format v2, required for hybrid).
+EMBED_MODEL="${TOTAL_RECALL_EMBED_MODEL:-qwen3-embedding:0.6b}"
+# Skip pull if operator still has a legacy HF embed id in env — they must unset it.
+case "$EMBED_MODEL" in
+  */*|*"gte-modernbert"*|*"bge-small"*)
+    log "WARN: TOTAL_RECALL_EMBED_MODEL=$EMBED_MODEL looks like a legacy fastembed id."
+    log "  Unset it (plugin MCP env no longer pins one) and use ollama: qwen3-embedding:0.6b"
+    EMBED_MODEL="qwen3-embedding:0.6b"
+    ;;
+esac
+
+log "checking refine model ${MODEL}..."
 recall::ollama_pull "$MODEL" || {
   log "ERROR: model pull failed — see ${RECALL_LOG_DIR}/llm-provision.log"
   exit 1
 }
 log "model ${MODEL} ready"
+
+log "checking embed model ${EMBED_MODEL}..."
+recall::ollama_pull "$EMBED_MODEL" || {
+  log "ERROR: embed model pull failed — see ${RECALL_LOG_DIR}/llm-provision.log"
+  exit 1
+}
+log "embed model ${EMBED_MODEL} ready"
 
 # ----- 4. sentinel -----------------------------------------------------------
 touch "$SENTINEL"
@@ -124,5 +142,6 @@ if out is None or not out.get("ok"):
 PYEOF
 fi
 
-log "done. total-recall LLM refinement layer is active."
-log "next: run /total-recall:recall-rebuild so the next rebuild includes refinement."
+log "done. ollama refine + embed models ready."
+log "next: total-recall rebuild --yes  (or /total-recall:recall-rebuild)"
+log "  — picks up LLM refinement and format-v2 dense vectors."

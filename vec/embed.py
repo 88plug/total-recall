@@ -147,12 +147,48 @@ def _embedding_names(base_url: str) -> list[str] | None:
     ]
 
 
+def _looks_like_legacy_hf_embed(name: str) -> bool:
+    """True for pre-v2 TOTAL_RECALL_EMBED_MODEL values (HuggingFace / ONNX ids).
+
+    Ollama tags (``qwen3-embedding:0.6b``, ``granite-embedding:30m``) are fine.
+    """
+    n = name.strip()
+    if not n:
+        return False
+    # HF org/model — never a valid ollama tag for this path.
+    if "/" in n and not n.startswith("http"):
+        return True
+    # Bare retired fastembed defaults (no ollama colon-tag form).
+    low = n.lower().split(":")[0]
+    return low in {
+        "gte-modernbert-base",
+        "gte-modernbert",
+        "bge-small-en-v1.5",
+        "bge-small-en",
+        "nomic-embed-text-v1.5",
+        "alibaba-nlp",
+    }
+
+
+def _legacy_embed_model_error(want: str) -> RuntimeError:
+    return RuntimeError(
+        f"TOTAL_RECALL_EMBED_MODEL={want!r} is a legacy fastembed/ONNX id. "
+        f"Dense embeds are ollama-only (format v2). Unset the env var (or remove it "
+        f"from plugin MCP config) and pull the recommended model:\n"
+        f"    ollama pull {RECOMMENDED_OLLAMA_EMBED}\n"
+        f"Then: total-recall rebuild --yes"
+    )
+
+
 def _pick_ollama_embed_model(base_url: str, want: str | None) -> str | None:
     """Return an embedding-capable pulled model name, or None if none / unreachable.
 
     If ``want`` is set and not pulled as an embedding model, raises RuntimeError
     (no silent substitute).
     """
+    if want and _looks_like_legacy_hf_embed(want):
+        raise _legacy_embed_model_error(want)
+
     names = _embedding_names(base_url)
     if names is None:
         return None

@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.1] - 2026-07-17
+
+### Fixed (user footguns after ollama-only embeds)
+
+- **Removed stale MCP pin** `TOTAL_RECALL_EMBED_MODEL=Alibaba-NLP/gte-modernbert-base`
+  from `.mcp.json` and `.claude-plugin/plugin.json`. That HF id broke dense embeds
+  for anyone on the ollama-only path (silent hybrid degradation / hard errors).
+- Clear **migration error** when env still holds a legacy fastembed/HF model id.
+- `llm-setup` now also pulls **`qwen3-embedding:0.6b`** (not only the chat refine model).
+- Rebuild backfill errors point at `ollama pull` + unset legacy env.
+- Docs/RELEASE no longer tell users to install `[vec]` for fastembed.
+- Plugin description: hybrid FTS5 + ollama dense (not gte-modernbert).
+
+### Upgrade
+
+```bash
+ollama pull qwen3-embedding:0.6b
+# unset any TOTAL_RECALL_EMBED_MODEL=Alibaba-NLP/... in shell / MCP config
+total-recall rebuild --yes
+```
+
 ## 2026.7.17
 
 - **Dense embeddings are ollama-only (format v2).** Removed the fastembed/ONNX

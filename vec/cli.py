@@ -40,7 +40,7 @@ def _open_db(path: Path) -> sqlite3.Connection:
         msg = str(exc)
         if "sqlite-vec is not installed" in msg or "total-recall[vec]" in msg:
             print(
-                "error: sqlite-vec not installed; run `pip install total-recall[vec]`",
+                "error: sqlite-vec not installed; run `pip install total-recall`",
                 file=sys.stderr,
             )
         else:
