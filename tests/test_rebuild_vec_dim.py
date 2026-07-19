@@ -53,7 +53,11 @@ def test_backfill_vectors_passes_embedder_dim(monkeypatch) -> None:
     monkeypatch.setattr("vec.embed.Embedder", FakeEmbedder)
     monkeypatch.setattr(
         "vec.runtime.ensure_product_ollama",
-        lambda **k: {"base_url": "http://localhost:11434", "embed_model": "qwen3-embedding:0.6b", "bin": None},
+        lambda **k: {
+            "base_url": "http://localhost:11434",
+            "embed_model": "qwen3-embedding:0.6b",
+            "bin": None,
+        },
     )
     monkeypatch.delenv("TOTAL_RECALL_VEC", raising=False)
 

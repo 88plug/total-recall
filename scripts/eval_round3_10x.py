@@ -16,10 +16,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
-import statistics
 import sys
 import tempfile
 import time
@@ -364,10 +364,8 @@ class RankMetrics:
             self.misses.append(target[:60])
         if target in ranks[:5]:
             self.p5 += 1
-        try:
+        with contextlib.suppress(ValueError):
             self.mrr += 1.0 / (ranks.index(target) + 1)
-        except ValueError:
-            pass
 
     def fin(self) -> dict:
         n = max(self.n, 1)
@@ -424,10 +422,8 @@ def audit_production() -> dict:
     from vec.store import _load_sqlite_vec
 
     conn = connect(PROD_DB)
-    try:
+    with contextlib.suppress(Exception):
         _load_sqlite_vec(conn)
-    except Exception:  # noqa: BLE001
-        pass
     n_ext = conn.execute("SELECT COUNT(*) FROM extractions").fetchone()[0]
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     meta = {}
@@ -454,9 +450,8 @@ def audit_production() -> dict:
 
     # chunk_embeddings rows imply vectors were written even if vec0 COUNT fails
     # on a read-only connection in some environments.
-    has_vectors = (
-        (isinstance(n_vec, int) and n_vec >= max(n_chunk, 1) * 0.99)
-        or (n_chunk > 0 and uncovered == 0 and meta.get("backend") == "ollama")
+    has_vectors = (isinstance(n_vec, int) and n_vec >= max(n_chunk, 1) * 0.99) or (
+        n_chunk > 0 and uncovered == 0 and meta.get("backend") == "ollama"
     )
 
     gates = {
@@ -497,7 +492,9 @@ def build_corpus_db(embedder, cwd="/proj/r3"):
         _stamp(conn, "domain_fact", d, cwd, ts + 900 + k, f"s{k}", 0.3)
     conn.commit()
     apply_vec_schema(
-        conn, dim=embedder.dim(), model=embedder.model or "qwen3-embedding:0.6b",
+        conn,
+        dim=embedder.dim(),
+        model=embedder.model or "qwen3-embedding:0.6b",
         backend=embedder.backend or "ollama",
     )
     t0 = time.perf_counter()
@@ -524,9 +521,9 @@ def ab_instruct_and_stack(pairs: list[tuple[str, str]]) -> dict:
     Documents are the targets + near-misses + soft; index not required.
     """
     from vec.embed import (
-        Embedder,
         QWEN3_QUERY_INSTRUCT_MEMORY,
         QWEN3_QUERY_INSTRUCT_WEB,
+        Embedder,
     )
     from vec.store import _DENSE_KIND_BOOST
 
@@ -622,8 +619,18 @@ def main() -> int:
     st = ensure_product_ollama(embed=True, chat=True, pull=True)
     emb = Embedder()
     emb._load()
-    print(json.dumps({"ensure": st, "model": emb.model, "dim": emb.dim(),
-                      "instruct": emb._query_prefix[:100]}, indent=2), flush=True)
+    print(
+        json.dumps(
+            {
+                "ensure": st,
+                "model": emb.model,
+                "dim": emb.dim(),
+                "instruct": emb._query_prefix[:100],
+            },
+            indent=2,
+        ),
+        flush=True,
+    )
 
     print("=== live production smoke ===", flush=True)
     smoke = live_smoke(emb)
@@ -631,30 +638,51 @@ def main() -> int:
 
     # Session-style paraphrases (domain where memory instruct wins) + HARD40 tech
     SESSION_AB: list[tuple[str, str]] = [
-        ("why did the GPU box thrash last night",
-         "keep_alive=-1 pins qwen3-embedding for the whole backfill"),
-        ("how do we avoid double-billing the cluster",
-         "standing rule: always set a hard max_tokens and stream-cancel on client disconnect"),
-        ("preferred way to drive the real Firefox session",
-         "screen-mcp screenshots and clicks; chrome-devtools is unauthenticated Chrome"),
-        ("what is the standing ban on dangerous rm",
-         "never rm -rf unbraced $VAR; empty expands to filesystem root"),
-        ("how should rebuild behave when ollama is missing",
-         "managed ollama binary lives under plugin data bin not system PATH first"),
-        ("how do we keep subagents honest about project rules",
-         "SubagentStart inject-claudemd-into-subagents.sh re-injects project rules"),
-        ("tool for local metasearch without leaving the LAN",
-         "LAN 192.168.1.211:8890 then local docker then tailscale"),
-        ("default fusion order for keyword plus vector recall",
-         "dense_primary keeps vector order and appends FTS fill"),
-        ("how query text is wrapped for the 0.6b embedder",
-         "documents embed raw; only search queries get Instruct/Query prefix"),
-        ("policy for inventing hostnames the user never named",
-         "few-shot examples show Monday and asyncpg dropped while web-01 kept"),
-        ("when to spawn a fresh reviewer instead of self-check",
-         "independent review: do not review your own work in the same context; spawn a fresh agent"),
-        ("how we pin inference weights in VRAM",
-         "TOTAL_RECALL_EMBED_KEEP_ALIVE defaults to -1"),
+        (
+            "why did the GPU box thrash last night",
+            "keep_alive=-1 pins qwen3-embedding for the whole backfill",
+        ),
+        (
+            "how do we avoid double-billing the cluster",
+            "standing rule: always set a hard max_tokens and stream-cancel on client disconnect",
+        ),
+        (
+            "preferred way to drive the real Firefox session",
+            "screen-mcp screenshots and clicks; chrome-devtools is unauthenticated Chrome",
+        ),
+        (
+            "what is the standing ban on dangerous rm",
+            "never rm -rf unbraced $VAR; empty expands to filesystem root",
+        ),
+        (
+            "how should rebuild behave when ollama is missing",
+            "managed ollama binary lives under plugin data bin not system PATH first",
+        ),
+        (
+            "how do we keep subagents honest about project rules",
+            "SubagentStart inject-claudemd-into-subagents.sh re-injects project rules",
+        ),
+        (
+            "tool for local metasearch without leaving the LAN",
+            "LAN 192.168.1.211:8890 then local docker then tailscale",
+        ),
+        (
+            "default fusion order for keyword plus vector recall",
+            "dense_primary keeps vector order and appends FTS fill",
+        ),
+        (
+            "how query text is wrapped for the 0.6b embedder",
+            "documents embed raw; only search queries get Instruct/Query prefix",
+        ),
+        (
+            "policy for inventing hostnames the user never named",
+            "few-shot examples show Monday and asyncpg dropped while web-01 kept",
+        ),
+        (
+            "when to spawn a fresh reviewer instead of self-check",
+            "independent review: do not review your own work in the same context; spawn a fresh agent",
+        ),
+        ("how we pin inference weights in VRAM", "TOTAL_RECALL_EMBED_KEEP_ALIVE defaults to -1"),
     ]
     # targets for SESSION_AB must exist in doc list — rebuild pairs with actual HARD40 targets
     session_targets = {t for _, t in HARD40}
@@ -678,12 +706,7 @@ def main() -> int:
             "chunks": rep.chunks_written,
             "seconds": round(secs, 3),
         }
-        # Adversarial twins on same DB (extra rows)
-        from index.db import connect as _c  # noqa: F401
-        for i, (_q, target, miss) in enumerate(ADVERSARIAL8):
-            # ensure targets already present; add miss if missing
-            pass
-        # Build separate adversarial mini-db
+        # Adversarial twins: built as a separate mini-db below.
     finally:
         conn.close()
 
@@ -702,7 +725,9 @@ def main() -> int:
         _stamp(adv_conn, "domain_fact", d, cwd, ts + 200 + k, f"as{k}", 0.3)
     adv_conn.commit()
     apply_vec_schema(
-        adv_conn, dim=emb.dim(), model=emb.model or "qwen3-embedding:0.6b",
+        adv_conn,
+        dim=emb.dim(),
+        model=emb.model or "qwen3-embedding:0.6b",
         backend=emb.backend or "ollama",
     )
     backfill_all(adv_conn, embedder=emb)
@@ -730,27 +755,20 @@ def main() -> int:
     )
     gates["adv8_hybrid_p@1_ge_0.5"] = adv_modes["hybrid"]["p@1"] >= 0.5
     gates["adv8_hybrid_p@5_ge_0.75"] = adv_modes["hybrid"]["p@5"] >= 0.75
-    gates["adv8_hybrid_beats_dense"] = adv_modes["hybrid"]["p@1"] + 1e-9 >= adv_modes["pure_dense"]["p@1"]
+    gates["adv8_hybrid_beats_dense"] = (
+        adv_modes["hybrid"]["p@1"] + 1e-9 >= adv_modes["pure_dense"]["p@1"]
+    )
     leg_miss = ab["legacy_web_no_kind"]["miss_rate@1"]
     crank_miss = ab["cranked_memory_plus_kind"]["miss_rate@1"]
     ab_miss_reduction = (leg_miss - crank_miss) / max(leg_miss, 1e-9)
     fts_miss = modes["fts_only"]["miss_rate@1"]
     hyb_miss = modes["hybrid"]["miss_rate@1"]
     miss_reduction = (fts_miss - hyb_miss) / max(fts_miss, 1e-9)
-    gates["hybrid_not_worse_than_dense_mrr"] = modes["hybrid"]["mrr"] + 0.02 >= modes["pure_dense"]["mrr"]
+    gates["hybrid_not_worse_than_dense_mrr"] = (
+        modes["hybrid"]["mrr"] + 0.02 >= modes["pure_dense"]["mrr"]
+    )
     # Dense alone misses more than hybrid on HARD40
     gates["hybrid_reduces_dense_misses"] = hyb_miss <= modes["pure_dense"]["miss_rate@1"] + 1e-9
-
-    report = {
-        "production": prod,
-        "smoke": smoke,
-        "ab": ab,
-        "hard40": modes,
-        "adversarial8": adv_modes,
-        "miss_reduction_vs_fts": round(miss_reduction, 4),
-        "ab_miss_reduction": round(ab_miss_reduction, 4),
-        "gates": gates,
-    }
 
     lines = [
         "# total-recall eval round 3 — vectors live + 10x hard A/B",
@@ -800,7 +818,9 @@ def main() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text("\n".join(lines), encoding="utf-8")
     print(f"\nWrote {args.out}", flush=True)
-    print(json.dumps({"gates": gates, "miss_reduction_vs_fts": miss_reduction}, indent=2), flush=True)
+    print(
+        json.dumps({"gates": gates, "miss_reduction_vs_fts": miss_reduction}, indent=2), flush=True
+    )
     return 0 if all(gates.values()) else 1
 
 

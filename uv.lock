@@ -1917,7 +1917,7 @@ wheels = [
 
 [[package]]
 name = "total-recall"
-version = "2.3.2"
+version = "2.3.10"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

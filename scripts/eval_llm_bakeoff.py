@@ -81,7 +81,6 @@ _DEFINABLE = {"harness", "project_key", "sharechain"}
 # Product JSON micro-tasks (subset of eval_product_models.LLM_TASKS)
 from scripts.eval_product_models import LLM_TASKS  # noqa: E402
 
-
 DEFAULT_MODELS = [
     "qwen3.5:2b",
     "gemma4:e2b-it-qat",
@@ -128,8 +127,7 @@ def _model_meta(name: str) -> dict[str, Any]:
         "mtp_present_in_gguf_meta": bool(mtp_keys),
         "thinking_cap": "thinking" in caps,
         "tools_cap": "tools" in caps,
-        "ollama_requires": (d.get("details") or {}).get("requires")
-        or mi.get("general.requires"),
+        "ollama_requires": (d.get("details") or {}).get("requires") or mi.get("general.requires"),
         "notes": (
             "Linux GGUF tags rarely ship MTP heads; Gemma4 MTP in Ollama is "
             "primarily MLX/Apple (ollama ≥0.31). Qwen3.5 MTP needs special GGUF "
@@ -165,15 +163,16 @@ def _run_json_tasks(client) -> dict[str, Any]:
                 blob = json.dumps(out).lower()
                 if not any(x.lower() in blob for x in task["must_contain_any"]):
                     reason.append("must_contain")
-            if "bool_key" in task and out is not None:
-                if out.get(task["bool_key"]) is not task.get("bool_expect"):
-                    reason.append("bool")
+            if (
+                "bool_key" in task
+                and out is not None
+                and out.get(task["bool_key"]) is not task.get("bool_expect")
+            ):
+                reason.append("bool")
             if not reason:
                 passed = True
                 ok += 1
-        results.append(
-            {"name": task["name"], "ok": passed, "ms": round(ms, 1), "reason": reason}
-        )
+        results.append({"name": task["name"], "ok": passed, "ms": round(ms, 1), "reason": reason})
     n = max(len(LLM_TASKS), 1)
     return {
         "pass_rate": ok / n,
@@ -208,7 +207,7 @@ def _run_machines(client) -> dict[str, Any]:
         "precision": round(prec, 4),
         "recall": round(rec, 4),
         "f1": round(f1, 4),
-        "kept_real_hosts": _TRUE_HOSTS <= kept,
+        "kept_real_hosts": kept >= _TRUE_HOSTS,
         "dropped_noise": not ({"Monday", "asyncpg", "hardening"} & kept),
         "ms": round(ms, 1),
         "gate_precision_ge_0.7": prec >= 0.7,
@@ -240,9 +239,7 @@ def _run_vocab(client) -> dict[str, Any]:
     definable_ok = 0
     for term in _DEFINABLE:
         d = defs.get(term)
-        snip = next(
-            (t["context_snippet"] for t in _VOCAB_TERMS if t["term"] == term), ""
-        )
+        snip = next((t["context_snippet"] for t in _VOCAB_TERMS if t["term"] == term), "")
         if d and isinstance(d, str) and len(d) > 5:
             non_null += 1
             ov = _token_overlap(d, snip)
@@ -432,9 +429,7 @@ def main() -> int:
         avail = [
             r
             for r in rows
-            if r.get("device") == device
-            and r.get("available")
-            and r.get("mtp", True)
+            if r.get("device") == device and r.get("available") and r.get("mtp", True)
         ]
         # If only no-mtp rows, rank those.
         if not avail:
@@ -513,9 +508,7 @@ def _recommend(ranking: dict, rows: list[dict]) -> dict:
     top = board[0]
     # Prefer current default if within 10% composite of top and much smaller/faster
     control = next((r for r in board if r["model"] == "qwen3.5:2b"), None)
-    reason_parts = [
-        f"top composite on primary device: {top['model']} score={top['score']}"
-    ]
+    reason_parts = [f"top composite on primary device: {top['model']} score={top['score']}"]
     switch = top["model"]
     if control and control["model"] != top["model"]:
         # only switch if challenger clearly better on define_coverage and not worse echo
@@ -601,9 +594,7 @@ def _render_md(report: dict) -> str:
             "| device | model | score | json | mach F1 | def_cov | echo | mach ms | vocab ms |",
             "|--------|-------|-------|------|---------|---------|------|---------|----------|",
         ]
-        off_rows.sort(
-            key=lambda r: (r.get("device") or "", -(r.get("composite_score") or 0))
-        )
+        off_rows.sort(key=lambda r: (r.get("device") or "", -(r.get("composite_score") or 0)))
         for r in off_rows:
             lines.append(
                 f"| {r.get('device')} | `{r['model']}` | {r['composite_score']} | "

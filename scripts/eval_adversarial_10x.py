@@ -21,10 +21,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
-import math
 import os
-import statistics
 import sys
 import tempfile
 import time
@@ -1133,10 +1132,8 @@ class RankMetrics:
             self.misses.append(target[:70])
         if target in ranks[:5]:
             self.p5 += 1
-        try:
+        with contextlib.suppress(ValueError):
             self.mrr += 1.0 / (ranks.index(target) + 1)
-        except ValueError:
-            pass
 
     def fin(self) -> dict:
         n = max(self.n, 1)

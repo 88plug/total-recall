@@ -311,9 +311,9 @@ def cmd_prompt_relevant(args):
     # Higher-level wrappers (if WT-4 ever ships one) take a natural-language
     # prompt; the lower-level FTS-backed primitives need the OR-joined form.
     if not hits:
-        hits = _safe_call(q, "search_relevant", conn, args.prompt, args.cwd, args.limit) or _safe_call(
-            q, "prompt_relevant", conn, args.prompt, args.cwd, args.limit
-        )
+        hits = _safe_call(
+            q, "search_relevant", conn, args.prompt, args.cwd, args.limit
+        ) or _safe_call(q, "prompt_relevant", conn, args.prompt, args.cwd, args.limit)
     if not hits and fts_query:
         # WT-4's real signature: search_extractions(conn, query, cwd, kind, scope, since, limit).
         hits = (

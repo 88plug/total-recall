@@ -312,7 +312,8 @@ def health_cmd(ctx: click.Context) -> None:
     click.echo(f"  db:                 {db_path}")
     # Dual-DB footgun: plugin path + XDG leftover from CLI without env.
     try:
-        from index.db import list_index_candidates, resolve_db_path as _canon
+        from index.db import list_index_candidates
+        from index.db import resolve_db_path as _canon
 
         canon = _canon().resolve()
         others = []

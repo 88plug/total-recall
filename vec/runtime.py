@@ -9,6 +9,7 @@ operator pins ``TOTAL_RECALL_LLM_BASE_URL`` / ``RECALL_OLLAMA_ALLOW_SYSTEM=1``.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -338,10 +339,8 @@ def start_daemon(bin_path: Path, url: str | None = None) -> bool:
                 env=env,
             )
         log.info("started product ollama serve pid=%s host=%s", proc.pid, env.get("OLLAMA_HOST"))
-        try:
+        with contextlib.suppress(OSError):
             (data_root() / "bin" / "ollama.pid").write_text(str(proc.pid) + "\n", encoding="utf-8")
-        except OSError:
-            pass
     except Exception as exc:  # noqa: BLE001
         log.warning("failed to start product ollama serve: %s", exc)
         return False

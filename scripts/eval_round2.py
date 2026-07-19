@@ -33,6 +33,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
@@ -423,10 +424,8 @@ class RankMetrics:
             self.misses.append(target[:70])
         if target in ranks[:5]:
             self.p_at_5 += 1
-        try:
+        with contextlib.suppress(ValueError):
             self.mrr += 1.0 / (ranks.index(target) + 1)
-        except ValueError:
-            pass
 
     def finalize(self) -> dict:
         n = max(self.n, 1)
@@ -539,7 +538,7 @@ def _run_suite(
 
 
 def eval_retrieval_round2() -> dict:
-    from vec.embed import Embedder, QWEN3_QUERY_INSTRUCT_MEMORY, QWEN3_QUERY_INSTRUCT_WEB
+    from vec.embed import QWEN3_QUERY_INSTRUCT_MEMORY, QWEN3_QUERY_INSTRUCT_WEB, Embedder
     from vec.runtime import ensure_product_ollama
 
     status = ensure_product_ollama(embed=True, chat=False, pull=True)

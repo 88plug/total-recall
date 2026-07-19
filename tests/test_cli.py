@@ -252,9 +252,14 @@ def test_human_bytes() -> None:
 def test_resolve_db_path_priority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from total_recall.util import resolve_db_path
 
+    # TOTAL_RECALL_DB is a file override: data dir = parent, canonical name index.db
+    # (see index.db.resolve_data_dir). CLI --db still wins as an exact path.
     monkeypatch.setenv("TOTAL_RECALL_DB", str(tmp_path / "env.db"))
+    monkeypatch.delenv("TOTAL_RECALL_DB_DIR", raising=False)
+    monkeypatch.delenv("CLAUDE_PLUGIN_DATA", raising=False)
+    monkeypatch.delenv("GROK_PLUGIN_DATA", raising=False)
     assert resolve_db_path(str(tmp_path / "cli.db")) == tmp_path / "cli.db"
-    assert resolve_db_path(None) == tmp_path / "env.db"
+    assert resolve_db_path(None) == (tmp_path / "index.db").resolve()
 
 
 # --------------------------------------------------------------------------- #

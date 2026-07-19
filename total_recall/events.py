@@ -27,12 +27,10 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-DEFAULT_EVENTS_PATH = (
-    Path(os.environ.get("GROK_PLUGIN_DATA") or os.environ.get("CLAUDE_PLUGIN_DATA", "~/.local/share/total-recall")).expanduser()
-    / "total-recall"
-    / "logs"
-    / "events.jsonl"
+_DATA_ROOT = os.environ.get("GROK_PLUGIN_DATA") or os.environ.get(
+    "CLAUDE_PLUGIN_DATA", "~/.local/share/total-recall"
 )
+DEFAULT_EVENTS_PATH = Path(_DATA_ROOT).expanduser() / "total-recall" / "logs" / "events.jsonl"
 
 MAX_SIZE_BYTES = 10 * 1024 * 1024  # 10 MiB
 KEEP_ROTATIONS = 3

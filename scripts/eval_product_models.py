@@ -311,11 +311,13 @@ class RankMetrics:
     def finalize(self) -> dict:
         n = max(self.n, 1)
         lats = sorted(self.latencies_ms) or [0.0]
+
         def pct(p: float) -> float:
             if not lats:
                 return 0.0
             i = min(len(lats) - 1, max(0, int(round(p * (len(lats) - 1)))))
             return lats[i]
+
         return {
             "n": self.n,
             "p@1": self.p_at_1 / n,
@@ -421,7 +423,7 @@ def _pairwise_instruct_ab(easy_pairs: list[tuple[str, str]]) -> dict:
     Documents are raw either way — no re-index needed. Measures pure cosine
     ranking quality on the easy set under each query prefix.
     """
-    from vec.embed import Embedder, QWEN3_QUERY_INSTRUCT_MEMORY, QWEN3_QUERY_INSTRUCT_WEB
+    from vec.embed import QWEN3_QUERY_INSTRUCT_MEMORY, QWEN3_QUERY_INSTRUCT_WEB, Embedder
 
     def score_with(prefix: str) -> dict:
         emb = Embedder()
@@ -505,7 +507,10 @@ def eval_embeds() -> dict:
     cwd = "/proj/eval"
     # Easy: comparable to prior 2.3.3 baseline (no hard-target clones)
     easy_conn, easy_rep, easy_bf = _build_eval_db(
-        embedder, cwd, CORPUS, soft=DISTRACTORS,
+        embedder,
+        cwd,
+        CORPUS,
+        soft=DISTRACTORS,
     )
     try:
         easy = _run_retrieval_suite(easy_conn, embedder, CORPUS, cwd, label="easy")
@@ -514,7 +519,11 @@ def eval_embeds() -> dict:
 
     # Hard: targets + near-miss domain_facts that share vocabulary
     hard_conn, hard_rep, hard_bf = _build_eval_db(
-        embedder, cwd, HARD_CORPUS, near_miss=HARD_NEAR_MISS, soft=DISTRACTORS,
+        embedder,
+        cwd,
+        HARD_CORPUS,
+        near_miss=HARD_NEAR_MISS,
+        soft=DISTRACTORS,
     )
     try:
         hard = _run_retrieval_suite(hard_conn, embedder, HARD_CORPUS, cwd, label="hard")
@@ -603,10 +612,9 @@ def eval_llm() -> dict:
                     passed = False
                     reasons.append(f"missing_text:{needle}")
             bk = task.get("bool_key")
-            if bk is not None:
-                if bool(out.get(bk)) is not bool(task.get("bool_expect")):
-                    passed = False
-                    reasons.append(f"bool_mismatch:{bk}")
+            if bk is not None and bool(out.get(bk)) is not bool(task.get("bool_expect")):
+                passed = False
+                reasons.append(f"bool_mismatch:{bk}")
             ek = task.get("expect_empty_list_key")
             if ek is not None:
                 val = out.get(ek)
@@ -615,13 +623,15 @@ def eval_llm() -> dict:
                     reasons.append(f"expected_empty_list:{ek}")
         if passed:
             ok += 1
-        results.append({
-            "name": task["name"],
-            "pass": passed,
-            "latency_ms": round(ms, 1),
-            "output": out,
-            "reasons": reasons,
-        })
+        results.append(
+            {
+                "name": task["name"],
+                "pass": passed,
+                "latency_ms": round(ms, 1),
+                "output": out,
+                "reasons": reasons,
+            }
+        )
 
     prod = eval_production_refine(client)
     # Harder production gate: drop day-name + library false positives
@@ -657,7 +667,12 @@ def eval_production_refine(client) -> dict:
     machines = {
         "web-01": {"role": "web", "ip": "10.0.0.1", "tailscale": False, "hits": 12},
         "cache-02": {"role": "cache", "ip": "10.0.0.2", "tailscale": True, "hits": 5},
-        "Monday": {"role": None, "ip": None, "tailscale": False, "hits": 2},  # false positive day-name
+        "Monday": {
+            "role": None,
+            "ip": None,
+            "tailscale": False,
+            "hits": 2,
+        },  # false positive day-name
         "asyncpg": {"role": None, "ip": None, "tailscale": False, "hits": 3},  # library not host
     }
     contexts = {
@@ -704,7 +719,11 @@ def eval_production_refine(client) -> dict:
     vocab_out = refine_vocabulary_definitions(terms, client=client)
     vocab_ms = (time.perf_counter() - t0) * 1000
     defs = {t["term"]: t.get("definition") for t in vocab_out}
-    vocab_ok = bool(defs.get("harness")) and isinstance(defs.get("harness"), str) and len(defs["harness"]) > 10
+    vocab_ok = (
+        bool(defs.get("harness"))
+        and isinstance(defs.get("harness"), str)
+        and len(defs["harness"]) > 10
+    )
 
     return {
         "machines_ms": round(machines_ms, 1),
@@ -720,9 +739,9 @@ def eval_product_runtime() -> dict:
     from vec.runtime import (
         daemon_reachable,
         ensure_product_ollama,
+        list_model_names,
         model_present,
         resolve_ollama_bin,
-        list_model_names,
     )
 
     st = ensure_product_ollama(embed=True, chat=True, pull=True)
@@ -805,11 +824,7 @@ def render_md(report: dict) -> str:
         "## LLM refine (qwen3.5:2b)",
         "```json",
         json.dumps(
-            {
-                k: v
-                for k, v in (report.get("llm") or {}).items()
-                if k not in ("runtime",)
-            },
+            {k: v for k, v in (report.get("llm") or {}).items() if k not in ("runtime",)},
             indent=2,
             default=str,
         ),
@@ -825,8 +840,10 @@ def render_md(report: dict) -> str:
     for k, v in all_gates.items():
         lines.append(f"- `{'PASS' if v else 'FAIL'}` {k}")
     lines.append("")
-    lines.append(f"**Overall: {'PASS' if all(all_gates.values()) else 'FAIL'}** "
-                 f"({sum(all_gates.values())}/{len(all_gates)} gates)")
+    lines.append(
+        f"**Overall: {'PASS' if all(all_gates.values()) else 'FAIL'}** "
+        f"({sum(all_gates.values())}/{len(all_gates)} gates)"
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -846,13 +863,24 @@ def main() -> int:
 
     print("=== embeds ===", flush=True)
     embeds = eval_embeds()
-    print(json.dumps({k: embeds[k] for k in embeds if k != "runtime"}, indent=2, default=str), flush=True)
+    print(
+        json.dumps({k: embeds[k] for k in embeds if k != "runtime"}, indent=2, default=str),
+        flush=True,
+    )
 
     print("=== llm ===", flush=True)
     llm = eval_llm()
-    print(json.dumps({k: llm[k] for k in llm if k not in ("runtime", "tasks")}, indent=2, default=str), flush=True)
+    print(
+        json.dumps(
+            {k: llm[k] for k in llm if k not in ("runtime", "tasks")}, indent=2, default=str
+        ),
+        flush=True,
+    )
     for t in llm.get("tasks") or []:
-        print(f"  [{'PASS' if t['pass'] else 'FAIL'}] {t['name']} {t['latency_ms']}ms {t.get('reasons')}", flush=True)
+        print(
+            f"  [{'PASS' if t['pass'] else 'FAIL'}] {t['name']} {t['latency_ms']}ms {t.get('reasons')}",
+            flush=True,
+        )
 
     report = {"runtime": runtime, "mtp": mtp, "embeds": embeds, "llm": llm}
     md = render_md(report)

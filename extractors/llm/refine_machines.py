@@ -62,7 +62,8 @@ Rules:
 - Prefer empty keep over guesses. When in doubt, EXCLUDE.
 
 EXAMPLES:
-  candidates: web-01 (ssh web-01), cache-02 (redis on cache-02), Monday (see you Monday), asyncpg (switched driver to asyncpg)
+  candidates: web-01 (ssh web-01), cache-02 (redis on cache-02),
+    Monday (see you Monday), asyncpg (switched driver to asyncpg)
   -> {"keep": ["web-01", "cache-02"]}
 
   candidates: hardening (security hardening), cloudflare (cdn), db-primary (pg on db-primary)

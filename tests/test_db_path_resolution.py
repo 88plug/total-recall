@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 
-def test_plugin_env_uses_claude_plugin_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_plugin_env_uses_claude_plugin_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
     monkeypatch.delenv("TOTAL_RECALL_DB_DIR", raising=False)
     monkeypatch.delenv("TOTAL_RECALL_DB", raising=False)
