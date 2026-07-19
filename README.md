@@ -23,6 +23,14 @@ Hybrid FTS5 + ollama dense embeddings (`qwen3-embedding:0.6b`) power recall. Wor
 /plugin install total-recall@88plug
 ```
 
+### Grok Build
+
+```text
+grok plugin marketplace add 88plug/claude-code-plugins
+grok plugin install total-recall@88plug --trust
+```
+
+
 > [!NOTE]
 > Needs `bash` + `curl` + internet. The plugin bootstraps `uv`, Python, and deps into its own data dir on first hook fire. No system-wide `pip install` and no system Python required.
 

@@ -29,6 +29,14 @@ Marketplace (recommended):
 /plugin install total-recall@88plug
 ```
 
+### Grok Build
+
+```text
+grok plugin marketplace add 88plug/claude-code-plugins
+grok plugin install total-recall@88plug --trust
+```
+
+
 Local checkout with [uv](https://docs.astral.sh/uv/) (development):
 
 ```bash
