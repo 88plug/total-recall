@@ -17,11 +17,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ${{ vars.RUNNER || 'ubuntu-latest' }}
-          - macos-latest
+        # Linux only — plugin is Linux-first (Claude/Grok/plugin data dirs).
+        # macos-latest was a fixed second axis and only slowed CI (shared GH mac pool).
         python: ["3.10", "3.11", "3.12"]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7.0.0
 
