@@ -7,6 +7,7 @@ transcripts so a new session already knows your decisions, corrections, bans, an
 [![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat)](https://github.com/88plug/total-recall/blob/main/LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2?style=flat)](https://github.com/88plug/claude-code-plugins)
 [![PyPI](https://img.shields.io/badge/pypi-total--recall-blue?style=flat)](https://pypi.org/project/total-recall/)
+[![Docs](https://img.shields.io/badge/docs-online-blue?style=flat)](https://88plug.github.io/total-recall/)
 
 Every session is already on disk as append-only JSONL. Total Recall reads that history
 locally and feeds the high-signal parts back in a low-token form. The model stops
@@ -58,7 +59,7 @@ claude --plugin-dir "$PWD"
     Requirements are `bash` + `curl` + internet. The plugin bootstraps `uv`, Python,
     and deps into its own data dir on first hook fire. No system-wide Python required.
 
-Per-client MCP wiring (OpenCode, Cursor, Gemini, …): see [Install overview](install/README.md).
+Per-client MCP wiring (OpenCode, Cursor, Gemini, …): see [Install overview](https://github.com/88plug/total-recall/blob/main/install/README.md).
 
 ## Quickstart
 
@@ -192,16 +193,16 @@ duplicated turns.
 
 | Client | MCP | Hooks | Ingest |
 | --- | --- | --- | --- |
-| [Claude Code](install/claude_code.md) | yes | yes | yes |
-| [OpenCode](install/opencode.md) | yes | no | yes |
-| [Gemini CLI](install/gemini_cli.md) | yes | no | yes |
-| [Codex CLI](install/codex.md) | yes | no | yes |
-| [Cursor](install/cursor.md) | yes | no | yes |
-| [Continue](install/continue.md) | yes | no | yes |
-| [Cline](install/cline.md) | yes | no | yes |
-| [Aider](install/aider.md) | no | no | yes |
-| [Goose](install/goose.md) | yes | no | yes |
-| [Grok](install/grok.md) | yes | no | yes |
+| [Claude Code](https://github.com/88plug/total-recall/blob/main/install/claude_code.md) | yes | yes | yes |
+| [OpenCode](https://github.com/88plug/total-recall/blob/main/install/opencode.md) | yes | no | yes |
+| [Gemini CLI](https://github.com/88plug/total-recall/blob/main/install/gemini_cli.md) | yes | no | yes |
+| [Codex CLI](https://github.com/88plug/total-recall/blob/main/install/codex.md) | yes | no | yes |
+| [Cursor](https://github.com/88plug/total-recall/blob/main/install/cursor.md) | yes | no | yes |
+| [Continue](https://github.com/88plug/total-recall/blob/main/install/continue.md) | yes | no | yes |
+| [Cline](https://github.com/88plug/total-recall/blob/main/install/cline.md) | yes | no | yes |
+| [Aider](https://github.com/88plug/total-recall/blob/main/install/aider.md) | no | no | yes |
+| [Goose](https://github.com/88plug/total-recall/blob/main/install/goose.md) | yes | no | yes |
+| [Grok](https://github.com/88plug/total-recall/blob/main/install/grok.md) | yes | no | yes |
 
 ```bash
 total-recall sources list
@@ -238,7 +239,7 @@ On first install, Total Recall can provision a small local model (`qwen3.5:2b` v
 ollama) in the background. Refinement runs only on rebuild. Heuristics remain the
 fallback if ollama is not ready.
 
-See [Local-LLM refinement](llm-refinement.md) for env vars and troubleshooting.
+See [Local-LLM refinement](https://github.com/88plug/total-recall/blob/main/llm-refinement.md) for env vars and troubleshooting.
 Disable with `TOTAL_RECALL_LLM_PROVIDER=none`.
 
 ## Relation to amnesia
@@ -252,10 +253,10 @@ high-signal extra source without overwriting them.
 
 | Page | Contents |
 | --- | --- |
-| [Architecture](architecture.md) | 4-layer pipeline (walker → extractors → index → delivery) |
-| [Install overview](install/README.md) | Per-CLI MCP + ingest setup |
-| [Marketplace](marketplace.md) | 88plug install path and plugin metadata |
-| [CI/CD](ci.md) | Test matrix and release workflow |
+| [Architecture](https://github.com/88plug/total-recall/blob/main/architecture.md) | 4-layer pipeline (walker → extractors → index → delivery) |
+| [Install overview](https://github.com/88plug/total-recall/blob/main/install/README.md) | Per-CLI MCP + ingest setup |
+| [Marketplace](https://github.com/88plug/total-recall/blob/main/marketplace.md) | 88plug install path and plugin metadata |
+| [CI/CD](https://github.com/88plug/total-recall/blob/main/ci.md) | Test matrix and release workflow |
 
 ## Contributing
 
@@ -274,3 +275,28 @@ Free to use, copy, modify, and redistribute except Competing Use (offering this 
 or a substantially similar substitute as a commercial product or service). Each release
 converts to Apache 2.0 on its second anniversary. Commercial inquiries:
 andrew@88plug.com.
+
+## Features
+
+| Area | What you get |
+|---|---|
+| Cross-session memory | Decisions, corrections, bans, goals, progress, domain facts from past sessions |
+| Cross-CLI RAG | One index across 10 clients (Claude Code, OpenCode, Codex, Gemini CLI, Cursor, Continue, Cline, Aider, Goose, Grok) |
+| MCP + hooks | 26 live tools, 6 hooks (SessionStart, retrieve, re-index, Pre/PostCompact continuity) |
+| Operator discovery | Profile, voice, ontology, workflow, implicit prefs, satisfaction — data-driven from your transcripts |
+| Local embeddings | SQLite FTS5 + ollama vectors; product-owned binary under plugin data dir |
+| Metrics | Tokens, cost, topics, health — all from the local index, no telemetry |
+
+## Development
+
+```bash
+git clone https://github.com/88plug/total-recall.git
+cd total-recall
+uv sync --all-groups    # or: pip install -e ".[dev]"
+uv run ruff check .
+uv run pytest
+uv run mkdocs build --strict
+claude --plugin-dir "$PWD"
+```
+
+Docs: [https://88plug.github.io/total-recall/](https://88plug.github.io/total-recall/). Architecture: [`docs/architecture.md`](https://github.com/88plug/total-recall/blob/main/docs/architecture.md).
