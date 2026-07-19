@@ -2,7 +2,7 @@
 
 # Total Recall
 
-Cross-session memory for Claude Code and AI coding assistants — mines your own transcripts so new sessions already know decisions, bans, corrections, and goals.
+Memory & RAG for Claude Code and Grok — mines your own transcripts so new sessions already know decisions, bans, corrections, and goals.
 
 [![plugin-validate](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml/badge.svg)](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml)
 [![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat)](LICENSE)

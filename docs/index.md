@@ -1,6 +1,6 @@
 # Total Recall
 
-Cross-session, cross-CLI memory for AI coding assistants. Mines your own session
+Memory & RAG for Claude Code and Grok. Mines your own session
 transcripts so a new session already knows your decisions, corrections, bans, and goals.
 
 [![plugin-validate](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml/badge.svg)](https://github.com/88plug/total-recall/actions/workflows/plugin-validate.yml)
