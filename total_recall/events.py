@@ -28,7 +28,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 DEFAULT_EVENTS_PATH = (
-    Path(os.environ.get("CLAUDE_PLUGIN_DATA", "~/.local/share/total-recall")).expanduser()
+    Path(os.environ.get("GROK_PLUGIN_DATA") or os.environ.get("CLAUDE_PLUGIN_DATA", "~/.local/share/total-recall")).expanduser()
     / "total-recall"
     / "logs"
     / "events.jsonl"

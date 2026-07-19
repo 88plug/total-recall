@@ -55,7 +55,7 @@ def resolve_db_path(cli_value: str | os.PathLike[str] | None) -> Path:
         env = os.environ.get("TOTAL_RECALL_DB")
         if env:
             return Path(env).expanduser()
-        base_env = os.environ.get("CLAUDE_PLUGIN_DATA")
+        base_env = os.environ.get("GROK_PLUGIN_DATA") or os.environ.get("CLAUDE_PLUGIN_DATA")
         if base_env:
             return Path(base_env).expanduser() / "total-recall" / "index.db"
         return Path("~/.local/share/total-recall/index.db").expanduser()

@@ -95,7 +95,7 @@ def _config_dir() -> Path:
     ``~/.local/share/total-recall``. We do NOT create the directory
     here — :func:`_save_config` handles that lazily.
     """
-    base = os.environ.get("CLAUDE_PLUGIN_DATA")
+    base = os.environ.get("GROK_PLUGIN_DATA") or os.environ.get("CLAUDE_PLUGIN_DATA")
     if base:
         return Path(base).expanduser() / "total-recall"
     return Path("~/.local/share/total-recall").expanduser()

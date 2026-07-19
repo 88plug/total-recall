@@ -3,16 +3,18 @@
 # Source from each hook script. Caller is responsible for `set -euo pipefail`.
 
 # Resolve plugin-data root. MUST match index.db.resolve_data_dir():
-#   TOTAL_RECALL_DB_DIR → CLAUDE_PLUGIN_DATA/total-recall → largest existing
-#   plugin index under ~/.claude/plugins/data → XDG ~/.local/share/total-recall
+#   TOTAL_RECALL_DB_DIR → GROK_PLUGIN_DATA|CLAUDE_PLUGIN_DATA/total-recall
+#   → largest existing plugin index under ~/.claude/plugins/data
+#   → XDG ~/.local/share/total-recall
 # Never invent a second DB when a plugin install already has one.
 recall::data_root() {
   if [ -n "${TOTAL_RECALL_DB_DIR:-}" ]; then
     printf '%s' "${TOTAL_RECALL_DB_DIR}"
     return 0
   fi
-  if [ -n "${CLAUDE_PLUGIN_DATA:-}" ]; then
-    printf '%s' "${CLAUDE_PLUGIN_DATA%/}/total-recall"
+  local pdata="${GROK_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-}}"
+  if [ -n "$pdata" ]; then
+    printf '%s' "${pdata%/}/total-recall"
     return 0
   fi
   local best="" best_sz=0 d sz
@@ -111,7 +113,7 @@ recall::emit_context() {
 # Best-effort: any failure is silently swallowed.
 recall::log_json() {
   local event="$1"; shift
-  local logdir="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data}/total-recall/logs"
+  local pdata="${GROK_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data}}"; logdir="${pdata%/}/total-recall/logs"
   local logfile="$logdir/events.jsonl"
   mkdir -p "$logdir" 2>/dev/null || return 0
   local ts; ts=$(date -u -Iseconds 2>/dev/null || date -u +%FT%TZ)
