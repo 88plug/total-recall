@@ -11,7 +11,7 @@
       "name": "total-recall",
       "source": ".",
       "displayName": "Total Recall",
-      "description": "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 10 supported CLI clients. Surfaces operator identity / decisions / bans / corrections / goals / voice via 26 MCP tools, 6 hooks (SessionStart signpost + SessionStart compact-restore + UserPromptSubmit retrieval + Stop/PostCompact re-index + PreCompact continuity-seed), 15 slash commands, and 3 skills. gte-modernbert hybrid recall; worktree-aware project scoping; post-compaction coding-continuity packet. Optional local-LLM refinement ([llm] extra, ollama, off by default). The operator becomes the source of truth; the model stops re-asking what they already told it.",
+      "description": "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 10 supported CLI clients. Surfaces operator identity / decisions / bans / corrections / goals / voice via 26 MCP tools, 6 hooks (SessionStart signpost + SessionStart compact-restore + UserPromptSubmit retrieval + Stop/PostCompact re-index + PreCompact continuity-seed), 15 slash commands, and 3 skills. Hybrid FTS5 + ollama dense recall (qwen3-embedding:0.6b, default-on; TOTAL_RECALL_EMBED_MODEL unset is correct). Product ollama auto-provisions refine (qwen3.5:2b; TOTAL_RECALL_LLM_PROVIDER=none to disable). Worktree-aware project scoping; post-compaction coding-continuity packet. The operator becomes the source of truth; the model stops re-asking what they already told it.",
       "author": {
         "name": "88plug",
         "email": "andrew@88plug.com"

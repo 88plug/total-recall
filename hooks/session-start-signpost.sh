@@ -104,12 +104,13 @@ if [ -z "${CTX// }" ]; then
   exit 0
 fi
 
-# v0.9.0+: LLM refinement status notice — shown at most once per install.
-# Auto-provisioning runs in the background on first install; if it hasn't
-# finished yet, or if something went wrong, we emit a single informational
-# message. Reads TOTAL_RECALL_LLM_PROVIDER env: skip silently when set to
-# "none" (operator explicitly disabled). The sentinel at
-# ${RECALL_DATA_ROOT}/.ollama_notice_shown suppresses the notice once emitted.
+# Product-ollama readiness notice — at most once per install.
+# Probes the *product* daemon (default :11435) and managed binary under
+# RECALL_DATA_ROOT/bin — never "is ollama on PATH?" (product does not need
+# system ollama). Unset TOTAL_RECALL_EMBED_MODEL is correct (default
+# qwen3-embedding:0.6b); no HF id is required or recommended.
+# Skip when TOTAL_RECALL_LLM_PROVIDER=none (chat refine off; embeds separate).
+# .ollama_notice_shown suppresses re-fire after one emit.
 LLM_PROVIDER="${TOTAL_RECALL_LLM_PROVIDER:-auto}"
 LLM_NOTICE_MARK="${RECALL_DATA_ROOT}/.ollama_notice_shown"
 LLM_PROVISION_MARK="${RECALL_DATA_ROOT}/.llm_provisioning"
@@ -117,22 +118,38 @@ if [ "$LLM_PROVIDER" != "none" ] && [ ! -f "$LLM_NOTICE_MARK" ]; then
   LLM_MODEL_TAG="${TOTAL_RECALL_LLM_MODEL:-qwen3.5:2b}"
   LLM_BASE_URL="${TOTAL_RECALL_LLM_BASE_URL:-http://127.0.0.1:11435}"
   LLM_NOTICE=""
+  # Lightweight product bin probe only — do NOT call recall::ollama (may fetch).
+  PRODUCT_OLLAMA=""
+  if [ -n "${RECALL_OLLAMA:-}" ] && [ -x "${RECALL_OLLAMA}" ]; then
+    PRODUCT_OLLAMA="$RECALL_OLLAMA"
+  elif [ -x "${RECALL_DATA_ROOT}/bin/ollama" ]; then
+    PRODUCT_OLLAMA="${RECALL_DATA_ROOT}/bin/ollama"
+  fi
   if [ -f "$LLM_PROVISION_MARK" ]; then
-    # Auto-provisioning is in progress (started by bootstrap).
-    LLM_NOTICE="[total-recall] Setting up local-LLM refinement in the background (${LLM_MODEL_TAG}, ~2.7 GB, local-only, one-time). Future sessions will have sharper machine-name extraction and vocabulary definitions. Disable with TOTAL_RECALL_LLM_PROVIDER=none."
-  elif ! command -v ollama >/dev/null 2>&1; then
-    # Provisioning finished but ollama still not on PATH — may need a shell reload,
-    # or the install failed. Point at the manual fallback.
-    LLM_NOTICE="[total-recall] Local-LLM refinement setup did not complete (ollama not found). Run /total-recall:llm-setup to retry, or set TOTAL_RECALL_LLM_PROVIDER=none to disable."
-  elif ! curl -sf "${LLM_BASE_URL}/api/tags" >/dev/null 2>&1; then
-    LLM_NOTICE="[total-recall] Local-LLM refinement: ollama installed but daemon not reachable at ${LLM_BASE_URL}. Run 'ollama serve' to start it, or /total-recall:llm-setup to repair."
-  elif ! ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "${LLM_MODEL_TAG}\(:latest\)\?"; then
-    LLM_NOTICE="[total-recall] Local-LLM refinement: model ${LLM_MODEL_TAG} not pulled. Run /total-recall:llm-setup, or 'ollama pull ${LLM_MODEL_TAG}' manually."
+    LLM_NOTICE="[total-recall] Setting up local models in the background (refine ${LLM_MODEL_TAG} + embed qwen3-embedding:0.6b, local-only, one-time). Chat refine: TOTAL_RECALL_LLM_PROVIDER=none to disable. Dense embeds: TOTAL_RECALL_VEC=0 to disable. No TOTAL_RECALL_EMBED_MODEL needed."
+  elif ! curl -sf --max-time 1 "${LLM_BASE_URL}/api/tags" >/dev/null 2>&1; then
+    if [ -n "$PRODUCT_OLLAMA" ]; then
+      LLM_NOTICE="[total-recall] Product ollama present but daemon not reachable at ${LLM_BASE_URL}. Run /total-recall:llm-setup to repair, or set TOTAL_RECALL_LLM_PROVIDER=none to disable chat refine."
+    else
+      LLM_NOTICE="[total-recall] Local ollama setup not complete (no product binary yet). Run /total-recall:llm-setup, or set TOTAL_RECALL_LLM_PROVIDER=none to disable chat refine."
+    fi
+  else
+    # Daemon up — model list from product API (not bare `ollama list` / PATH).
+    TAGS_JSON="$(curl -sf --max-time 2 "${LLM_BASE_URL}/api/tags" 2>/dev/null || true)"
+    if [ -n "$TAGS_JSON" ] && command -v jq >/dev/null 2>&1; then
+      if ! printf '%s' "$TAGS_JSON" | jq -e --arg m "$LLM_MODEL_TAG" '
+          (.models // [])
+          | map(.name // "")
+          | any(. == $m or . == ($m + ":latest") or startswith($m + ":"))
+        ' >/dev/null 2>&1; then
+        LLM_NOTICE="[total-recall] Product daemon up at ${LLM_BASE_URL} but refine model ${LLM_MODEL_TAG} not pulled. Run /total-recall:llm-setup (also pulls embed qwen3-embedding:0.6b by default)."
+      fi
+    fi
   fi
   if [ -n "$LLM_NOTICE" ]; then
     CTX="${CTX}"$'\n\n'"${LLM_NOTICE}"
     touch "$LLM_NOTICE_MARK" 2>/dev/null || true
-    recall::log "session-start-v2: LLM-refinement notice appended ($(echo "$LLM_NOTICE" | head -c 60)…)"
+    recall::log "session-start-v2: product-ollama notice appended ($(echo "$LLM_NOTICE" | head -c 60)…)"
   fi
 fi
 

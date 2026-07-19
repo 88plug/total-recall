@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.10] - 2026-07-19
+
+### Fixed — SessionStart + defaults tell the truth about product ollama
+
+- SessionStart readiness probe uses **product daemon** ``:11435`` + managed
+  ``$data/bin/ollama`` (and ``/api/tags`` for model presence) — no longer
+  ``command -v ollama`` / bare PATH ``ollama list`` (false "not installed"
+  when product-only setup is fine).
+- **``TOTAL_RECALL_EMBED_MODEL`` unset is correct** — default
+  ``qwen3-embedding:0.6b``; no HF id required. Skill / llm-setup / rebuild
+  hints no longer treat unsetting HF as a normal step.
+- Marketplace / plugin / marketplace-entry copy: drop ``gte-modernbert`` and
+  ``[llm] extra, off by default`` lies; state dense default-on + refine
+  auto-provision (``TOTAL_RECALL_LLM_PROVIDER=none`` to disable chat).
+
 ## [2.3.9] - 2026-07-18
 
 ### Fixed — product daemon never rides system ollama

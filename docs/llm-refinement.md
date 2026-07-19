@@ -73,23 +73,27 @@ validated sweet spot for speed vs quality on a typical developer machine.
 
 ## Troubleshooting
 
-### "ollama not found" after install
+### SessionStart says setup incomplete
 
-The bootstrap installs ollama into the plugin data dir, not `/usr/local/bin`.
-If your shell does not pick it up automatically, run `/total-recall:llm-setup`
-to retry. Alternatively: `export TOTAL_RECALL_LLM_PROVIDER=none` to opt out.
+SessionStart probes the **product** daemon at `:11435` and the managed binary
+under the plugin data dir — not whether `ollama` is on your shell `PATH`.
+System ollama is optional.
+
+If the notice fires once, fix with `/total-recall:llm-setup`, or opt out of
+chat refine with `TOTAL_RECALL_LLM_PROVIDER=none`. Dense embeds stay on unless
+`TOTAL_RECALL_VEC=0`. Leave `TOTAL_RECALL_EMBED_MODEL` unset (default
+`qwen3-embedding:0.6b`).
 
 ### Daemon not starting
 
 ```bash
-ollama serve &   # or: systemctl --user start ollama
+# Prefer product path via /total-recall:llm-setup — not system `ollama serve`
 curl http://127.0.0.1:11435/api/tags   # product daemon
 ```
 
 Product defaults to **:11435** so system ollama on :11434 never collides.
 Only pin `TOTAL_RECALL_LLM_BASE_URL` if you intentionally own that endpoint
 with the **product** binary (foreign daemons are refused).
-
 ### Disk space
 
 The model download is ~2.7 GB. Check available space before letting the

@@ -96,12 +96,12 @@ fi
 
 # ----- 3. models (shared function) ------------------------------------------
 # Chat refine model (optional layer) + dense embed model (format v2, required for hybrid).
+# Unset TOTAL_RECALL_EMBED_MODEL is correct — product default, no HF id needed.
 EMBED_MODEL="${TOTAL_RECALL_EMBED_MODEL:-qwen3-embedding:0.6b}"
-# Skip pull if operator still has a legacy HF embed id in env — they must unset it.
 case "$EMBED_MODEL" in
   */*|*"gte-modernbert"*|*"bge-small"*)
-    log "WARN: TOTAL_RECALL_EMBED_MODEL=$EMBED_MODEL looks like a legacy fastembed id."
-    log "  Unset it (plugin MCP env no longer pins one) and use ollama: qwen3-embedding:0.6b"
+    log "WARN: TOTAL_RECALL_EMBED_MODEL=$EMBED_MODEL is a legacy HF/fastembed id (not required)."
+    log "  Ignoring it; using product default qwen3-embedding:0.6b. Unset the env var when convenient."
     EMBED_MODEL="qwen3-embedding:0.6b"
     ;;
 esac

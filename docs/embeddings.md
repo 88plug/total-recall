@@ -76,7 +76,7 @@ instruct on **queries only**, documents raw, English task text.
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `TOTAL_RECALL_EMBED_MODEL` | `qwen3-embedding:0.6b` | Ollama embed tag (not HF ids) |
+| `TOTAL_RECALL_EMBED_MODEL` | `qwen3-embedding:0.6b` | Ollama embed tag. **Leave unset** for the default — no HF id is required or used. |
 | `TOTAL_RECALL_EMBED_INSTRUCT` | product memory task | `web` / `memory` / `memory_v1` / full `Instruct:…\nQuery:` / bare task |
 | `TOTAL_RECALL_LLM_BASE_URL` | `http://127.0.0.1:11435` | Product daemon URL (not system 11434) |
 | `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Chat refine tag |

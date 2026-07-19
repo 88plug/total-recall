@@ -101,7 +101,8 @@ def _backfill_vectors(db_path: str | Path, verbose: bool) -> None:
             f"total-recall: vec backfill failed (recall stays FTS5-only): {exc}\n"
             "  Product ollama should auto-provision on first session / llm-setup.\n"
             "  Repair: bash scripts/llm-setup.sh   # or /total-recall:llm-setup\n"
-            "  Unset legacy TOTAL_RECALL_EMBED_MODEL HF ids (Alibaba-NLP/...).",
+            "  Embed default is qwen3-embedding:0.6b — leave TOTAL_RECALL_EMBED_MODEL unset.\n"
+            "  Only if a legacy HF id is still set (Alibaba-NLP/...), unset that env var.",
             err=True,
         )
 
