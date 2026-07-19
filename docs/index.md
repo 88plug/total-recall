@@ -23,7 +23,7 @@ re-asking what you already told it.
 
 ## Install
 
-Marketplace (recommended):
+### Claude Code
 
 ```text
 /plugin marketplace add 88plug/claude-code-plugins

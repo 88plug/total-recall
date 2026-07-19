@@ -5,7 +5,7 @@ Generated: 2026-07-18 01:30:10 -0400
 ## Production index (real machine)
 ```json
 {
-  "path": "/home/andrew/.claude/plugins/data/total-recall-88plug/total-recall/index.db",
+  "path": "${CLAUDE_PLUGIN_DATA}/total-recall/index.db",
   "size_mb": 568.4,
   "extractions": 11358,
   "chunks": 11361,

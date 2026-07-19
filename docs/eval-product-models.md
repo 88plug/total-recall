@@ -6,7 +6,7 @@ Generated: 2026-07-18 01:27:13 -0400
 ```json
 {
   "daemon_reachable": true,
-  "bin": "/home/andrew/.claude/plugins/data/total-recall-88plug/total-recall/bin/ollama",
+  "bin": "${CLAUDE_PLUGIN_DATA}/total-recall/bin/ollama",
   "ensure": {
     "base_url": "http://localhost:11434",
     "embed": true,
@@ -16,7 +16,7 @@ Generated: 2026-07-18 01:27:13 -0400
     "chat_model": "qwen3.5:2b",
     "embed_ready": true,
     "chat_ready": true,
-    "bin": "/home/andrew/.claude/plugins/data/total-recall-88plug/total-recall/bin/ollama"
+    "bin": "${CLAUDE_PLUGIN_DATA}/total-recall/bin/ollama"
   },
   "models_present": {
     "qwen3-embedding:0.6b": true,

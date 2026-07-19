@@ -18,6 +18,8 @@ Hybrid FTS5 + ollama dense embeddings (`qwen3-embedding:0.6b`) power recall. Wor
 
 ## Install
 
+### Claude Code
+
 ```text
 /plugin marketplace add 88plug/claude-code-plugins
 /plugin install total-recall@88plug
