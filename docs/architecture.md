@@ -304,6 +304,9 @@ emitted via the same `additionalContext` channel as normal signpost content.
 main process owns the SQLite writer (SQLite single-writer / default
 serialized mode). Workers stay busy via `submit` + `as_completed` so parse
 overlaps with commit; the long tail is still main-process DB writes.
+`rebuild` passes `bulk_load=True` to `ingest_all`: write-throughput PRAGMAs,
+deferred FTS trigger rebuild, skip per-file profiles (cold consolidation
+covers them).
 
 | Mode | Default `jobs` |
 |------|----------------|

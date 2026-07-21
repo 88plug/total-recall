@@ -189,7 +189,10 @@ def rebuild_cmd(
     job_count = max(1, int(jobs_resolved))
 
     if verbose:
-        click.echo(f"[rebuild] full ingest into {db_path} (jobs={job_count})", err=True)
+        click.echo(
+            f"[rebuild] full ingest into {db_path} (jobs={job_count}, bulk_load=1)",
+            err=True,
+        )
     started = time.monotonic()
     result = ingest_all(
         db_path=db_path,
@@ -198,6 +201,7 @@ def rebuild_cmd(
         projects_root=Path(projects_root).expanduser() if projects_root else None,
         dry_run=False,
         jobs=job_count,
+        bulk_load=True,
     )
     # Consolidation pass (cold path). The per-file incremental merge that
     # runs during ingest can freeze an early, non-global winner for

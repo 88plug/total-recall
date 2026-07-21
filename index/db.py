@@ -27,6 +27,11 @@ __all__ = [
     "connect",
     "apply_schema",
     "vacuum",
+    "apply_bulk_load_pragmas",
+    "restore_default_pragmas",
+    "drop_fts_sync_triggers",
+    "recreate_fts_sync_triggers",
+    "rebuild_fts_indexes",
 ]
 
 
@@ -204,6 +209,113 @@ def connect(
         apply_schema(conn)
 
     return conn
+
+
+# ---------------------------------------------------------------------------
+# Bulk-load (rebuild / oneshot) helpers
+# ---------------------------------------------------------------------------
+# Rebuild is single-writer + restartable. These knobs trade crash durability
+# and FTS live-sync for write throughput. Always pair apply with restore +
+# rebuild_fts_indexes before the connection is handed back to readers.
+
+_FTS_TRIGGER_SQL: tuple[str, ...] = (
+    """
+    CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+        INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+        INSERT INTO messages_fts(messages_fts, rowid, text)
+            VALUES('delete', old.id, old.text);
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
+        INSERT INTO messages_fts(messages_fts, rowid, text)
+            VALUES('delete', old.id, old.text);
+        INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS extractions_ai AFTER INSERT ON extractions BEGIN
+        INSERT INTO extractions_fts(rowid, content) VALUES (new.id, new.content);
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS extractions_ad AFTER DELETE ON extractions BEGIN
+        INSERT INTO extractions_fts(extractions_fts, rowid, content)
+            VALUES('delete', old.id, old.content);
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS extractions_au AFTER UPDATE ON extractions BEGIN
+        INSERT INTO extractions_fts(extractions_fts, rowid, content)
+            VALUES('delete', old.id, old.content);
+        INSERT INTO extractions_fts(rowid, content) VALUES (new.id, new.content);
+    END
+    """,
+)
+
+_FTS_TRIGGER_NAMES: tuple[str, ...] = (
+    "messages_ai",
+    "messages_ad",
+    "messages_au",
+    "extractions_ai",
+    "extractions_ad",
+    "extractions_au",
+)
+
+
+def apply_bulk_load_pragmas(conn: sqlite3.Connection) -> None:
+    """Maximize write throughput for a restartable oneshot (rebuild).
+
+    Source: sqlite.org PRAGMA docs — ``synchronous=OFF`` is fastest and
+    unsafe on crash (OK: rebuild re-runs). Larger ``cache_size`` / ``mmap``
+    keep page churn off disk during multi-hundred-MB loads. Default
+    ``cache_size`` is only ~2 MiB (``-2000``), which starves a rebuild.
+    """
+    conn.execute("PRAGMA synchronous = OFF")
+    # Negative cache_size is kibibytes of page cache (~256 MiB).
+    conn.execute("PRAGMA cache_size = -262144")
+    conn.execute("PRAGMA mmap_size = 268435456")
+    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute("PRAGMA wal_autocheckpoint = 10000")
+
+
+def restore_default_pragmas(conn: sqlite3.Connection) -> None:
+    """Restore post-bulk defaults used by :func:`connect`."""
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA cache_size = -2000")
+    conn.execute("PRAGMA mmap_size = 0")
+    conn.execute("PRAGMA temp_store = DEFAULT")
+    conn.execute("PRAGMA wal_autocheckpoint = 1000")
+
+
+def drop_fts_sync_triggers(conn: sqlite3.Connection) -> None:
+    """Drop FTS5 content-sync triggers for bulk insert (rebuild later)."""
+    for name in _FTS_TRIGGER_NAMES:
+        conn.execute(f"DROP TRIGGER IF EXISTS {name}")
+
+
+def recreate_fts_sync_triggers(conn: sqlite3.Connection) -> None:
+    """Re-install FTS5 content-sync triggers after bulk load."""
+    for sql in _FTS_TRIGGER_SQL:
+        conn.execute(sql)
+
+
+def rebuild_fts_indexes(conn: sqlite3.Connection) -> None:
+    """Rebuild external-content FTS5 tables from base tables.
+
+    FTS5 command: ``INSERT INTO fts(fts) VALUES('rebuild')`` (sqlite.org/fts5).
+    Safe when tables are missing (fresh / partial schema).
+    """
+    for table in ("messages_fts", "extractions_fts"):
+        try:
+            conn.execute(f"INSERT INTO {table}({table}) VALUES('rebuild')")
+        except sqlite3.DatabaseError:
+            # Table may not exist on a minimal/test schema.
+            pass
 
 
 _CURRENT_SCHEMA_VERSION = "5"

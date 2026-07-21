@@ -737,9 +737,34 @@ def _existing_voice_from_conn(conn: sqlite3.Connection) -> dict | None:
     return stored
 
 
+def _max_rowid(conn: sqlite3.Connection, table: str) -> int:
+    """Highest INTEGER PRIMARY KEY in ``table``, or 0. Cheap via PK."""
+    try:
+        row = conn.execute(f"SELECT MAX(id) FROM {table}").fetchone()
+    except sqlite3.DatabaseError:
+        return 0
+    if row is None or row[0] is None:
+        return 0
+    return int(row[0])
+
+
+def _new_rows_since(conn: sqlite3.Connection, table: str, before_id: int) -> int:
+    """Count rows with ``id > before_id`` (PK range scan, not full-table)."""
+    try:
+        row = conn.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE id > ?",
+            (before_id,),
+        ).fetchone()
+    except sqlite3.DatabaseError:
+        return 0
+    return int(row[0] or 0) if row else 0
+
+
 def _commit_parsed(
     conn: sqlite3.Connection,
     parsed: _ParsedFile,
+    *,
+    update_profiles: bool = True,
 ) -> IngestReport:
     """Write a `_ParsedFile`'s rows into the DB inside a single transaction.
 
@@ -747,6 +772,11 @@ def _commit_parsed(
     path can reuse it. Mirrors the sequential commit logic exactly:
     rotation wipes old rows, INSERT OR IGNORE everywhere, idempotent
     cursor update, defensive try/except around the v2 metrics tables.
+
+    ``update_profiles=False`` skips per-file incremental profile work
+    (rebuild bulk path does a single cold consolidation pass instead).
+    New-row counts use PK-range ``id > max_before`` — not full-table
+    ``COUNT(*)`` and not ``total_changes`` (FTS triggers inflate the latter).
     """
     t0 = time.monotonic()
     source_file = parsed.source_file
@@ -772,15 +802,12 @@ def _commit_parsed(
             )
 
         if parsed.message_rows:
-            before = conn.execute(
-                "SELECT COUNT(*) FROM messages WHERE source_file = ?",
-                (source_file,),
-            ).fetchone()[0]
             # v4: append the `source` column so the row carries its origin
             # CLI client. _row_for_message already produces the trailing
             # `source` value. Defensive: if the column hasn't been migrated
             # in (running against a pre-v4 DB someone bypassed apply_schema),
             # retry against the v3 column list.
+            before_id = _max_rowid(conn, "messages")
             try:
                 conn.executemany(
                     """
@@ -829,18 +856,11 @@ def _commit_parsed(
                     )
                 else:
                     raise
-            after = conn.execute(
-                "SELECT COUNT(*) FROM messages WHERE source_file = ?",
-                (source_file,),
-            ).fetchone()[0]
-            new_messages = max(0, after - before)
+            new_messages = _new_rows_since(conn, "messages", before_id)
 
         if parsed.turn_rows:
             try:
-                before_t = conn.execute(
-                    "SELECT COUNT(*) FROM turns WHERE source_file = ?",
-                    (source_file,),
-                ).fetchone()[0]
+                before_t = _max_rowid(conn, "turns")
                 conn.executemany(
                     """
                     INSERT OR IGNORE INTO turns(
@@ -852,11 +872,7 @@ def _commit_parsed(
                     """,
                     parsed.turn_rows,
                 )
-                after_t = conn.execute(
-                    "SELECT COUNT(*) FROM turns WHERE source_file = ?",
-                    (source_file,),
-                ).fetchone()[0]
-                new_turns = max(0, after_t - before_t)
+                new_turns = _new_rows_since(conn, "turns", before_t)
             except sqlite3.OperationalError:
                 _warn_metrics_unavailable_once()
                 new_turns = 0
@@ -876,10 +892,7 @@ def _commit_parsed(
 
         if parsed.compaction_rows:
             try:
-                before_c = conn.execute(
-                    "SELECT COUNT(*) FROM compactions WHERE source_file = ?",
-                    (source_file,),
-                ).fetchone()[0]
+                before_c = _max_rowid(conn, "compactions")
                 conn.executemany(
                     """
                     INSERT OR IGNORE INTO compactions(
@@ -889,17 +902,13 @@ def _commit_parsed(
                     """,
                     parsed.compaction_rows,
                 )
-                after_c = conn.execute(
-                    "SELECT COUNT(*) FROM compactions WHERE source_file = ?",
-                    (source_file,),
-                ).fetchone()[0]
-                new_compactions = max(0, after_c - before_c)
+                new_compactions = _new_rows_since(conn, "compactions", before_c)
             except sqlite3.OperationalError:
                 _warn_metrics_unavailable_once()
                 new_compactions = 0
 
         if parsed.extraction_rows:
-            before_e = conn.execute("SELECT COUNT(*) FROM extractions").fetchone()[0]
+            before_e = _max_rowid(conn, "extractions")
             try:
                 conn.executemany(
                     """
@@ -939,8 +948,7 @@ def _commit_parsed(
                     )
                 else:
                     raise
-            after_e = conn.execute("SELECT COUNT(*) FROM extractions").fetchone()[0]
-            new_extractions = max(0, after_e - before_e)
+            new_extractions = _new_rows_since(conn, "extractions", before_e)
 
         new_offset = parsed.size
         bytes_processed = max(0, new_offset - parsed.start_offset)
@@ -996,7 +1004,8 @@ def _commit_parsed(
     # the ingest. Each updater is responsible for its own persistence so
     # we can run them independently and let one crash without losing the
     # others. Runs only when there are new records to score against.
-    if parsed.profile_records:
+    # Rebuild bulk_load skips this — cmd_rebuild does one cold consolidation.
+    if update_profiles and parsed.profile_records:
         try:
             from extractors.ontology import (
                 update_vocabulary_counts as _o_inc,
@@ -1255,6 +1264,7 @@ def _dedup_and_commit_parsed(
     ext_cwd_idx: int,
     ext_ts_idx: int,
     ext_text_idx: int,
+    update_profiles: bool = True,
 ) -> IngestReport:
     """Apply cross-source dedup then commit one parsed session."""
     from index.multi_source import filter_dedup_rows  # noqa: WPS433
@@ -1293,7 +1303,7 @@ def _dedup_and_commit_parsed(
         parsed.extraction_rows = kept_e
 
     try:
-        return _commit_parsed(conn, parsed)
+        return _commit_parsed(conn, parsed, update_profiles=update_profiles)
     except Exception as exc:  # noqa: BLE001
         log.warning(
             "ingest_all: commit for %s/%s failed: %s",
@@ -1311,6 +1321,7 @@ def _ingest_all_multi_source(
     cwd_filter: str | None,
     force_full: bool,
     jobs: int = 1,
+    update_profiles: bool = True,
 ) -> list[IngestReport]:
     """Multi-source ingest loop with cross-source dedup applied at commit time.
 
@@ -1445,6 +1456,7 @@ def _ingest_all_multi_source(
                                 ext_cwd_idx=ext_cwd_idx,
                                 ext_ts_idx=ext_ts_idx,
                                 ext_text_idx=ext_text_idx,
+                                update_profiles=update_profiles,
                             )
                         )
                     except Exception as exc:  # noqa: BLE001
@@ -1505,6 +1517,7 @@ def _ingest_all_multi_source(
                     ext_cwd_idx=ext_cwd_idx,
                     ext_ts_idx=ext_ts_idx,
                     ext_text_idx=ext_text_idx,
+                    update_profiles=update_profiles,
                 )
             )
 
@@ -1566,6 +1579,7 @@ def ingest_all(
     trigger: str = "manual",
     jobs: int = 1,
     sources: list[str] | None = None,
+    bulk_load: bool = False,
 ) -> list[IngestReport]:
     """Walk every available source's sessions and ingest them.
 
@@ -1587,6 +1601,10 @@ def ingest_all(
     returns truthy is ingested. When :mod:`lib.sources` is unavailable
     (bare branch without XW1), we silently fall back to the original
     ``<slug>/*.jsonl`` walker so this PR remains independently mergeable.
+
+    ``bulk_load``: rebuild/oneshot mode — apply write-throughput PRAGMAs,
+    drop FTS live-sync triggers during insert (rebuild FTS once at end),
+    and skip per-file incremental profiles (cold consolidation does that).
 
     The XW8 cross-source dedup heuristic
     (:func:`index.multi_source.filter_dedup_rows`) is applied across
@@ -1615,8 +1633,24 @@ def ingest_all(
 
     reports: list[IngestReport] = []
     run_t0 = time.monotonic()
+    update_profiles = not bulk_load
+    bulk_active = False
 
     try:
+        if bulk_load and not dry_run:
+            from index.db import (
+                apply_bulk_load_pragmas,
+                drop_fts_sync_triggers,
+            )
+
+            apply_bulk_load_pragmas(conn)
+            drop_fts_sync_triggers(conn)
+            bulk_active = True
+            log.info(
+                "ingest_all: bulk_load on "
+                "(sync=OFF, large cache, FTS triggers deferred, profiles deferred)"
+            )
+
         # ----- Multi-source path -------------------------------------------
         # Activate when the caller asked for specific sources OR when
         # lib.sources is importable AND has more than just claude_code
@@ -1656,6 +1690,7 @@ def ingest_all(
                     cwd_filter=cwd_filter,
                     force_full=force_full,
                     jobs=jobs,
+                    update_profiles=update_profiles,
                 )
             )
         else:
@@ -1674,7 +1709,20 @@ def ingest_all(
             if not use_parallel:
                 for path in files:
                     try:
-                        reports.append(ingest_file(conn, path, force_full=force_full))
+                        start_offset, rotated, last_sid = _resolve_cursor(
+                            conn, path, force_full=force_full
+                        )
+                        parsed = _parse_file_pure(
+                            path,
+                            start_offset=start_offset,
+                            rotated=rotated,
+                            last_session_id=last_sid,
+                        )
+                        reports.append(
+                            _commit_parsed(
+                                conn, parsed, update_profiles=update_profiles
+                            )
+                        )
                     except Exception as exc:  # noqa: BLE001
                         log.warning("ingest_all: %s failed: %s", path, exc)
                         reports.append(
@@ -1716,7 +1764,11 @@ def ingest_all(
                             reports.append(IngestReport(src, 0, 0, 1, 0, 0))
                             continue
                         try:
-                            reports.append(_commit_parsed(conn, parsed))
+                            reports.append(
+                                _commit_parsed(
+                                    conn, parsed, update_profiles=update_profiles
+                                )
+                            )
                         except Exception as exc:  # noqa: BLE001
                             log.warning(
                                 "ingest_all: commit for %s failed: %s",
@@ -1729,6 +1781,19 @@ def ingest_all(
         # row reflects the actual data work. Defensive: skips silently on a
         # pre-MA1 schema.
         _record_ingest_run(conn, reports, run_t0, trigger)
+
+        if bulk_active:
+            from index.db import (
+                rebuild_fts_indexes,
+                recreate_fts_sync_triggers,
+                restore_default_pragmas,
+            )
+
+            log.info("ingest_all: bulk_load finishing — rebuild FTS + restore PRAGMAs")
+            rebuild_fts_indexes(conn)
+            recreate_fts_sync_triggers(conn)
+            restore_default_pragmas(conn)
+            bulk_active = False
 
         # Cheap maintenance after a bulk ingest helps the planner pick the
         # right indexes for FTS-joined cwd/kind/ts queries.
@@ -1755,6 +1820,19 @@ def ingest_all(
         except sqlite3.DatabaseError as exc:
             log.debug("ingest_all: wal_checkpoint failed: %s", exc)
     finally:
+        if bulk_active and conn is not None:
+            # Crash mid-bulk: still restore triggers/PRAGMAs so the DB is
+            # usable for incremental hooks even if FTS is incomplete.
+            with contextlib.suppress(Exception):
+                from index.db import (
+                    rebuild_fts_indexes,
+                    recreate_fts_sync_triggers,
+                    restore_default_pragmas,
+                )
+
+                rebuild_fts_indexes(conn)
+                recreate_fts_sync_triggers(conn)
+                restore_default_pragmas(conn)
         if owns_conn and conn is not None:
             with contextlib.suppress(Exception):
                 conn.close()
