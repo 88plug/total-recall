@@ -72,15 +72,19 @@ the current directory.
 /recall what did we decide about the deploy pipeline?
 ```
 
-Manual full reindex:
+Manual full reindex (oneshot — defaults to **all logical CPUs**):
 
 ```bash
-total-recall index --rebuild --jobs 4
-# or, from a uv checkout:
-uv run total-recall index --rebuild --jobs 4
+total-recall rebuild --yes
+# or: total-recall index --full
+# throttle with -j N on tiny-RAM hosts
 ```
 
-Typical corpus: ~22s single-threaded → ~9s at `--jobs 4`.
+```bash
+uv run total-recall rebuild --yes -j "$(nproc)"
+```
+
+Multi-source and claude-only both parallelize file-backed session parse.
 
 ## MCP tools (26)
 

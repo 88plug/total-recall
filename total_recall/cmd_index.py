@@ -55,12 +55,12 @@ from .util import resolve_db_path
     type=int,
     default=None,
     help=(
-        "Worker processes for parsing JSONL files. Parsing is CPU-bound "
+        "Worker processes for parsing sessions. Parsing is CPU-bound "
         "(regex-heavy extractors) and parallelizes well; DB writes always "
         "stay single-threaded (SQLite serializes writers). Default: 1 for "
-        "incremental ingest, min(cpu_count, 8) for --full backfill. "
-        "Tradeoff: more jobs = faster, but each worker holds an additional "
-        "session's worth of records in RAM."
+        "incremental ingest, all logical CPUs (os.cpu_count()) for --full "
+        "oneshot backfill. Tradeoff: more jobs = faster, but each worker "
+        "holds an additional session's worth of records in RAM."
     ),
 )
 @click.pass_context
@@ -86,11 +86,11 @@ def index_cmd(
         )
         raise click.Abort from exc
 
-    # Resolve --jobs: explicit wins, else 1 for incremental, capped cpu_count
-    # for --full backfill. Cap at 8 to avoid OOM on memory-constrained boxes
-    # (each worker can hold one session's records in RAM, ~50-200MB peak).
+    # Resolve --jobs: explicit wins, else 1 for incremental, ALL logical CPUs
+    # for --full oneshot. No artificial cap of 8 — max performance on the
+    # user's machine. Operators on tiny RAM boxes can pass -j 2 explicitly.
     if jobs is None:
-        jobs = min(os.cpu_count() or 4, 8) if full else 1
+        jobs = (os.cpu_count() or 4) if full else 1
     jobs = max(1, int(jobs))
 
     if verbose:

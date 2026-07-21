@@ -1226,28 +1226,111 @@ def _source_file_key_for_session(session: Any) -> str:
     return path_str
 
 
+def _session_is_poolable(session: Any) -> bool:
+    """True when a session can be parsed by :func:`_parse_worker` (path only).
+
+    File-per-session JSONL sources (Claude Code, Codex, …) qualify when the
+    path exists on disk. SQLite-backed sources (OpenCode, Cursor) pack many
+    sessions into one DB and need ``iter_records`` from the adapter — those
+    stay on the serial path (not picklable into a process pool).
+    """
+    extra = getattr(session, "extra", None) or {}
+    if isinstance(extra, dict) and extra.get("storage") == "sqlite":
+        return False
+    path = Path(getattr(session, "path", "") or "")
+    return path.is_file()
+
+
+def _dedup_and_commit_parsed(
+    conn: sqlite3.Connection,
+    parsed: _ParsedFile,
+    *,
+    src_name: str,
+    source_file_key: str,
+    msg_seen: dict[tuple[str, int, str], str],
+    ext_seen: dict[tuple[str, int, str], str],
+    msg_cwd_idx: int,
+    msg_ts_idx: int,
+    msg_text_idx: int,
+    ext_cwd_idx: int,
+    ext_ts_idx: int,
+    ext_text_idx: int,
+) -> IngestReport:
+    """Apply cross-source dedup then commit one parsed session."""
+    from index.multi_source import filter_dedup_rows  # noqa: WPS433
+
+    if parsed.message_rows:
+        kept, _seen_m, suppressed = filter_dedup_rows(
+            parsed.message_rows,
+            source=src_name,
+            cwd_idx=msg_cwd_idx,
+            ts_idx=msg_ts_idx,
+            text_idx=msg_text_idx,
+            seen=msg_seen,  # mutated in place; same object returned
+        )
+        if suppressed:
+            log.info(
+                "ingest_all: dedup suppressed %d %s messages",
+                suppressed,
+                src_name,
+            )
+        parsed.message_rows = kept
+    if parsed.extraction_rows:
+        kept_e, _seen_e, suppressed_e = filter_dedup_rows(
+            parsed.extraction_rows,
+            source=src_name,
+            cwd_idx=ext_cwd_idx,
+            ts_idx=ext_ts_idx,
+            text_idx=ext_text_idx,
+            seen=ext_seen,
+        )
+        if suppressed_e:
+            log.info(
+                "ingest_all: dedup suppressed %d %s extractions",
+                suppressed_e,
+                src_name,
+            )
+        parsed.extraction_rows = kept_e
+
+    try:
+        return _commit_parsed(conn, parsed)
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "ingest_all: commit for %s/%s failed: %s",
+            src_name,
+            source_file_key,
+            exc,
+        )
+        return IngestReport(source_file_key, 0, 0, 1, 0, 0)
+
+
 def _ingest_all_multi_source(
     *,
     conn: sqlite3.Connection,
     active: list[Any],
     cwd_filter: str | None,
     force_full: bool,
+    jobs: int = 1,
 ) -> list[IngestReport]:
     """Multi-source ingest loop with cross-source dedup applied at commit time.
 
     Iterates sources in priority order (the order returned by
-    :func:`_available_sources`), parsing each session through the source
-    adapter's ``iter_records``. After parsing, the
-    :mod:`index.multi_source` dedup heuristic prunes message rows whose
-    ``(cwd, minute_bucket, sha256(text[:200]))`` triple already lives in
-    a higher-priority source's batch within this same ingest pass.
+    :func:`_available_sources`). Within each source, when ``jobs > 1`` and
+    sessions are file-backed (poolable), parse fans out via
+    :class:`concurrent.futures.ProcessPoolExecutor` — same model as the
+    legacy claude_code path. SQLite-backed adapters stay serial.
+
+    After parsing, the :mod:`index.multi_source` dedup heuristic prunes
+    message rows whose ``(cwd, minute_bucket, sha256(text[:200]))`` triple
+    already lives in a higher-priority source's batch within this same
+    ingest pass. Dedup + SQLite commit stay on the main process.
 
     Best-effort: dedup state is per-call (an in-memory dict), so a
     duplicate that splits across separate ingest runs WILL land in the
     DB. The ``source`` column lets downstream queries collapse those at
     query time if needed.
     """
-    from index.multi_source import filter_dedup_rows  # noqa: WPS433
+    import concurrent.futures as cf
 
     reports: list[IngestReport] = []
     # message_rows tuple layout (see _row_for_message):
@@ -1262,6 +1345,7 @@ def _ingest_all_multi_source(
 
     msg_seen: dict[tuple[str, int, str], str] = {}
     ext_seen: dict[tuple[str, int, str], str] = {}
+    job_count = max(1, int(jobs))
 
     for src in active:
         src_name = getattr(src, "name", "?")
@@ -1283,12 +1367,14 @@ def _ingest_all_multi_source(
                 or getattr(s, "cwd", None) == cwd_filter.rstrip("/")
             ]
 
+        # Split poolable (file-on-disk) vs serial (sqlite / synthetic / missing).
+        pool_jobs: list[tuple] = []
+        pool_keys: list[str] = []
+        serial_items: list[tuple[Any, str, int, bool, Any]] = []
+
         for session in sessions:
             source_file_key = _source_file_key_for_session(session)
             session_path = Path(getattr(session, "path", source_file_key))
-
-            # Resolve cursor against the per-session key (handles SQLite
-            # sources via "<db>#<session_id>" keys).
             state = _read_state(conn, source_file_key)
             if state is None or force_full:
                 start_offset = 0
@@ -1299,6 +1385,50 @@ def _ingest_all_multi_source(
                 rotated = False
                 last_sid = state["last_session_id"]
 
+            if job_count > 1 and _session_is_poolable(session):
+                # Path-only worker — same 5-tuple as legacy parallel path.
+                pool_jobs.append((str(session_path), start_offset, rotated, last_sid, src_name))
+                pool_keys.append(source_file_key)
+            else:
+                serial_items.append((session, source_file_key, start_offset, rotated, last_sid))
+
+        # --- parallel parse (file-backed sessions of this source) ----------
+        if pool_jobs:
+            log.info(
+                "ingest_all: multi-source parallel parse source=%s files=%d jobs=%d",
+                src_name,
+                len(pool_jobs),
+                job_count,
+            )
+            with cf.ProcessPoolExecutor(max_workers=job_count) as pool:
+                # map preserves order so keys stay aligned
+                parsed_list = list(pool.map(_parse_worker, pool_jobs))
+            for source_file_key, parsed in zip(pool_keys, parsed_list, strict=True):
+                # Pool workers key source_file on path; multi-source may need
+                # the #session_id form for sqlite (not poolable) — for files
+                # path == key. Force the key we resolved for ingest_state.
+                if parsed.source_file != source_file_key:
+                    parsed.source_file = source_file_key
+                reports.append(
+                    _dedup_and_commit_parsed(
+                        conn,
+                        parsed,
+                        src_name=src_name,
+                        source_file_key=source_file_key,
+                        msg_seen=msg_seen,
+                        ext_seen=ext_seen,
+                        msg_cwd_idx=msg_cwd_idx,
+                        msg_ts_idx=msg_ts_idx,
+                        msg_text_idx=msg_text_idx,
+                        ext_cwd_idx=ext_cwd_idx,
+                        ext_ts_idx=ext_ts_idx,
+                        ext_text_idx=ext_text_idx,
+                    )
+                )
+
+        # --- serial parse (sqlite / non-file adapters) ---------------------
+        for session, source_file_key, start_offset, rotated, last_sid in serial_items:
+            session_path = Path(getattr(session, "path", source_file_key))
             try:
                 record_iter = src.iter_records(session, start_offset=start_offset)
             except Exception as exc:  # noqa: BLE001
@@ -1331,53 +1461,22 @@ def _ingest_all_multi_source(
                 reports.append(IngestReport(source_file_key, 0, 0, 1, 0, 0))
                 continue
 
-            # Cross-source dedup. Only meaningful when multiple sources
-            # are active; degenerate (single source) → seen dicts stay
-            # empty after this source's pass and the next iteration is
-            # the only opportunity to suppress.
-            if parsed.message_rows:
-                kept, msg_seen, suppressed = filter_dedup_rows(
-                    parsed.message_rows,
-                    source=src_name,
-                    cwd_idx=msg_cwd_idx,
-                    ts_idx=msg_ts_idx,
-                    text_idx=msg_text_idx,
-                    seen=msg_seen,
+            reports.append(
+                _dedup_and_commit_parsed(
+                    conn,
+                    parsed,
+                    src_name=src_name,
+                    source_file_key=source_file_key,
+                    msg_seen=msg_seen,
+                    ext_seen=ext_seen,
+                    msg_cwd_idx=msg_cwd_idx,
+                    msg_ts_idx=msg_ts_idx,
+                    msg_text_idx=msg_text_idx,
+                    ext_cwd_idx=ext_cwd_idx,
+                    ext_ts_idx=ext_ts_idx,
+                    ext_text_idx=ext_text_idx,
                 )
-                if suppressed:
-                    log.info(
-                        "ingest_all: dedup suppressed %d %s messages",
-                        suppressed,
-                        src_name,
-                    )
-                parsed.message_rows = kept
-            if parsed.extraction_rows:
-                kept_e, ext_seen, suppressed_e = filter_dedup_rows(
-                    parsed.extraction_rows,
-                    source=src_name,
-                    cwd_idx=ext_cwd_idx,
-                    ts_idx=ext_ts_idx,
-                    text_idx=ext_text_idx,
-                    seen=ext_seen,
-                )
-                if suppressed_e:
-                    log.info(
-                        "ingest_all: dedup suppressed %d %s extractions",
-                        suppressed_e,
-                        src_name,
-                    )
-                parsed.extraction_rows = kept_e
-
-            try:
-                reports.append(_commit_parsed(conn, parsed))
-            except Exception as exc:  # noqa: BLE001
-                log.warning(
-                    "ingest_all: commit for %s/%s failed: %s",
-                    src_name,
-                    source_file_key,
-                    exc,
-                )
-                reports.append(IngestReport(source_file_key, 0, 0, 1, 0, 0))
+            )
 
     return reports
 
@@ -1526,6 +1625,7 @@ def ingest_all(
                     active=active,
                     cwd_filter=cwd_filter,
                     force_full=force_full,
+                    jobs=jobs,
                 )
             )
         else:

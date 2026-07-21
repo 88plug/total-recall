@@ -125,8 +125,9 @@ def _backfill_vectors(db_path: str | Path, verbose: bool) -> None:
     "-j",
     type=int,
     default=None,
-    help="Worker processes for parsing JSONL. Default: min(cpu_count, 8). "
-    "Parsing is CPU-bound and parallelizes well; DB writes stay single-threaded.",
+    help="Worker processes for parsing sessions. Default: all logical CPUs "
+    "(os.cpu_count()) for max oneshot throughput. Parsing is CPU-bound; "
+    "DB writes stay single-threaded.",
 )
 @click.pass_context
 def rebuild_cmd(
@@ -178,12 +179,13 @@ def rebuild_cmd(
         # Recreate schema by opening a fresh connection.
         connect(db_path).close()
 
-    # Resolve --jobs: explicit wins, else min(cpu_count, 8) — a full rebuild is
-    # a from-scratch backfill, so default to parallel (mirrors `index --full`).
-    # Without this the ingest defaulted to jobs=1 and pinned a single core.
+    # Resolve --jobs: explicit wins, else ALL logical CPUs. Rebuild is a cold
+    # oneshot — pin the machine. (Incremental index defaults to 1.) Multi-source
+    # and claude_code paths both honor jobs (file-backed sessions parallelize;
+    # SQLite-backed adapters stay serial).
     jobs_resolved = jobs
     if jobs_resolved is None:
-        jobs_resolved = min(os.cpu_count() or 4, 8)
+        jobs_resolved = os.cpu_count() or 4
     job_count = max(1, int(jobs_resolved))
 
     if verbose:

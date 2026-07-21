@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.11] - 2026-07-21
+
+### Fixed — oneshot ingest actually uses the machine
+
+- **Multi-source path honors `-j` / `--jobs`.** File-backed sessions within each
+  source parse via `ProcessPoolExecutor` (same as legacy claude_code). SQLite
+  adapters stay serial. Previously multi-source was always single-core while
+  the CLI still logged `jobs=8`.
+- **Oneshot default = all logical CPUs** (`os.cpu_count()`), not
+  `min(cpu_count, 8)`. Applies to `rebuild` and `index --full`. Incremental
+  stays `jobs=1`. Pass `-j N` to throttle on tiny-RAM hosts.
+
 ## [2.3.10] - 2026-07-19
 
 ### Fixed — SessionStart + defaults tell the truth about product ollama

@@ -298,11 +298,20 @@ emitted via the same `additionalContext` channel as normal signpost content.
 
 ### `--jobs N` parallel ingest
 
-`total-recall index --jobs N` runs parse + extract across a `ProcessPoolExecutor`
-(`index/ingest.py`); only the main process owns the SQLite writer, fed by `as_completed()` from
-the pool. This sidesteps SQLite's single-writer constraint while still pinning all CPU-heavy
-work to workers. On the author's real corpus this dropped a full reindex from ~22s to ~9s.
-Default is 1 for incremental runs (overhead wins for small deltas) and `min(cpu_count, 8)` for full rebuilds.
+`total-recall index --jobs N` / `rebuild -j N` runs parse + extract across a
+`ProcessPoolExecutor` (`index/ingest.py`); only the main process owns the SQLite
+writer. This sidesteps SQLite's single-writer constraint while pinning CPU-heavy
+work to workers.
+
+| Mode | Default `jobs` |
+|------|----------------|
+| Incremental (`index` without `--full`) | `1` |
+| Oneshot (`rebuild`, `index --full`) | **`os.cpu_count()`** (all logical CPUs) |
+
+Multi-source ingest (Claude + Grok + Codex + …) uses the same pool for
+**file-backed** sessions within each source (priority order preserved for
+cross-source dedup). SQLite-backed adapters (OpenCode, Cursor) stay serial.
+Override with `-j N` on tiny-RAM boxes.
 
 ### Hook fire matrix
 
