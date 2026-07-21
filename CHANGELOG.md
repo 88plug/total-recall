@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.15] - 2026-07-21
+
+### Fixed — refuse silent L2 dense search
+
+- **Existing L2-only `vec_chunks` raise a rebuild error** on
+  `apply_vec_schema` / search / backfill (DDL lacks `distance_metric=cosine`).
+  No silent wrong-metric ranking. Drop + rebuild required (cannot ALTER).
+- Stamp missing `vec_meta.distance_metric=cosine` when cosine DDL is present.
+- **`rebuild --keep-file` also drops** `vec_chunks` / `chunk_embeddings` /
+  `vec_meta` so cosine pin can recreate (default rebuild unlinks the DB).
+  Loads **sqlite-vec before DROP** (`index.db.connect` does not); dense tables
+  drop first so a failed later DROP cannot leave L2 stranded after FTS wipe.
+- **`_ensure_dim_matches` stamps** missing `distance_metric=cosine` meta when
+  cosine DDL is already present (search/backfill path, not only apply).
+- Pin **`sqlite-vec>=0.1.9`** (PyPI latest). Product ollama still **0.32.1**
+  (GitHub `ollama/ollama` latest). `cosine_distance` field = sqlite-vec cosine
+  distance (`1 - cos_sim` on unit vectors).
+
 ## [2.3.14] - 2026-07-21
 
 ### Fixed — dense index uses cosine (Qwen card / sqlite-vec)

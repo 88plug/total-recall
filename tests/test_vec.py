@@ -371,6 +371,113 @@ class TestVecSchemaMetric:
         assert _read_meta(conn, "format") == "2"
         conn.close()
 
+    @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec required")
+    def test_apply_vec_schema_rejects_existing_l2_table(self) -> None:
+        """Pre-cosine L2 vec_chunks must not be reused silently."""
+        import sqlite_vec
+
+        from vec.store import apply_vec_schema
+
+        conn = sqlite3.connect(":memory:")
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        # Bare float column → L2 default (no distance_metric=cosine).
+        conn.execute("CREATE VIRTUAL TABLE vec_chunks USING vec0(embedding float[8])")
+        conn.executescript(
+            """
+            CREATE TABLE chunk_embeddings (
+                id INTEGER PRIMARY KEY,
+                extraction_id INTEGER,
+                chunk_text TEXT,
+                chunk_index INTEGER
+            );
+            CREATE TABLE vec_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO vec_meta(key, value) VALUES
+                ('format', '2'),
+                ('dim', '8'),
+                ('model', 'qwen3-embedding:0.6b'),
+                ('backend', 'ollama');
+            INSERT INTO chunk_embeddings(id, extraction_id, chunk_text, chunk_index)
+                VALUES (1, 1, 'seed', 0);
+            """
+        )
+        conn.commit()
+        with pytest.raises(RuntimeError, match="distance_metric=cosine"):
+            apply_vec_schema(conn, dim=8, model="qwen3-embedding:0.6b", backend="ollama")
+        conn.close()
+
+    @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec required")
+    def test_ensure_rejects_l2_table_on_search_path(self) -> None:
+        """_ensure_dim_matches (used by vec_search/backfill) also refuses L2."""
+        import sqlite_vec
+
+        from vec.store import _ensure_dim_matches, _load_sqlite_vec
+
+        conn = sqlite3.connect(":memory:")
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        conn.execute("CREATE VIRTUAL TABLE vec_chunks USING vec0(embedding float[8])")
+        conn.executescript(
+            """
+            CREATE TABLE chunk_embeddings (
+                id INTEGER PRIMARY KEY,
+                extraction_id INTEGER,
+                chunk_text TEXT,
+                chunk_index INTEGER
+            );
+            CREATE TABLE vec_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO vec_meta(key, value) VALUES
+                ('format', '2'),
+                ('dim', '8'),
+                ('model', 'fake'),
+                ('backend', 'fake');
+            INSERT INTO chunk_embeddings(id, extraction_id, chunk_text, chunk_index)
+                VALUES (1, 1, 'seed', 0);
+            """
+        )
+        conn.commit()
+        _load_sqlite_vec(conn)
+        with pytest.raises(RuntimeError, match="distance_metric=cosine"):
+            _ensure_dim_matches(conn, _FakeEmbedder())
+        conn.close()
+
+    @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec required")
+    def test_apply_vec_schema_stamps_missing_metric_meta_on_cosine_ddl(self) -> None:
+        """Cosine DDL without meta key gets distance_metric stamped, not rebuilt."""
+        import sqlite_vec
+
+        from vec.store import _read_meta, apply_vec_schema
+
+        conn = sqlite3.connect(":memory:")
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        conn.execute(
+            "CREATE VIRTUAL TABLE vec_chunks USING vec0("
+            "embedding float[8] distance_metric=cosine)"
+        )
+        conn.executescript(
+            """
+            CREATE TABLE chunk_embeddings (
+                id INTEGER PRIMARY KEY,
+                extraction_id INTEGER,
+                chunk_text TEXT,
+                chunk_index INTEGER
+            );
+            CREATE TABLE vec_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO vec_meta(key, value) VALUES
+                ('format', '2'),
+                ('dim', '8'),
+                ('model', 'qwen3-embedding:0.6b');
+            """
+        )
+        conn.commit()
+        apply_vec_schema(conn, dim=8, model="qwen3-embedding:0.6b", backend="ollama")
+        assert _read_meta(conn, "distance_metric") == "cosine"
+        conn.close()
+
 
 class TestIncrementalVecBackfill:
     @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec required")

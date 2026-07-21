@@ -69,6 +69,8 @@ class VecHit:
 
     extraction_id: int
     chunk_text: str
+    # sqlite-vec cosine metric: distance = 1 - cos_sim on unit vectors in [0, 2].
+    # Lower is better. Only valid when vec_chunks DDL has distance_metric=cosine.
     cosine_distance: float
     content: str
     cwd: str
@@ -147,6 +149,48 @@ def _parse_ts(raw: object) -> datetime:
 # ----------------------------------------------------------------------------
 
 
+def _vec_chunks_ddl(conn: sqlite3.Connection) -> str | None:
+    """Return CREATE sql for vec_chunks, or None if the table is absent."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_chunks'"
+    ).fetchone()
+    if row is None:
+        return None
+    return row[0] if row[0] is not None else ""
+
+
+def _ddl_has_cosine_metric(ddl: str) -> bool:
+    """True if vec0 DDL pins distance_metric=cosine (sqlite-vec column option)."""
+    import re
+
+    return re.search(r"distance_metric\s*=\s*cosine\b", ddl, re.IGNORECASE) is not None
+
+
+def _assert_cosine_metric_or_raise(conn: sqlite3.Connection) -> None:
+    """Refuse L2-default vec_chunks — Qwen card + product embeds use cosine.
+
+    sqlite-vec defaults float columns to L2. An index built without an explicit
+    ``distance_metric=cosine`` would rank (and return ``v.distance``) in L2
+    space while callers treat hits as cosine distance. Raise a rebuild error
+    instead of silent wrong-metric search. Cannot ALTER in place.
+    """
+    ddl = _vec_chunks_ddl(conn)
+    if ddl is None:
+        return
+    if not _ddl_has_cosine_metric(ddl):
+        raise RuntimeError(
+            "vec_chunks was created without distance_metric=cosine "
+            "(sqlite-vec default is L2). Dense recall would use the wrong "
+            "metric for Qwen3-Embedding (L2-normalized, cosine). "
+            f"{_REBUILD_HINT}"
+        )
+    meta = _read_meta(conn, "distance_metric")
+    if meta is not None and meta.strip().lower() != "cosine":
+        raise RuntimeError(
+            f"vec_meta distance_metric={meta!r} is not cosine. {_REBUILD_HINT}"
+        )
+
+
 def apply_vec_schema(
     conn: sqlite3.Connection,
     *,
@@ -158,6 +202,7 @@ def apply_vec_schema(
 
     `dim` / `model` / `backend` are recorded in `vec_meta` so query-time
     mismatches force a rebuild rather than silent wrong-space search.
+    Existing L2-only ``vec_chunks`` (no cosine in DDL) also raise — rebuild.
     """
     _load_sqlite_vec(conn)
 
@@ -189,6 +234,10 @@ def apply_vec_schema(
 
     if exists:
         _assert_format_v2_or_raise(conn)
+        _assert_cosine_metric_or_raise(conn)
+        # Cosine DDL present but meta key missing (partial stamp) — fill it.
+        if _read_meta(conn, "distance_metric") is None:
+            _write_meta(conn, "distance_metric", "cosine")
         stored = _read_meta(conn, "dim")
         if stored is not None and int(stored) != int(dim):
             raise RuntimeError(
@@ -263,8 +312,10 @@ def _assert_format_v2_or_raise(conn: sqlite3.Connection) -> None:
 
 
 def _ensure_dim_matches(conn: sqlite3.Connection, embedder: Embedder) -> int:
-    """Confirm embedder identity (format + model + dim) matches the on-disk index."""
+    """Confirm embedder identity (format + model + dim + cosine metric) matches disk."""
     _assert_format_v2_or_raise(conn)
+    # Defense in depth: search/backfill without re-apply_vec_schema still refuse L2.
+    _assert_cosine_metric_or_raise(conn)
     dim = embedder.dim()
     identity = embedder.identity()  # backend:model
     backend, _, model = identity.partition(":")
@@ -280,6 +331,7 @@ def _ensure_dim_matches(conn: sqlite3.Connection, embedder: Embedder) -> int:
         _write_meta(conn, "model", model or embedder.model)
         _write_meta(conn, "backend", backend or (embedder.backend or "unknown"))
         _write_meta(conn, "format", VEC_FORMAT)
+        _write_meta(conn, "distance_metric", "cosine")
         return dim
 
     if stored_fmt is not None and stored_fmt != VEC_FORMAT:
@@ -309,6 +361,9 @@ def _ensure_dim_matches(conn: sqlite3.Connection, embedder: Embedder) -> int:
         _write_meta(conn, "model", want_model)
     if stored_backend is None and backend:
         _write_meta(conn, "backend", backend)
+    # Cosine DDL already asserted above; stamp meta for ops that only read vec_meta.
+    if _read_meta(conn, "distance_metric") is None and _vec_chunks_ddl(conn) is not None:
+        _write_meta(conn, "distance_metric", "cosine")
     return dim
 
 
@@ -612,8 +667,8 @@ def vec_search(
 
     over = max(limit * 3, limit)
 
-    # KNN over the virtual table. We pull the chunk rowid + cosine_distance
-    # then join out to chunk_embeddings + extractions.
+    # KNN over the virtual table (cosine metric pin on DDL). v.distance is
+    # cosine distance (1 - cos_sim); alias keeps the field name accurate.
     sql = """
         SELECT
             ce.extraction_id,

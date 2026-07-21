@@ -115,6 +115,8 @@ was 0.40 under equal RRF vs 0.80 pure dense).
 - First dense setup
 - You change `TOTAL_RECALL_EMBED_MODEL`
 - Format v2 migration (pre-ollama / old indexes)
+- **L2-only `vec_chunks`** (created before the cosine pin): open raises
+  `distance_metric=cosine` rebuild error — drop/rebuild; cannot ALTER the metric
 
 ```bash
 total-recall rebuild --yes

@@ -694,9 +694,41 @@ def rebuild_cmd(
     )
 
 
+def _ensure_sqlite_vec_loaded_for_drop(conn: object) -> None:
+    """Load sqlite-vec when ``vec_chunks`` exists so DROP can call xDestroy.
+
+    ``index.db.connect`` does not load the extension. DROP TABLE on a vec0
+    virtual table without the module raises ``no such module: vec0`` and, with
+    autocommit connections, leaves a half-wiped DB if earlier DROPs already ran.
+    """
+    try:
+        row = conn.execute(  # type: ignore[attr-defined]
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='vec_chunks'"
+        ).fetchone()
+    except Exception:  # noqa: BLE001
+        return
+    if row is None:
+        return
+    try:
+        from vec.store import _load_sqlite_vec
+
+        _load_sqlite_vec(conn)  # type: ignore[arg-type]
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "Cannot DROP vec_chunks: sqlite-vec is not available on this "
+            f"connection ({exc}). Install total-recall (core dep sqlite-vec), "
+            "or rebuild without --keep-file to unlink the DB file."
+        ) from exc
+
+
 def _drop_all_tables(conn: object) -> None:
-    # Order matters: drop FTS shadow tables first, then triggers/indices, then base.
+    # Dense first (needs vec0 loaded), then FTS shadows/triggers, then base.
+    # vec0 cannot ALTER distance_metric / dim in place — wipe on keep-file rebuild.
+    _ensure_sqlite_vec_loaded_for_drop(conn)
     statements = [
+        "DROP TABLE IF EXISTS vec_chunks",
+        "DROP TABLE IF EXISTS chunk_embeddings",
+        "DROP TABLE IF EXISTS vec_meta",
         "DROP TRIGGER IF EXISTS messages_ai",
         "DROP TRIGGER IF EXISTS messages_ad",
         "DROP TRIGGER IF EXISTS messages_au",

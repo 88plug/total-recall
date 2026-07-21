@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "total-recall"
-version = "2.3.14"
+version = "2.3.15"
 description = "Cross-session, cross-CLI memory for AI coding assistants. Mines transcripts from 10 supported CLI clients; surfaces operator identity / decisions / bans / corrections via MCP."
 readme = "README.md"
 license = "LicenseRef-FSL-1.1-ALv2"
@@ -51,8 +51,8 @@ classifiers = [
 dependencies = [
     "mcp>=1.28.0",
     "click>=8",
-    "sqlite-vec>=0.1.6",
-    # Dense embeds: product-owned ollama (managed binary; no fastembed / ONNX).
+    "sqlite-vec>=0.1.9",  # distance_metric=cosine column option; PyPI latest 0.1.9
+    # Dense embeds: product-owned ollama binary (GitHub ollama/ollama latest 0.32.1).
 ]
 
 [project.optional-dependencies]
