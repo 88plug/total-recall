@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.13] - 2026-07-21
+
+### Fixed — rebuild actually shows work + hammers embed GPU
+
+- **`-v` enables log.INFO** on stderr so multi-source `jobs=N` / vec progress
+  lines appear during rebuild (previously only outer click banners).
+- **Vec backfill concurrent batches:** default 256 extractions/outer round,
+  sub-calls of 128 texts with **4 parallel** `/api/embed` HTTP requests
+  (`TOTAL_RECALL_EMBED_BATCH` / `_MAX_INPUT` / `_CONCURRENCY`).
+- **Product ollama serve defaults:** `OLLAMA_NUM_PARALLEL=16`,
+  `OLLAMA_MAX_QUEUE=8192` (was 4 / 2048 — starved GPU during backfill).
+- **`sqlite_vec.serialize_float32`** preferred for vec blob packing.
+
 ## [2.3.12] - 2026-07-21
 
 ### Fixed — multi-source keeps `jobs` worker processes alive

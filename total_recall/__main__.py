@@ -44,6 +44,18 @@ def cli(ctx: click.Context, db_path: str | None, verbose: bool, as_json: bool) -
     ctx.obj["db_path"] = db_path
     ctx.obj["verbose"] = verbose
     ctx.obj["json"] = as_json
+    # -v must actually surface log.info from ingest/vec (multi-source
+    # "parallel parse files=N jobs=N", backfill progress). Without this,
+    # rebuild only printed the outer click.echo lines and looked stuck.
+    if verbose:
+        import logging
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s %(name)s: %(message)s",
+            stream=sys.stderr,
+            force=True,
+        )
 
 
 # ---- subcommand registration ---------------------------------------------- #

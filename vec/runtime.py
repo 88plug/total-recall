@@ -294,8 +294,10 @@ def _product_serve_env(url: str | None = None) -> dict[str, str]:
     env.setdefault("OLLAMA_FLASH_ATTENTION", "1")
     env.setdefault("OLLAMA_KEEP_ALIVE", "-1")
     env.setdefault("OLLAMA_MAX_LOADED_MODELS", "4")
-    env.setdefault("OLLAMA_NUM_PARALLEL", "4")
-    env.setdefault("OLLAMA_MAX_QUEUE", "2048")
+    # Embed backfill issues concurrent /api/embed batches; 4 slots was the
+    # old chat-oriented default and under-filled a dedicated GPU0 embed.
+    env.setdefault("OLLAMA_NUM_PARALLEL", "16")
+    env.setdefault("OLLAMA_MAX_QUEUE", "8192")
     # MTP draft depth (MLX). CUDA/llama-server auto-uses built-in mtp.* tensors
     # on models like qwen3.5:2b (no extra env required, but harmless).
     env.setdefault("OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS", "4")

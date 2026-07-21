@@ -306,10 +306,63 @@ def _ensure_dim_matches(conn: sqlite3.Connection, embedder: Embedder) -> int:
 
 
 def _serialize_vector(vec: list[float]) -> bytes:
-    """Pack a float vector into the little-endian float32 blob sqlite-vec expects."""
+    """Pack a float vector into the little-endian float32 blob sqlite-vec expects.
+
+    Prefer ``sqlite_vec.serialize_float32`` (matches extension layout); fall
+    back to struct when the helper is absent.
+    """
+    try:
+        import sqlite_vec
+
+        ser = getattr(sqlite_vec, "serialize_float32", None)
+        if callable(ser):
+            return ser(vec)
+    except Exception:  # noqa: BLE001
+        pass
     import struct
 
     return struct.pack(f"<{len(vec)}f", *vec)
+
+
+def _embed_texts_chunked(
+    embedder: Embedder,
+    texts: list[str],
+    *,
+    max_per_call: int,
+    concurrency: int,
+) -> list[list[float]]:
+    """Embed ``texts`` in ordered sub-batches, optionally concurrent HTTP.
+
+    Ollama ``/api/embed`` accepts a list; larger batches raise throughput.
+    Concurrent sub-batches fill ``OLLAMA_NUM_PARALLEL`` slots on the GPU.
+    Results are concatenated in original order.
+    """
+    if not texts:
+        return []
+    max_per_call = max(1, int(max_per_call))
+    concurrency = max(1, int(concurrency))
+    chunks: list[list[str]] = [
+        texts[i : i + max_per_call] for i in range(0, len(texts), max_per_call)
+    ]
+    if concurrency == 1 or len(chunks) == 1:
+        out: list[list[float]] = []
+        for ch in chunks:
+            out.extend(embedder.embed(ch))
+        return out
+
+    import concurrent.futures as cf
+
+    results: list[list[list[float]] | None] = [None] * len(chunks)
+    with cf.ThreadPoolExecutor(max_workers=min(concurrency, len(chunks))) as pool:
+        futs = {pool.submit(embedder.embed, ch): i for i, ch in enumerate(chunks)}
+        for fut in cf.as_completed(futs):
+            i = futs[fut]
+            results[i] = fut.result()
+    out = []
+    for part in results:
+        assert part is not None
+        out.extend(part)
+    return out
 
 
 def upsert_extraction_embedding(
@@ -376,7 +429,7 @@ def _delete_existing(conn: sqlite3.Connection, extraction_id: int) -> None:
 def backfill_all(
     conn: sqlite3.Connection,
     embedder: Embedder | None = None,
-    batch_size: int = 128,
+    batch_size: int | None = None,
     only_kinds: list[str] | None = None,
 ) -> BackfillReport:
     """Embed every extraction in WT-4's `extractions` table that lacks chunks.
@@ -385,14 +438,33 @@ def backfill_all(
         conn: Open sqlite3 connection to the shared `index.db`.
         embedder: Embedder to use. If None, a default `Embedder()` is built —
             (ollama by default; see vec.embed).
-        batch_size: How many extractions to fetch + embed per round-trip.
+        batch_size: How many extractions to fetch per outer round. Default 256
+            (or ``TOTAL_RECALL_EMBED_BATCH``). Texts inside the batch are
+            embedded in concurrent sub-calls of ``TOTAL_RECALL_EMBED_MAX_INPUT``
+            (default 128) with ``TOTAL_RECALL_EMBED_CONCURRENCY`` (default 4)
+            parallel HTTP requests so product ollama's ``OLLAMA_NUM_PARALLEL``
+            slots stay busy.
         only_kinds: If set, restrict to these `extractions.kind` values
             (e.g. ['correction', 'decision']).
     """
+    import os
+
     from .embed import Embedder, chunk_for_embedding
 
     if embedder is None:
         embedder = Embedder()
+
+    if batch_size is None:
+        raw = (os.environ.get("TOTAL_RECALL_EMBED_BATCH") or "256").strip()
+        batch_size = int(raw) if raw.isdigit() and int(raw) > 0 else 256
+    batch_size = max(1, int(batch_size))
+
+    max_input_raw = (os.environ.get("TOTAL_RECALL_EMBED_MAX_INPUT") or "128").strip()
+    max_per_call = (
+        int(max_input_raw) if max_input_raw.isdigit() and int(max_input_raw) > 0 else 128
+    )
+    conc_raw = (os.environ.get("TOTAL_RECALL_EMBED_CONCURRENCY") or "4").strip()
+    concurrency = int(conc_raw) if conc_raw.isdigit() and int(conc_raw) > 0 else 4
 
     _load_sqlite_vec(conn)
     _ensure_dim_matches(conn, embedder)
@@ -411,11 +483,19 @@ def backfill_all(
         params,
     )
     rows = cur.fetchall()
+    total = len(rows)
+    log.info(
+        "vec backfill: pending extractions=%d batch=%d max_input=%d concurrency=%d",
+        total,
+        batch_size,
+        max_per_call,
+        concurrency,
+    )
 
-    for i in range(0, len(rows), batch_size):
+    for i in range(0, total, batch_size):
         batch = rows[i : i + batch_size]
-        # Build a flat list of (extraction_id, chunk_text) so we embed in one
-        # call — one HTTP batch to ollama is much happier with bigger batches.
+        # Build a flat list of (extraction_id, chunk_text) so we embed in
+        # batched concurrent HTTP calls to product ollama.
         flat: list[tuple[int, str]] = []
         skip_ids: set[int] = set()
         for ext_id, content in batch:
@@ -432,16 +512,30 @@ def backfill_all(
             continue
 
         try:
-            vectors = embedder.embed([t for _, t in flat])
+            vectors = _embed_texts_chunked(
+                embedder,
+                [t for _, t in flat],
+                max_per_call=max_per_call,
+                concurrency=concurrency,
+            )
         except Exception as exc:  # pragma: no cover - defensive
             msg = f"embed batch starting at row {i} failed: {exc!r}"
             log.warning(msg)
             report.errors.append(msg)
             continue
 
+        if len(vectors) != len(flat):
+            msg = (
+                f"embed batch at row {i}: got {len(vectors)} vectors "
+                f"for {len(flat)} texts"
+            )
+            log.warning(msg)
+            report.errors.append(msg)
+            continue
+
         # Group vectors back by extraction_id so chunk_index restarts per ext.
         per_ext: dict[int, list[tuple[str, list[float]]]] = {}
-        for (ext_id, chunk), vec in zip(flat, vectors, strict=False):
+        for (ext_id, chunk), vec in zip(flat, vectors, strict=True):
             per_ext.setdefault(ext_id, []).append((chunk, vec))
 
         cur2 = conn.cursor()
@@ -461,6 +555,14 @@ def backfill_all(
                 report.chunks_written += 1
             report.extractions_embedded += 1
         conn.commit()
+        log.info(
+            "vec backfill progress: %d/%d extractions seen, "
+            "embedded=%d chunks=%d",
+            min(i + batch_size, total),
+            total,
+            report.extractions_embedded,
+            report.chunks_written,
+        )
 
     return report
 

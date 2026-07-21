@@ -41,7 +41,8 @@ Product `ollama serve` (hooks + `vec.runtime`) always sets:
 - `OLLAMA_FLASH_ATTENTION=1`
 - `OLLAMA_MLX_MTP_MAX_DRAFT_TOKENS=4`
 - `OLLAMA_MLX_MTP_INITIAL_DRAFT_TOKENS=4`
-- `OLLAMA_KEEP_ALIVE=-1`, `OLLAMA_MAX_LOADED_MODELS=4`, `OLLAMA_NUM_PARALLEL=4`
+- `OLLAMA_KEEP_ALIVE=-1`, `OLLAMA_MAX_LOADED_MODELS=4`, `OLLAMA_NUM_PARALLEL=16`
+  (16 slots for concurrent embed batches during rebuild backfill)
 
 MLX runners honor the `OLLAMA_MLX_MTP_*` knobs. CUDA runners use built-in heads
 on Qwen3.5 (no separate draft model required).

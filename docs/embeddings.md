@@ -82,6 +82,9 @@ instruct on **queries only**, documents raw, English task text.
 | `TOTAL_RECALL_LLM_MODEL` | `qwen3.5:2b` | Chat refine tag |
 | `TOTAL_RECALL_LLM_PROVIDER` | `auto` | `none` disables **chat only** |
 | `TOTAL_RECALL_VEC` | on | `0` skips dense (and embed pull) |
+| `TOTAL_RECALL_EMBED_BATCH` | `256` | Extractions per outer backfill round |
+| `TOTAL_RECALL_EMBED_MAX_INPUT` | `128` | Max texts per `/api/embed` call |
+| `TOTAL_RECALL_EMBED_CONCURRENCY` | `4` | Parallel embed HTTP calls (fills `OLLAMA_NUM_PARALLEL`) |
 | `RECALL_OLLAMA` | (unset) | Force a specific ollama binary |
 
 There is **no** `TOTAL_RECALL_EMBED_PROVIDER=fastembed`.
