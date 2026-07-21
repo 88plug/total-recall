@@ -54,6 +54,12 @@ total-recall rebuild --yes
 Card rules (Qwen3-Embedding-0.6B): **last-token pool**, **L2 normalize**, **cosine**,
 instruct on **queries only**, documents raw, English task text.
 
+**sqlite-vec index metric:** `vec_chunks` is created as
+`vec0(embedding float[DIM] distance_metric=cosine)` (sqlite-vec **0.1.9** column
+option). Default vec0 float metric is **L2** — wrong for the card without an
+explicit cosine pin. After L2-normalize, ranks are similar, but cosine is the
+correct distance space (and required for non-unit edge cases).
+
 - **Queries** (search) — product **domain** instruct (not generic web search).
   Card template + session-memory task (live A/B winner vs long laundry-list):
 

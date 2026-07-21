@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.14] - 2026-07-21
+
+### Fixed — dense index uses cosine (Qwen card / sqlite-vec)
+
+- **`vec0(... distance_metric=cosine)`** on create. sqlite-vec 0.1.9 defaults
+  float columns to **L2**; card + our L2-normalized ollama embeds want
+  **cosine**. Meta key `distance_metric=cosine` stamped for rebuild detection.
+- Grounded against installed sqlite-vec **0.1.9** (= PyPI latest), ollama
+  **0.32.1** (= GitHub latest), HF Qwen3-Embedding-0.6B card.
+
 ## [2.3.13] - 2026-07-21
 
 ### Fixed — rebuild actually shows work + hammers embed GPU

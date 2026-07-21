@@ -354,6 +354,24 @@ class _FakeEmbedder:
         return [[float(len(t) % 7)] + [0.1] * 7 for t in texts]
 
 
+class TestVecSchemaMetric:
+    @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec required")
+    def test_apply_vec_schema_pins_cosine_distance_metric(self) -> None:
+        """sqlite-vec float default is L2; Qwen card needs cosine (0.1.9)."""
+        from vec.store import _read_meta, apply_vec_schema
+
+        conn = sqlite3.connect(":memory:")
+        apply_vec_schema(conn, dim=8, model="qwen3-embedding:0.6b", backend="ollama")
+        ddl = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name='vec_chunks'"
+        ).fetchone()[0]
+        assert "distance_metric=cosine" in ddl
+        assert _read_meta(conn, "distance_metric") == "cosine"
+        assert _read_meta(conn, "dim") == "8"
+        assert _read_meta(conn, "format") == "2"
+        conn.close()
+
+
 class TestIncrementalVecBackfill:
     @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec required")
     def test_backfill_only_touches_new_extractions(self, tmp_path: Path) -> None:

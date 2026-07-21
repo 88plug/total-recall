@@ -11,8 +11,11 @@ Schema (added by `apply_vec_schema`):
   );
   CREATE INDEX idx_chunk_embeddings_extraction ON chunk_embeddings(extraction_id);
 
-  CREATE VIRTUAL TABLE vec_chunks USING vec0(embedding float[<DIM>]);
+  CREATE VIRTUAL TABLE vec_chunks USING vec0(
+      embedding float[<DIM>] distance_metric=cosine
+  );
   -- rowid in vec_chunks matches chunk_embeddings.id
+  -- distance_metric=cosine (sqlite-vec ≥0.1.x column option; default is L2)
 
   CREATE TABLE vec_meta (
       key TEXT PRIMARY KEY,
@@ -200,9 +203,18 @@ def apply_vec_schema(
                     f"{model!r}. {_REBUILD_HINT}"
                 )
     else:
-        cur.execute(f"CREATE VIRTUAL TABLE vec_chunks USING vec0(embedding float[{int(dim)}])")
+        # Qwen3-Embedding card: cosine similarity after L2-normalize.
+        # sqlite-vec 0.1.x defaults float columns to L2; pin cosine explicitly
+        # (distance_metric is a column option — not a table option).
+        # With unit vectors L2 rank ≈ cosine rank, but distance values and
+        # non-unit edge cases differ — always store/search in cosine space.
+        cur.execute(
+            f"CREATE VIRTUAL TABLE vec_chunks USING vec0("
+            f"embedding float[{int(dim)}] distance_metric=cosine)"
+        )
         _write_meta(conn, "dim", str(int(dim)))
         _write_meta(conn, "format", VEC_FORMAT)
+        _write_meta(conn, "distance_metric", "cosine")
         if model is not None:
             _write_meta(conn, "model", model)
         if backend is not None:
