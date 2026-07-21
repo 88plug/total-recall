@@ -1393,38 +1393,68 @@ def _ingest_all_multi_source(
                 serial_items.append((session, source_file_key, start_offset, rotated, last_sid))
 
         # --- parallel parse (file-backed sessions of this source) ----------
+        # Match the legacy claude_code path: submit + as_completed so up to
+        # job_count worker *processes* stay busy while main commits each
+        # finished parse (SQLite single-writer). pool.map() was wrong here —
+        # it waited for ALL parses before ANY commit, so after the parse
+        # burst the process tree showed 1 main thread and zero workers for
+        # the long SQLite phase (jobs=N looked like a lie).
         if pool_jobs:
+            workers = min(job_count, len(pool_jobs))
             log.info(
                 "ingest_all: multi-source parallel parse source=%s files=%d jobs=%d",
                 src_name,
                 len(pool_jobs),
-                job_count,
+                workers,
             )
-            with cf.ProcessPoolExecutor(max_workers=job_count) as pool:
-                # map preserves order so keys stay aligned
-                parsed_list = list(pool.map(_parse_worker, pool_jobs))
-            for source_file_key, parsed in zip(pool_keys, parsed_list, strict=True):
-                # Pool workers key source_file on path; multi-source may need
-                # the #session_id form for sqlite (not poolable) — for files
-                # path == key. Force the key we resolved for ingest_state.
-                if parsed.source_file != source_file_key:
-                    parsed.source_file = source_file_key
-                reports.append(
-                    _dedup_and_commit_parsed(
-                        conn,
-                        parsed,
-                        src_name=src_name,
-                        source_file_key=source_file_key,
-                        msg_seen=msg_seen,
-                        ext_seen=ext_seen,
-                        msg_cwd_idx=msg_cwd_idx,
-                        msg_ts_idx=msg_ts_idx,
-                        msg_text_idx=msg_text_idx,
-                        ext_cwd_idx=ext_cwd_idx,
-                        ext_ts_idx=ext_ts_idx,
-                        ext_text_idx=ext_text_idx,
-                    )
-                )
+            with cf.ProcessPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(_parse_worker, args): key
+                    for args, key in zip(pool_jobs, pool_keys, strict=True)
+                }
+                for fut in cf.as_completed(futures):
+                    source_file_key = futures[fut]
+                    try:
+                        parsed = fut.result()
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning(
+                            "ingest_all: worker for %s/%s failed: %s",
+                            src_name,
+                            source_file_key,
+                            exc,
+                        )
+                        reports.append(IngestReport(source_file_key, 0, 0, 1, 0, 0))
+                        continue
+                    # Pool workers key source_file on path; multi-source may
+                    # need the #session_id form for sqlite (not poolable) —
+                    # for files path == key. Force the key we resolved.
+                    if parsed.source_file != source_file_key:
+                        parsed.source_file = source_file_key
+                    try:
+                        reports.append(
+                            _dedup_and_commit_parsed(
+                                conn,
+                                parsed,
+                                src_name=src_name,
+                                source_file_key=source_file_key,
+                                msg_seen=msg_seen,
+                                ext_seen=ext_seen,
+                                msg_cwd_idx=msg_cwd_idx,
+                                msg_ts_idx=msg_ts_idx,
+                                msg_text_idx=msg_text_idx,
+                                ext_cwd_idx=ext_cwd_idx,
+                                ext_ts_idx=ext_ts_idx,
+                                ext_text_idx=ext_text_idx,
+                            )
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning(
+                            "ingest_all: commit for %s/%s failed: %s",
+                            src_name,
+                            source_file_key,
+                            exc,
+                        )
+                        reports.append(IngestReport(source_file_key, 0, 0, 1, 0, 0))
 
         # --- serial parse (sqlite / non-file adapters) ---------------------
         for session, source_file_key, start_offset, rotated, last_sid in serial_items:

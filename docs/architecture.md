@@ -299,9 +299,11 @@ emitted via the same `additionalContext` channel as normal signpost content.
 ### `--jobs N` parallel ingest
 
 `total-recall index --jobs N` / `rebuild -j N` runs parse + extract across a
-`ProcessPoolExecutor` (`index/ingest.py`); only the main process owns the SQLite
-writer. This sidesteps SQLite's single-writer constraint while pinning CPU-heavy
-work to workers.
+`ProcessPoolExecutor` (`index/ingest.py`) — **processes, not threads**
+(Python `concurrent.futures.ProcessPoolExecutor`; `max_workers=N`). Only the
+main process owns the SQLite writer (SQLite single-writer / default
+serialized mode). Workers stay busy via `submit` + `as_completed` so parse
+overlaps with commit; the long tail is still main-process DB writes.
 
 | Mode | Default `jobs` |
 |------|----------------|

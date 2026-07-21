@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.12] - 2026-07-21
+
+### Fixed — multi-source keeps `jobs` worker processes alive
+
+- **Multi-source parallel path uses `submit` + `as_completed`** (same as legacy
+  claude_code), not `pool.map` then serial commit. Parse and SQLite commit
+  overlap: up to `jobs` **worker processes** stay busy while main writes.
+  `jobs` is process count (`ProcessPoolExecutor.max_workers`), not OS threads
+  on the main PID.
+- Caps `max_workers` at `min(jobs, file_count)` so small sources don't overspawn.
+
 ## [2.3.11] - 2026-07-21
 
 ### Fixed — oneshot ingest actually uses the machine
