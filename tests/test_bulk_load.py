@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from index.db import (
     apply_bulk_load_pragmas,
     connect,
@@ -300,14 +298,7 @@ def test_voice_cold_path_covers_bulk_skip(tmp_path: Path) -> None:
         jobs=1,
         sources=["claude_code"],
     )
-    conn = connect(db)
-    try:
-        before = get_voice(conn)
-        # Incremental path skipped — empty or missing sample is expected.
-        assert int(before.get("sample_size") or 0) == 0 or before == {} or True
-    finally:
-        conn.close()
-
+    # bulk_load skips per-file voice; cold path below must fill sample_size.
     def recs():
         for p in (tmp_path / "projects").glob("*/*.jsonl"):
             for _o, r in iter_records(p, start_offset=0):
