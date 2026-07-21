@@ -268,14 +268,18 @@ _FTS_TRIGGER_NAMES: tuple[str, ...] = (
 
 
 def apply_bulk_load_pragmas(conn: sqlite3.Connection) -> None:
-    """Maximize write throughput for a restartable oneshot (rebuild).
+    """Raise write throughput for rebuild without weakening durability.
 
-    Source: sqlite.org PRAGMA docs — ``synchronous=OFF`` is fastest and
-    unsafe on crash (OK: rebuild re-runs). Larger ``cache_size`` / ``mmap``
-    keep page churn off disk during multi-hundred-MB loads. Default
-    ``cache_size`` is only ~2 MiB (``-2000``), which starves a rebuild.
+    Source: sqlite.org ``PRAGMA synchronous`` — ``OFF`` can corrupt on OS
+    crash/power loss even after commit; product quality forbids that.
+    We keep ``synchronous=NORMAL`` (WAL-safe, same as :func:`connect`).
+
+    Larger ``cache_size`` / ``mmap_size`` / ``temp_store=MEMORY`` only change
+    page residency — not correctness. Default ``cache_size`` is ~2 MiB
+    (``-2000``), which starves multi-hundred-MB rebuilds.
     """
-    conn.execute("PRAGMA synchronous = OFF")
+    # Do NOT set synchronous=OFF. Quality > speed.
+    conn.execute("PRAGMA synchronous = NORMAL")
     # Negative cache_size is kibibytes of page cache (~256 MiB).
     conn.execute("PRAGMA cache_size = -262144")
     conn.execute("PRAGMA mmap_size = 268435456")
@@ -284,7 +288,7 @@ def apply_bulk_load_pragmas(conn: sqlite3.Connection) -> None:
 
 
 def restore_default_pragmas(conn: sqlite3.Connection) -> None:
-    """Restore post-bulk defaults used by :func:`connect`."""
+    """Restore post-bulk page-cache defaults used by :func:`connect`."""
     conn.execute("PRAGMA synchronous = NORMAL")
     conn.execute("PRAGMA cache_size = -2000")
     conn.execute("PRAGMA mmap_size = 0")
@@ -304,18 +308,108 @@ def recreate_fts_sync_triggers(conn: sqlite3.Connection) -> None:
         conn.execute(sql)
 
 
-def rebuild_fts_indexes(conn: sqlite3.Connection) -> None:
+def _fts_match_probe(
+    conn: sqlite3.Connection,
+    *,
+    fts: str,
+    base: str,
+    text_col: str,
+    sample: int = 32,
+) -> int:
+    """Return how many sample content rows are MATCH-findable in ``fts``.
+
+    External-content FTS5: ``SELECT COUNT(*) FROM fts`` is *not* a reliable
+    index-size signal (it can track the content table). Real quality is
+    whether token MATCH finds the row after rebuild.
+    """
+    import re
+
+    rows = conn.execute(
+        f"SELECT id, {text_col} FROM {base} "
+        f"WHERE {text_col} IS NOT NULL AND length(trim({text_col})) > 8 "
+        f"ORDER BY id DESC LIMIT ?",
+        (sample,),
+    ).fetchall()
+    hits = 0
+    for rowid, text in rows:
+        tokens = re.findall(r"[A-Za-z]{4,}", text or "")
+        # Prefer longer tokens (less stemming surprise with porter).
+        tokens = sorted(set(tokens), key=len, reverse=True)
+        found = False
+        for tok in tokens[:6]:
+            try:
+                n = conn.execute(
+                    f"SELECT 1 FROM {fts} WHERE {fts} MATCH ? AND rowid = ? LIMIT 1",
+                    (tok, rowid),
+                ).fetchone()
+            except sqlite3.DatabaseError:
+                continue
+            if n:
+                found = True
+                break
+        if found:
+            hits += 1
+    return hits
+
+
+def rebuild_fts_indexes(
+    conn: sqlite3.Connection,
+    *,
+    verify: bool = True,
+) -> dict[str, dict[str, int]]:
     """Rebuild external-content FTS5 tables from base tables.
 
-    FTS5 command: ``INSERT INTO fts(fts) VALUES('rebuild')`` (sqlite.org/fts5).
-    Safe when tables are missing (fresh / partial schema).
+    FTS5 special INSERTs (sqlite.org/fts5 §6 Special INSERT Commands):
+
+    * ``INSERT INTO fts(fts) VALUES('rebuild')`` — reconstruct index from
+      the external content table (required after deferred triggers).
+    * ``INSERT INTO fts(fts) VALUES('integrity-check')`` — raise if the
+      FTS index disagrees with content for rows it *does* hold.
+
+    When ``verify=True`` (default), also run MATCH probes on sample content
+    rows. ``COUNT(*)`` on external-content FTS is **not** used (unreliable
+    vs the content table; empty index can still report content-sized counts).
+    Zero hits on non-empty sample content raises — never ship unsearchable FTS.
+
+    Returns per-table stats for logging/tests.
     """
-    for table in ("messages_fts", "extractions_fts"):
+    pairs = (
+        ("messages_fts", "messages", "text"),
+        ("extractions_fts", "extractions", "content"),
+    )
+    out: dict[str, dict[str, int]] = {}
+    for fts, base, text_col in pairs:
         try:
-            conn.execute(f"INSERT INTO {table}({table}) VALUES('rebuild')")
+            conn.execute(f"INSERT INTO {fts}({fts}) VALUES('rebuild')")
         except sqlite3.DatabaseError:
             # Table may not exist on a minimal/test schema.
-            pass
+            continue
+        if not verify:
+            out[fts] = {"verified": 0}
+            continue
+        try:
+            conn.execute(f"INSERT INTO {fts}({fts}) VALUES('integrity-check')")
+        except sqlite3.DatabaseError as exc:
+            raise RuntimeError(
+                f"FTS integrity-check failed for {fts} after rebuild: {exc}"
+            ) from exc
+        try:
+            n_base = int(
+                conn.execute(
+                    f"SELECT COUNT(*) FROM {base} "
+                    f"WHERE {text_col} IS NOT NULL AND length(trim({text_col})) > 8"
+                ).fetchone()[0]
+            )
+        except sqlite3.DatabaseError:
+            n_base = 0
+        hits = _fts_match_probe(conn, fts=fts, base=base, text_col=text_col)
+        if n_base > 0 and hits == 0:
+            raise RuntimeError(
+                f"FTS MATCH probe failed for {fts}: 0/{min(n_base, 32)} sample "
+                f"content rows searchable after rebuild (search quality compromised)"
+            )
+        out[fts] = {"content_with_text": n_base, "match_probe_hits": hits}
+    return out
 
 
 _CURRENT_SCHEMA_VERSION = "5"

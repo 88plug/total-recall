@@ -2,22 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.17] - 2026-07-21
+
+### Fixed — bulk_load quality gates (never compromise search/profiles)
+
+Docs-grounded hardening of 2.3.16 bulk_load (sqlite.org FTS5 + PRAGMA):
+
+- **`synchronous` stays NORMAL** — never OFF. Official docs: OFF can corrupt
+  on OS crash/power loss even after commit; product quality forbids that.
+  Throughput still gains from large `cache_size` / `mmap` / `temp_store`.
+- **FTS rebuild is a hard gate:** `INSERT … VALUES('rebuild')` then
+  `integrity-check`, then **MATCH probes** on sample content rows. (External-
+  content FTS `COUNT(*)` is unreliable vs the content table — not used.)
+  Zero searchable samples raises — no silent unsearchable index.
+- **Voice cold consolidation on rebuild** — bulk skips per-file incremental
+  profiles; operator/workflow/implicit/satisfaction/ontology were already
+  cold-rebuilt, but **voice was not**. Rebuild now runs full-corpus
+  `measure_voice` + persist so voice quality matches non-bulk.
+
 ## [2.3.16] - 2026-07-21
 
 ### Performance — rebuild bulk_load writer path
 
-Rebuild was single-writer bound (~97% main CPU, workers idle). Onesots now:
+Rebuild was single-writer bound (~97% main CPU, workers idle). Oneshots now:
 
 - **`ingest_all(bulk_load=True)`** from `rebuild` — write-throughput PRAGMAs
-  (`synchronous=OFF`, `cache_size=-262144` ~256 MiB, `mmap_size`, `temp_store=MEMORY`,
-  raised `wal_autocheckpoint`), restored after ingest.
-- **Defer FTS5 live-sync triggers** during bulk insert; `INSERT … VALUES('rebuild')`
-  once at end, then recreate triggers (sqlite.org/fts5 external-content rebuild).
-- **Skip per-file incremental profiles** on bulk (cold consolidation in rebuild
-  already re-derives them once over the full corpus).
+  (large cache/mmap/temp_store; sync stays NORMAL as of 2.3.17), FTS trigger
+  defer + rebuild, skip per-file profiles → cold consolidation.
 - **PK-range new-row counts** (`id > MAX(id)` before insert) replace full-table
-  / per-file `COUNT(*)` for messages / extractions / turns / compactions
-  (FTS triggers inflate `total_changes`; full-table COUNT grows with the DB).
+  `COUNT(*)` for messages / extractions / turns / compactions.
 
 Incremental `index` / Stop hooks unchanged (`bulk_load` default off).
 

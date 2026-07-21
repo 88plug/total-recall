@@ -5,7 +5,7 @@
     "url": "https://github.com/88plug/total-recall.git"
   },
   "description": "Cross-session, cross-CLI memory for Claude Code and other AI coding assistants. Mines the operator's transcripts from Claude Code, OpenCode, Codex CLI, Gemini CLI, Cursor, Continue, Cline, Aider, Goose, Grok. Surfaces identity / decisions / bans / corrections / workflow / implicit preferences / satisfaction via 26 MCP tools + 6 hooks + 15 slash commands + 3 skills. Hybrid FTS5 + ollama dense (qwen3-embedding:0.6b, default-on; TOTAL_RECALL_EMBED_MODEL unset is correct). Product ollama auto-provisions refine (qwen3.5:2b; TOTAL_RECALL_LLM_PROVIDER=none to disable). The operator becomes the source of truth; the model stops re-asking what they already told it.",
-  "version": "2.3.16",
+  "version": "2.3.17",
   "category": "productivity",
   "tags": [
     "type:plugin",

@@ -312,9 +312,55 @@ def rebuild_cmd(
     # Consolidation for the additional aggregated profiles. Same rationale —
     # per-file incremental can drift; the full-corpus pass is authoritative.
     # Each is wrapped independently so one failure doesn't block the others.
+    #
+    # bulk_load skips per-file incremental profiles during ingest — every
+    # profile that path used to update MUST be rebuilt here or quality
+    # regresses. Covered: operator (above), workflow, implicit, satisfaction,
+    # ontology, **voice** (was missing until 2.3.17).
 
     _has_data = (_using_records and all_records) or bool(all_jsonl)
     if _has_data:
+        # Voice profile — full-corpus measure (bulk_load skips incremental).
+        try:
+            from extractors.voice_profile import (  # type: ignore[import-not-found]
+                measure_voice,
+            )
+            from index.voice import persist_voice_profile  # type: ignore[import-not-found]
+            from lib.jsonl_walker import iter_records  # type: ignore[import-not-found]
+
+            if _using_records and all_records:
+                voice = measure_voice(all_records)
+            else:
+                # Path-glob: stream every user turn like the incremental path.
+                def _voice_records():
+                    for p in all_jsonl:
+                        try:
+                            for _off, rec in iter_records(p, start_offset=0):
+                                yield rec
+                        except Exception:  # noqa: BLE001
+                            continue
+
+                voice = measure_voice(_voice_records())
+            if voice and int(voice.get("sample_size") or 0) > 0:
+                conn = connect(db_path)
+                try:
+                    persist_voice_profile(
+                        conn,
+                        voice,
+                        sample_size=voice.get("sample_size"),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+                if verbose:
+                    click.echo(
+                        f"[rebuild] consolidated voice_profile "
+                        f"(sample_size={voice.get('sample_size')})",
+                        err=True,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"total-recall: voice consolidation skipped ({exc})", err=True)
+
         # Workflow profile.
         try:
             from extractors.workflow import (  # type: ignore[import-not-found]

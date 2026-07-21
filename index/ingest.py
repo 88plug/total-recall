@@ -1648,7 +1648,8 @@ def ingest_all(
             bulk_active = True
             log.info(
                 "ingest_all: bulk_load on "
-                "(sync=OFF, large cache, FTS triggers deferred, profiles deferred)"
+                "(sync=NORMAL, large cache/mmap, FTS triggers deferred, "
+                "per-file profiles deferred → cold consolidation)"
             )
 
         # ----- Multi-source path -------------------------------------------
@@ -1790,7 +1791,9 @@ def ingest_all(
             )
 
             log.info("ingest_all: bulk_load finishing — rebuild FTS + restore PRAGMAs")
-            rebuild_fts_indexes(conn)
+            # verify=True: integrity-check + row-count parity (quality gate).
+            fts_stats = rebuild_fts_indexes(conn, verify=True)
+            log.info("ingest_all: FTS rebuild verified %s", fts_stats)
             recreate_fts_sync_triggers(conn)
             restore_default_pragmas(conn)
             bulk_active = False
@@ -1821,18 +1824,32 @@ def ingest_all(
             log.debug("ingest_all: wal_checkpoint failed: %s", exc)
     finally:
         if bulk_active and conn is not None:
-            # Crash mid-bulk: still restore triggers/PRAGMAs so the DB is
-            # usable for incremental hooks even if FTS is incomplete.
-            with contextlib.suppress(Exception):
+            # Mid-bulk abort: still try to restore a correct FTS + triggers
+            # so hooks don't see a permanently broken index. verify=True —
+            # if parity fails we log; do not suppress quality errors silently.
+            try:
                 from index.db import (
                     rebuild_fts_indexes,
                     recreate_fts_sync_triggers,
                     restore_default_pragmas,
                 )
 
-                rebuild_fts_indexes(conn)
+                rebuild_fts_indexes(conn, verify=True)
                 recreate_fts_sync_triggers(conn)
                 restore_default_pragmas(conn)
+            except Exception as exc:  # noqa: BLE001
+                log.error(
+                    "ingest_all: bulk_load cleanup failed (FTS/triggers may be incomplete): %s",
+                    exc,
+                )
+                with contextlib.suppress(Exception):
+                    from index.db import (
+                        recreate_fts_sync_triggers,
+                        restore_default_pragmas,
+                    )
+
+                    recreate_fts_sync_triggers(conn)
+                    restore_default_pragmas(conn)
         if owns_conn and conn is not None:
             with contextlib.suppress(Exception):
                 conn.close()
