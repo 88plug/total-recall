@@ -22,7 +22,7 @@ jobs:
         python: ["3.10", "3.11", "3.12"]
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-python@v6.3.0
         with:
@@ -77,7 +77,7 @@ jobs:
   packaging:
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-python@v6.3.0
         with:
