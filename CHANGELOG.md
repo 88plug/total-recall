@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.18] - 2026-07-24
+
+### Fixed — bound MCP responses so heavy load can't crash the stdio pipe
+
+Under heavy recall usage the MCP could disconnect mid-session (the whole Claude
+Code session lost the tool). Root cause: `search_messages` returned each message's
+full `text` verbatim via `_row_to_hit`; a single ~172k-char tool-result blob (times
+`limit` rows) produced a JSON-RPC response large enough to break the stdio pipe.
+
+- **`_row_to_hit`** caps bulky free-text fields (`text`/`content`/`value`/`preview`/
+  `body`/`snippet`) at 1500 chars with `<key>_truncated` + `<key>_full_chars` markers
+  — one chokepoint bounds every recall/message tool.
+- **`search_messages`** clamps `limit` to ≤50 and applies a 256 KB total-response
+  backstop that trims rows and appends a non-silent `_meta`.
+- Internal Python callers bypass `_row_to_hit`, so they keep full text — no logic change.
+- New `tests/test_mcp_payload_bounds.py` pins the bounds.
+
 ## [2.3.17] - 2026-07-21
 
 ### Fixed — bulk_load quality gates (never compromise search/profiles)

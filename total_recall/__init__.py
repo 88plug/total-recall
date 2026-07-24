@@ -12,6 +12,6 @@ optional dependencies are missing.
 
 from __future__ import annotations
 
-__version__ = "2.3.17"
+__version__ = "2.3.18"
 
 __all__ = ["__version__"]
