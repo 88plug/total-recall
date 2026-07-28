@@ -49,7 +49,11 @@ classifiers = [
     "Environment :: Plugins",
 ]
 dependencies = [
-    "mcp>=1.28.0",
+    # Upper bound: mcp 2.0.0 (2026-07) drops `mcp.server.fastmcp`, which
+    # mcp_server/server.py imports. Unbounded, CI resolves 2.0.0 and every test
+    # module that touches the server fails at import. Lift once the FastMCP
+    # entrypoint is ported to the 2.x API. Latest satisfying release: 1.29.0.
+    "mcp>=1.28.0,<2",
     "click>=8",
     "sqlite-vec>=0.1.9",  # distance_metric=cosine column option; PyPI latest 0.1.9
     # Dense embeds: product-owned ollama binary (GitHub ollama/ollama latest 0.32.1).
