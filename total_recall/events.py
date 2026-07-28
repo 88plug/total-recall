@@ -27,10 +27,27 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-_DATA_ROOT = os.environ.get("GROK_PLUGIN_DATA") or os.environ.get(
-    "CLAUDE_PLUGIN_DATA", "~/.local/share/total-recall"
-)
-DEFAULT_EVENTS_PATH = Path(_DATA_ROOT).expanduser() / "total-recall" / "logs" / "events.jsonl"
+
+def _default_events_path() -> Path:
+    """``<data-root>/logs/events.jsonl``, matching ``index.db.resolve_data_dir()``.
+
+    Deriving the path from ``$CLAUDE_PLUGIN_DATA`` alone splits the stream: with
+    no harness env it lands somewhere other than the index that
+    ``resolve_data_dir()`` picked, and the XDG default (already ending in
+    ``total-recall``) would gain a second ``total-recall`` segment.
+    """
+    try:
+        from index.db import resolve_data_dir  # type: ignore[import-not-found]
+
+        return resolve_data_dir() / "logs" / "events.jsonl"
+    except Exception:  # noqa: BLE001 — observability must never break the host
+        root = os.environ.get("GROK_PLUGIN_DATA") or os.environ.get("CLAUDE_PLUGIN_DATA")
+        if root:
+            return Path(root).expanduser() / "total-recall" / "logs" / "events.jsonl"
+        return Path("~/.local/share/total-recall").expanduser() / "logs" / "events.jsonl"
+
+
+DEFAULT_EVENTS_PATH = _default_events_path()
 
 MAX_SIZE_BYTES = 10 * 1024 * 1024  # 10 MiB
 KEEP_ROTATIONS = 3

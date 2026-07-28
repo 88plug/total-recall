@@ -108,12 +108,15 @@ recall::emit_context() {
 }
 
 # recall::log_json <event_name> [key=value ...]
-# Emits one NDJSON line to ${CLAUDE_PLUGIN_DATA}/total-recall/logs/events.jsonl
-# (the same file total_recall.events writes to from Python — MA4).
+# Emits one NDJSON line to <data-root>/logs/events.jsonl (the same file
+# total_recall.events writes to from Python — MA4). Uses $RECALL_LOG_DIR so the
+# stream always lands beside the index recall::data_root resolved; deriving a
+# second path here would split events across two dirs whenever the harness has
+# not exported CLAUDE_PLUGIN_DATA.
 # Best-effort: any failure is silently swallowed.
 recall::log_json() {
   local event="$1"; shift
-  local pdata="${GROK_PLUGIN_DATA:-${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data}}"; logdir="${pdata%/}/total-recall/logs"
+  local logdir="${RECALL_LOG_DIR:-$(recall::data_root)/logs}"
   local logfile="$logdir/events.jsonl"
   mkdir -p "$logdir" 2>/dev/null || return 0
   local ts; ts=$(date -u -Iseconds 2>/dev/null || date -u +%FT%TZ)
