@@ -452,3 +452,127 @@ def test_registered_in_sources_list_if_base_present() -> None:
     except Exception:
         pytest.skip("lib.sources.base not yet built by XW1")
     assert OpenCodeSource in SOURCES, "OpenCodeSource should register itself on import"
+
+
+# ---------------------------------------------------------------------------
+# 2026 schema: `session.directory` + `project.worktree` fallback
+# ---------------------------------------------------------------------------
+
+_SQLITE_DDL_2026 = """
+CREATE TABLE project (
+    id TEXT PRIMARY KEY,
+    worktree TEXT
+);
+CREATE TABLE session (
+    id TEXT PRIMARY KEY,
+    project_id TEXT,
+    directory TEXT,
+    path TEXT
+);
+"""
+
+
+def _make_db_2026(db_path: Path, rows: list[tuple[str, str, str | None, str | None]]) -> None:
+    """Build a 2026-schema OpenCode DB.
+
+    ``rows`` is ``(session_id, worktree, directory, path)``. One project row is
+    created per distinct ``worktree``.
+    """
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.executescript(_SQLITE_DDL_2026)
+        projects: dict[str, str] = {}
+        for sid, worktree, directory, path in rows:
+            pid = projects.setdefault(worktree, f"prj_{len(projects)}")
+            conn.execute(
+                "INSERT OR IGNORE INTO project (id, worktree) VALUES (?, ?)",
+                (pid, worktree),
+            )
+            conn.execute(
+                "INSERT INTO session (id, project_id, directory, path) VALUES (?, ?, ?, ?)",
+                (sid, pid, directory, path),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_2026_child_session_falls_back_to_project_worktree(tmp_path: Path) -> None:
+    """A child session stores ``directory=''`` — the real path is on the project.
+
+    Regression: without the ``project`` join these sessions land with a NULL
+    ``cwd``, so every cwd-scoped recall misses them.
+    """
+    db = tmp_path / "opencode.db"
+    _make_db_2026(db, [("ses_child", "/home/op/proj", "", None)])
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        cwds = OpenCodeSource._session_cwds_sqlite(conn)
+    finally:
+        conn.close()
+    assert cwds["ses_child"] == "/home/op/proj"
+
+
+def test_2026_session_directory_wins_over_worktree(tmp_path: Path) -> None:
+    """When the session carries its own directory, that is authoritative."""
+    db = tmp_path / "opencode.db"
+    _make_db_2026(db, [("ses_own", "/home/op/proj", "/home/op/proj/packages/api", None)])
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        cwds = OpenCodeSource._session_cwds_sqlite(conn)
+    finally:
+        conn.close()
+    assert cwds["ses_own"] == "/home/op/proj/packages/api"
+
+
+def test_2026_mixed_sessions_each_resolve(tmp_path: Path) -> None:
+    """Empty-directory rows must not suppress the populated ones (or vice versa)."""
+    db = tmp_path / "opencode.db"
+    _make_db_2026(
+        db,
+        [
+            ("ses_parent", "/home/op/proj", "/home/op/proj", None),
+            ("ses_child_a", "/home/op/proj", "", None),
+            ("ses_child_b", "/home/op/other", None, None),
+        ],
+    )
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        cwds = OpenCodeSource._session_cwds_sqlite(conn)
+    finally:
+        conn.close()
+    assert cwds == {
+        "ses_parent": "/home/op/proj",
+        "ses_child_a": "/home/op/proj",
+        "ses_child_b": "/home/op/other",
+    }
+
+
+def test_2026_session_path_used_when_directory_empty(tmp_path: Path) -> None:
+    """``session.path`` sits between ``directory`` and the project worktree."""
+    db = tmp_path / "opencode.db"
+    _make_db_2026(db, [("ses_p", "/home/op/proj", "", "/home/op/proj/sub")])
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        cwds = OpenCodeSource._session_cwds_sqlite(conn)
+    finally:
+        conn.close()
+    assert cwds["ses_p"] == "/home/op/proj/sub"
+
+
+def test_2026_no_project_table_still_reads_directory(tmp_path: Path) -> None:
+    """Older 2026 builds have ``session`` but no ``project`` — do not regress."""
+    db = tmp_path / "opencode.db"
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.executescript("CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT);")
+        conn.execute("INSERT INTO session (id, directory) VALUES (?, ?)", ("ses_x", "/home/op/x"))
+        conn.commit()
+    finally:
+        conn.close()
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        cwds = OpenCodeSource._session_cwds_sqlite(conn)
+    finally:
+        conn.close()
+    assert cwds["ses_x"] == "/home/op/x"

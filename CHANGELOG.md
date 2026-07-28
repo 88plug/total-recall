@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed — data-dir resolution: OpenCode child sessions, and two split-path bugs
+
+Three instances of the same class of defect: a caller deriving its own data path
+instead of using the canonical resolver, so state landed beside a different index
+than the one in use.
+
+- **`lib/sources/opencode.py`** — the 2026-schema branch of `_session_cwds_sqlite`
+  read only `session.directory`. OpenCode leaves that empty on **child (sub-agent)
+  sessions** and keeps the real path on `project.worktree`, so those sessions were
+  indexed with a NULL `cwd` and no cwd-scoped recall could reach them. Now resolves
+  `session.directory` → `session.path` → `project.worktree`, introspecting columns
+  so older builds without `project`/`path` still work. On a real corpus this took
+  the adapter from 4 unattributed sessions to 0.
+- **`scripts/recall-cli.sh`** — defaulted `CLAUDE_PLUGIN_DATA` to
+  `~/.claude/plugins/data`, the multi-plugin *parent*. Every manual CLI run (no
+  harness env) therefore resolved to an empty `…/data/total-recall/index.db` and
+  reported a dead index — `metrics health` showed 0 ingests against a live one.
+  `scripts/mcp-server.sh` already carried this fix; the CLI never got it.
+- **`hooks/lib/common.sh`** / **`total_recall/events.py`** — `recall::log_json` and
+  `DEFAULT_EVENTS_PATH` each rebuilt the events path from `$CLAUDE_PLUGIN_DATA`
+  rather than the resolved data root, splitting `events.jsonl` across two dirs
+  (and, on the XDG fallback, doubling the `total-recall` path segment). Both now
+  derive from the resolver.
+
+New tests in `tests/test_sources_opencode.py` pin the child-session fallback, the
+precedence order, and the no-`project`-table path.
+
 ## [2.3.18] - 2026-07-24
 
 ### Fixed — bound MCP responses so heavy load can't crash the stdio pipe

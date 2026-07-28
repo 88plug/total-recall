@@ -38,10 +38,10 @@ fi
 COMMON_SH="${PLUGIN_ROOT}/hooks/lib/common.sh"
 
 if [ -f "$COMMON_SH" ]; then
-  # common.sh uses RECALL_DATA_ROOT which needs CLAUDE_PLUGIN_DATA or HOME.
-  # We set a safe default so sourcing it never fails due to unbound vars.
-  CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugins/data}"
-  export CLAUDE_PLUGIN_DATA
+  # Do NOT invent CLAUDE_PLUGIN_DATA=~/.claude/plugins/data — that is the
+  # multi-plugin *parent*, not this plugin's data dir, and forces a second
+  # empty …/data/total-recall/ index. Harness sets CLAUDE_PLUGIN_DATA correctly;
+  # without it, recall::data_root discovers the real install DB.
   # shellcheck source=../hooks/lib/common.sh
   source "$COMMON_SH"
 

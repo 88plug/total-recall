@@ -101,6 +101,25 @@ from lib.schema import (
 # ---------------------------------------------------------------------------
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """Column names of ``table``, or an empty set when it is absent."""
+    try:
+        return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})")}
+    except sqlite3.Error:
+        return set()
+
+
+def _has_table(conn: sqlite3.Connection, table: str) -> bool:
+    """``True`` iff ``table`` exists in this database."""
+    try:
+        cur = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (table,)
+        )
+        return cur.fetchone() is not None
+    except sqlite3.Error:
+        return False
+
+
 def _ts_from_ms(value: Any) -> datetime | None:
     """OpenCode stores epoch milliseconds — convert to UTC datetime."""
     if value is None:
@@ -401,22 +420,45 @@ class OpenCodeSource(SessionSource):
             conn.close()
 
     @staticmethod
-    def _session_cwds_sqlite(conn: sqlite3.Connection) -> dict[str, str | None]:
+    def _session_cwds_sqlite(conn: sqlite3.Connection) -> dict[str, str | None]:  # noqa: C901
         """Best-effort join of session → project → cwd. OpenCode schema
         has shifted; try a couple of column names before giving up."""
 
         out: dict[str, str | None] = {}
 
         # 0) OpenCode 2026: `session` table has top-level `directory` column.
+        #    Child (sub-agent) sessions store `directory = ''` and keep the real
+        #    path on their project row, so fall back through
+        #    `session.path` → `project.worktree` before giving up.
         try:
-            cur = conn.execute("SELECT id, directory FROM session")
-            for sid, directory in cur.fetchall():
-                if sid:
-                    out[str(sid)] = directory
-            if out:
-                return out
+            cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(session)")}
         except sqlite3.Error:
-            pass
+            cols = set()
+
+        if "id" in cols:
+            select = ["s.id", "s.directory" if "directory" in cols else "NULL"]
+            select.append("s.path" if "path" in cols else "NULL")
+            join = ""
+            if "project_id" in cols and _has_table(conn, "project"):
+                pcols = _table_columns(conn, "project")
+                if "worktree" in pcols:
+                    select.append("p.worktree")
+                    join = " LEFT JOIN project p ON p.id = s.project_id"
+                else:
+                    select.append("NULL")
+            else:
+                select.append("NULL")
+            try:
+                cur = conn.execute(f"SELECT {', '.join(select)} FROM session s{join}")
+                for sid, directory, path, worktree in cur.fetchall():
+                    if not sid:
+                        continue
+                    # First non-empty wins; '' is as absent as NULL here.
+                    out[str(sid)] = directory or path or worktree or None
+                if out:
+                    return out
+            except sqlite3.Error:
+                out.clear()
 
         # 1) Legacy `SessionTable` with an `info` JSON column carrying a
         #    `directory` / `path` / `cwd` key.
