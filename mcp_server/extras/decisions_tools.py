@@ -11,7 +11,7 @@ Two read-only surfaces:
 
 Both tools degrade gracefully when the index file is missing or the
 ``standing_decisions`` table hasn't been bootstrapped yet — they never
-raise into the FastMCP transport. The table is created lazily by the
+raise into the MCPServer transport. The table is created lazily by the
 indexer via :mod:`index.decisions.ensure_schema`; this module does not
 try to create it from a read-only connection.
 """

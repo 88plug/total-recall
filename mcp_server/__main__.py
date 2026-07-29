@@ -6,7 +6,7 @@ Usage:
 
 Claude Code spawns this as a child process per-session via the plugin's
 ``.mcp.json``. We simply delegate to :func:`mcp_server.server.main`, which
-runs the FastMCP stdio loop and never returns until the parent closes stdin.
+runs the MCP stdio loop and never returns until the parent closes stdin.
 """
 
 from __future__ import annotations

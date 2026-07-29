@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — port to mcp 2.0, lift the `<2` cap
+
+`mcp` 2.0 moved the server entrypoint `mcp.server.fastmcp.FastMCP` →
+`mcp.server.mcpserver.MCPServer`. We were pinned at `<2` as a stopgap; the
+requirement is now `mcp>=2.0.0`.
+
+- **Production change is two lines** — the import and the constructor in
+  `mcp_server/server.py`. Every `@mcp.tool(title=..., annotations=...)` call
+  site is unchanged: 2.0 kept the `ToolAnnotations(readOnlyHint=...)`
+  constructor alias, and we only ever construct, never read those fields.
+- **Test-side API shapes moved.** `call_tool` now answers with a
+  `CallToolResult` instead of a `(content, structured)` tuple, and
+  `Tool.inputSchema` is `Tool.input_schema`. New `tests/mcp_helpers.py` holds
+  one `call_tool(mcp, name, args)` shim returning the pair the assertions read,
+  so individual tests describe payloads rather than transport shape.
+- Verified against a real 2.0.0 install: 26 tools register, and a live stdio
+  JSON-RPC handshake (`initialize` → `tools/list` → `tools/call`) returns tools
+  carrying `title` + `annotations` with the spec's camelCase `readOnlyHint` on
+  the wire.
+
+
 ### Fixed — data-dir resolution: OpenCode child sessions, and two split-path bugs
 
 Three instances of the same class of defect: a caller deriving its own data path

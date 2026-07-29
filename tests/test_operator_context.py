@@ -50,7 +50,7 @@ def tmp_db_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point the server at a temp DB dir before it's imported."""
     monkeypatch.setenv("TOTAL_RECALL_DB_DIR", str(tmp_path))
     # Force a fresh import so DB_PATH resolves against the new env var and
-    # the @mcp.tool() decorator re-registers our tool with a clean FastMCP
+    # the @mcp.tool() decorator re-registers our tool with a clean MCPServer
     # instance.
     for mod in (
         "mcp_server",
@@ -480,7 +480,7 @@ def test_empty_sections_are_pruned(tmp_db_dir, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 4. The tool is registered on the FastMCP server (one-call discoverability).
+# 4. The tool is registered on the MCPServer server (one-call discoverability).
 # ---------------------------------------------------------------------------
 
 
@@ -492,7 +492,7 @@ def test_tool_is_registered(tmp_db_dir):
     spec = next(t for t in tools if t.name == "get_operator_context")
     assert spec.description, "tool needs a description"
     assert len(spec.description) < 2048
-    props = spec.inputSchema["properties"]
+    props = spec.input_schema["properties"]
     assert "cwd" in props
     assert "max_chars" in props
 

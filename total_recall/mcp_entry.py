@@ -6,7 +6,7 @@ recommend in ``.mcp.json``) instead of having to know the internal module
 path ``python -m mcp_server``.
 
 This module is intentionally a thin wrapper: it only re-exports
-:func:`mcp_server.server.main`, which blocks on the FastMCP stdio loop until
+:func:`mcp_server.server.main`, which blocks on the MCP stdio loop until
 the parent process closes stdin. All real logic lives in :mod:`mcp_server`.
 """
 

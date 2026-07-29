@@ -117,7 +117,7 @@ Top-level directories (one per pipeline layer or delivery surface):
 - `extractors/` — pipeline-routed: `decisions`, `corrections`, `self_corrections`, `progress`, `domain_facts`, `away_summaries`, `model_corrections`, `standing_decisions`, `bans`, `goals`, `truth_rhetoric` + `secrets` (scrubber). Standalone (out-of-band): `operator_profile`, `voice_profile`, `ontology`, `workflow` (v0.8), `implicit_preferences` (v0.8), `satisfaction` (v0.8). Optional refinement: `extractors/llm/` (v0.9, ollama, opt-in).
 - `index/` — SQLite/FTS5 store, `ingest.py` (incremental, inode-aware), `query.py`.
 - `vec/` — `sqlite-vec` + **ollama embeds only** (`qwen3-embedding:0.6b`), RRF with FTS5.
-- `mcp_server/` — FastMCP stdio server: core tools (`tools.py`) + resources.
+- `mcp_server/` — MCPServer stdio server: core tools (`tools.py`) + resources.
 - `mcp_server/extras/` — operator-aware tool surfaces, one file per domain. v0.3: `bans_tools.py`, `corrections_tools.py`, `decisions_tools.py`, `escalation_tools.py`, `goals_tools.py`, `ontology_tools.py`, `operator_context_tools.py`, `operator_tools.py`, `recall_targeted_tools.py`, `rhetoric_tools.py`, `voice_tools.py`. v0.8 additions: `workflow_tools.py`, `implicit_prefs_tools.py`, `satisfaction_tools.py`.
 - `detector/` — escalation/risk heuristics (numeric scorer + state machine; backs `assess_escalation_risk`).
 - `hooks/` — `SessionStart`, `UserPromptSubmit`, `Stop`, `PreCompact`, `PostCompact` bash entrypoints (`*.sh`; 6 scripts across 5 events — PostCompact runs both recovery + re-index) + Python query bridge (`lib/query.py`).

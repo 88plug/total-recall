@@ -1,4 +1,4 @@
-"""FastMCP stdio server exposing the total-recall index as tools.
+"""MCPServer stdio server exposing the total-recall index as tools.
 
 This package is the live-query surface of `total-recall`. The model can call
 its tools mid-conversation to look up prior decisions, user corrections,
@@ -7,12 +7,12 @@ sessions stored in the local SQLite index.
 
 The server is intentionally thin: every tool delegates to `index.query` (or
 `vec.rrf.hybrid_search` when the optional vector layer is installed) and
-formats results as plain `list[dict]` so FastMCP can auto-generate JSON
+formats results as plain `list[dict]` so MCPServer can auto-generate JSON
 schema from the type hints.
 
 Public surface:
 
-- :data:`mcp_server.server.mcp` — the configured ``FastMCP`` instance.
+- :data:`mcp_server.server.mcp` — the configured ``MCPServer`` instance.
 - :func:`mcp_server.server.main` — stdio entrypoint (`python -m mcp_server`).
 - :mod:`mcp_server.tools` — tool implementations.
 - :mod:`mcp_server.resources` — optional MCP resources (e.g. session digest).

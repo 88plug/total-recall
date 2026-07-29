@@ -6,7 +6,7 @@ which is the single most effective preventer of repeat mistakes.
 
 Both tools are read-only, degrade gracefully when the SQLite index is absent
 or when the WT-4 ``index.query`` module hasn't landed yet on the current
-branch, and never raise into the FastMCP transport.
+branch, and never raise into the MCPServer transport.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""FastMCP server instance + lifecycle for ``total-recall``.
+"""MCP server instance + lifecycle for ``total-recall``.
 
 The server runs over stdio (the only transport Claude Code child-process MCPs
 need). Tools are registered at import time by :mod:`mcp_server.tools`;
@@ -38,7 +38,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ DB_PATH: Path = DB_DIR / "index.db"
 
 
 # ---------------------------------------------------------------------------
-# FastMCP instance
+# MCPServer instance
 # ---------------------------------------------------------------------------
 
 
@@ -88,7 +88,7 @@ INSTRUCTIONS = (
 )
 
 
-mcp = FastMCP("total-recall", instructions=INSTRUCTIONS)
+mcp = MCPServer("total-recall", instructions=INSTRUCTIONS)
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ from mcp_server.extras import workflow_tools as _workflow_tools  # noqa: E402,F4
 
 
 def main() -> None:
-    """Run the FastMCP stdio loop.
+    """Run the MCP stdio loop.
 
     Blocks until the parent process (Claude Code) closes stdin. Logs go to
     stderr by convention — never stdout, because stdout is the JSON-RPC wire.

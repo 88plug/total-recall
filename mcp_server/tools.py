@@ -6,7 +6,7 @@ sibling module is absent on this branch — typical during parallel worktree
 development — the tool degrades to a clear error payload rather than
 crashing the MCP server.
 
-Return shape is a plain ``list[dict]`` (or ``dict``) so FastMCP can
+Return shape is a plain ``list[dict]`` (or ``dict``) so MCPServer can
 auto-serialize it; we keep the keys verbose because they appear directly in
 the tool's structured output and are read by both the model and humans
 debugging logs.
