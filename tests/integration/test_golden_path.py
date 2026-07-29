@@ -348,7 +348,7 @@ def test_mcp_recall_via_stdio_returns_data(tmp_path: pathlib.Path):
                 "recall",
                 {"topic": "provider-x", "scope": "all_projects"},
             )
-            # FastMCP wraps the return value in result.content
+            # MCPServer wraps the return value in result.content
             payload: list = []
             for c in result.content:
                 text = getattr(c, "text", None)
@@ -371,9 +371,9 @@ def test_mcp_recall_via_stdio_returns_data(tmp_path: pathlib.Path):
         pytest.skip(outcome["_skip"])
 
     result = outcome["result"]
-    # Whatever it returned, it should be a list of dicts (FastMCP usually
+    # Whatever it returned, it should be a list of dicts (MCPServer usually
     # serializes a Python `list[dict]` return as a JSON array). When the
-    # underlying tool returns a single-element list FastMCP may auto-
+    # underlying tool returns a single-element list MCPServer may auto-
     # unwrap to a dict — accept either shape.
     if isinstance(result, dict):
         result = [result]

@@ -11,7 +11,6 @@ the full pipeline to be wired up.
 
 from __future__ import annotations
 
-import asyncio
 import importlib
 import json
 import sqlite3
@@ -25,6 +24,7 @@ from typing import Any
 import pytest
 
 from extractors.model_corrections import ModelCorrections
+from tests.mcp_helpers import call_tool
 
 # ---------------------------------------------------------------------------
 # Fixtures: minimal Record + DAG (mirrors test_extractors.py)
@@ -402,7 +402,7 @@ def _import_server_with_extras():
     """Fresh import of mcp_server.server then the extras tool module.
 
     Importing the tool module is what registers ``recall_corrections_about``
-    and ``get_recent_corrections`` against the shared FastMCP instance.
+    and ``get_recent_corrections`` against the shared MCPServer instance.
     """
     server = importlib.import_module("mcp_server.server")
     importlib.import_module("mcp_server.extras.corrections_tools")
@@ -413,11 +413,10 @@ def test_recall_corrections_about_returns_documented_shape(tmp_db_dir, fake_inde
     _seed_corrections(tmp_db_dir / "index.db")
     server = _import_server_with_extras()
 
-    _, structured = asyncio.run(
-        server.mcp.call_tool(
-            "recall_corrections_about",
-            {"topic": "provider-y", "scope": "all_projects", "limit": 10},
-        )
+    _, structured = call_tool(
+        server.mcp,
+        "recall_corrections_about",
+        {"topic": "provider-y", "scope": "all_projects", "limit": 10},
     )
     hits = structured["result"]
     assert isinstance(hits, list)

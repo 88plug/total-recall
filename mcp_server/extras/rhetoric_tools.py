@@ -10,7 +10,7 @@ about X?" or "has the operator ever invoked the session logs on this topic?"
 before repeating a pattern that already triggered a hard correction.
 
 Tool is read-only, degrades gracefully when the SQLite index or the
-``index.query`` module are absent, and never raises into the FastMCP
+``index.query`` module are absent, and never raises into the MCPServer
 transport.
 """
 

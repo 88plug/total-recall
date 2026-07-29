@@ -39,7 +39,7 @@ def test_main_is_mcp_server_main():
 def test_main_delegates_to_server(monkeypatch):
     """Calling the wrapper must call the underlying server.main exactly once.
 
-    We can't actually let the FastMCP stdio loop run in a unit test (it would
+    We can't actually let the MCPServer stdio loop run in a unit test (it would
     block on stdin), so we patch the reference and verify call-through.
     """
     from total_recall import mcp_entry

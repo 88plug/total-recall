@@ -12,7 +12,7 @@ Three read-only tools form the *orientation* surface for a fresh session:
   saves the model from confidently inventing a wrong definition.
 
 All three degrade gracefully when the index is absent (returning an
-``error`` payload) and never raise into the FastMCP transport.
+``error`` payload) and never raise into the MCPServer transport.
 """
 
 from __future__ import annotations

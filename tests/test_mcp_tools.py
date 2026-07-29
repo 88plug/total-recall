@@ -1,6 +1,6 @@
 """Unit tests for the total-recall MCP server.
 
-These tests exercise the FastMCP server in three modes:
+These tests exercise the MCPServer server in three modes:
 
 1. **Tool registration shape** — every tool is registered with the expected
    name, has a non-empty description, has an input schema with the documented
@@ -33,6 +33,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+
+from tests.mcp_helpers import call_tool
+from tests.mcp_helpers import unwrap_call_tool_result as _unwrap_call_tool_result
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -333,30 +336,6 @@ MINIMAL_TOOL_ARGS: dict[str, dict] = {
 }
 
 
-def _unwrap_call_tool_result(result: object) -> object:
-    """Normalize FastMCP call_tool return shapes into a plain Python value.
-
-    Structured tools return ``(content, {\"result\": ...})``; tools without a
-    structured-output schema return a list of content blocks (often with a
-    JSON ``.text`` payload). None of these paths should raise.
-    """
-    if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], dict):
-        structured = result[1]
-        if "result" in structured:
-            return structured["result"]
-        return structured
-    if isinstance(result, (list, tuple)) and result:
-        first = result[0]
-        if hasattr(first, "text"):
-            text = first.text
-            try:
-                return json.loads(text)
-            except (TypeError, json.JSONDecodeError):
-                return text
-        return first
-    return result
-
-
 def test_all_expected_tools_registered(server_module):
     tools = asyncio.run(server_module.mcp.list_tools())
     names = {t.name for t in tools}
@@ -372,14 +351,14 @@ def test_every_tool_has_description_and_schema(server_module):
         # The description is the model's only hint at *when* to use it — keep
         # it under 2KB (Claude Code truncates) and ideally under 300 chars.
         assert len(t.description) < 2048, f"{t.name} description too long"
-        assert t.inputSchema, f"{t.name} missing inputSchema"
-        assert "properties" in t.inputSchema
+        assert t.input_schema, f"{t.name} missing input_schema"
+        assert "properties" in t.input_schema
 
 
 def test_recall_schema_enums(server_module):
     tools = {t.name: t for t in asyncio.run(server_module.mcp.list_tools())}
     recall = tools["recall"]
-    props = recall.inputSchema["properties"]
+    props = recall.input_schema["properties"]
     assert "topic" in props
     assert "kind" in props
     assert "scope" in props
@@ -397,7 +376,7 @@ def test_recall_schema_enums(server_module):
 
 def test_search_messages_role_enum(server_module):
     tools = {t.name: t for t in asyncio.run(server_module.mcp.list_tools())}
-    props = tools["search_messages"].inputSchema["properties"]
+    props = tools["search_messages"].input_schema["properties"]
     assert set(props["role"]["enum"]) == {"any", "user", "assistant"}
 
 
@@ -409,7 +388,7 @@ def test_search_messages_role_enum(server_module):
 def test_recall_returns_error_when_db_missing(server_module):
     # No DB file has been created in tmp_db_dir.
     assert not server_module.DB_PATH.exists()
-    _, structured = asyncio.run(server_module.mcp.call_tool("recall", {"topic": "anything"}))
+    _, structured = call_tool(server_module.mcp, "recall", {"topic": "anything"})
     out = structured["result"]
     assert isinstance(out, list)
     assert out and "error" in out[0]
@@ -417,18 +396,16 @@ def test_recall_returns_error_when_db_missing(server_module):
 
 
 def test_prior_sessions_returns_error_when_db_missing(server_module):
-    _, structured = asyncio.run(server_module.mcp.call_tool("prior_sessions_for_cwd", {}))
+    _, structured = call_tool(server_module.mcp, "prior_sessions_for_cwd", {})
     out = structured["result"]
     assert out and "error" in out[0]
 
 
 def test_get_session_digest_returns_error_when_db_missing(server_module):
-    # `get_session_digest` returns `dict` (not `list[dict]`), so FastMCP
+    # `get_session_digest` returns `dict` (not `list[dict]`), so MCPServer
     # doesn't auto-derive a structured-output schema for it — we read the
     # unstructured text-content payload instead.
-    result = asyncio.run(server_module.mcp.call_tool("get_session_digest", {"session_id": "x"}))
-    content = result[0] if isinstance(result, (list, tuple)) else result
-    out = json.loads(content.text) if hasattr(content, "text") else content
+    _, out = call_tool(server_module.mcp, "get_session_digest", {"session_id": "x"})
     assert isinstance(out, dict)
     assert "error" in out
 
@@ -450,7 +427,7 @@ def test_all_tools_call_tool_smoke_missing_db(server_module):
     for name in sorted(EXPECTED_TOOLS):
         args = MINIMAL_TOOL_ARGS[name]
         try:
-            raw = asyncio.run(server_module.mcp.call_tool(name, args))
+            raw = call_tool(server_module.mcp, name, args)
         except Exception as exc:  # noqa: BLE001 — surface tool name on failure
             failures.append(f"{name}: raised {type(exc).__name__}: {exc}")
             continue
@@ -478,10 +455,8 @@ def test_recall_ranks_synthetic_corpus(tmp_db_dir, fake_index_query):
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
 
-    _, structured = asyncio.run(
-        server.mcp.call_tool(
-            "recall", {"topic": "provider-x", "scope": "all_projects", "limit": 10}
-        )
+    _, structured = call_tool(
+        server.mcp, "recall", {"topic": "provider-x", "scope": "all_projects", "limit": 10}
     )
     hits = structured["result"]
     assert isinstance(hits, list)
@@ -503,11 +478,8 @@ def test_recall_filters_by_kind(tmp_db_dir, fake_index_query):
     _seed_corpus(tmp_db_dir / "index.db")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool(
-            "recall",
-            {"topic": "provider-x", "scope": "all_projects", "kind": "correction"},
-        )
+    _, structured = call_tool(
+        server.mcp, "recall", {"topic": "provider-x", "scope": "all_projects", "kind": "correction"}
     )
     hits = structured["result"]
     assert len(hits) == 1
@@ -519,9 +491,7 @@ def test_recall_scopes_to_cwd(tmp_db_dir, fake_index_query, monkeypatch):
     monkeypatch.setenv("PWD", "/home/operator/proj-a")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool("recall", {"topic": "provider-x", "scope": "this_cwd"})
-    )
+    _, structured = call_tool(server.mcp, "recall", {"topic": "provider-x", "scope": "this_cwd"})
     hits = structured["result"]
     # proj-a has rows 1, 2 mentioning provider-x.
     assert len(hits) == 2
@@ -533,9 +503,7 @@ def test_find_failed_attempts_returns_paired_rejection(tmp_db_dir, fake_index_qu
     monkeypatch.setenv("PWD", "/home/operator/proj-a")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool("find_failed_attempts", {"pattern": "provider-x"})
-    )
+    _, structured = call_tool(server.mcp, "find_failed_attempts", {"pattern": "provider-x"})
     hits = structured["result"]
     assert len(hits) == 1
     h = hits[0]
@@ -548,8 +516,8 @@ def test_prior_sessions_for_cwd_lists_sessions(tmp_db_dir, fake_index_query):
     _seed_corpus(tmp_db_dir / "index.db")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool("prior_sessions_for_cwd", {"cwd": "/home/operator/proj-a"})
+    _, structured = call_tool(
+        server.mcp, "prior_sessions_for_cwd", {"cwd": "/home/operator/proj-a"}
     )
     rows = structured["result"]
     assert len(rows) == 1
@@ -567,7 +535,7 @@ def test_prior_sessions_for_cwd_falls_back_when_cwd_unknown(
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(server.mcp.call_tool("prior_sessions_for_cwd", {}))
+    _, structured = call_tool(server.mcp, "prior_sessions_for_cwd", {})
     rows = structured["result"]
     # First row is the scope-fallback meta, body carries the proj-a session.
     assert rows and "_meta" in rows[0]
@@ -580,8 +548,8 @@ def test_prior_sessions_for_cwd_explicit_cwd_no_fallback(tmp_db_dir, fake_index_
     _seed_corpus(tmp_db_dir / "index.db")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool("prior_sessions_for_cwd", {"cwd": "/home/operator/proj-not-in-index"})
+    _, structured = call_tool(
+        server.mcp, "prior_sessions_for_cwd", {"cwd": "/home/operator/proj-not-in-index"}
     )
     rows = structured["result"]
     # Explicit cwd is honored verbatim: no rows, no _meta fallback marker.
@@ -592,11 +560,8 @@ def test_search_messages_falls_through_to_fts(tmp_db_dir, fake_index_query):
     _seed_corpus(tmp_db_dir / "index.db")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool(
-            "search_messages",
-            {"query": "provider-x", "cwd": "/home/operator/proj-a"},
-        )
+    _, structured = call_tool(
+        server.mcp, "search_messages", {"query": "provider-x", "cwd": "/home/operator/proj-a"}
     )
     rows = structured["result"]
     assert len(rows) == 1
@@ -607,9 +572,7 @@ def test_get_session_digest_assembles_digest(tmp_db_dir, fake_index_query):
     _seed_corpus(tmp_db_dir / "index.db")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    result = asyncio.run(server.mcp.call_tool("get_session_digest", {"session_id": "s1"}))
-    content = result[0] if isinstance(result, (list, tuple)) else result
-    digest = json.loads(content.text) if hasattr(content, "text") else content
+    _, digest = call_tool(server.mcp, "get_session_digest", {"session_id": "s1"})
     assert isinstance(digest, dict)
     assert digest["session_id"] == "s1"
     assert digest["ai_title"] == "Set up relay fleet"
@@ -636,8 +599,8 @@ def test_recall_falls_back_to_all_projects_when_this_cwd_empty(
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
 
-    _, structured = asyncio.run(
-        server.mcp.call_tool("recall", {"topic": "provider-x", "scope": "this_cwd", "limit": 10})
+    _, structured = call_tool(
+        server.mcp, "recall", {"topic": "provider-x", "scope": "this_cwd", "limit": 10}
     )
     hits = structured["result"]
     assert isinstance(hits, list)
@@ -660,8 +623,8 @@ def test_recall_no_fallback_meta_when_this_cwd_has_hits(tmp_db_dir, fake_index_q
     monkeypatch.setenv("PWD", "/home/operator/proj-a")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool("recall", {"topic": "provider-x", "scope": "this_cwd", "limit": 10})
+    _, structured = call_tool(
+        server.mcp, "recall", {"topic": "provider-x", "scope": "this_cwd", "limit": 10}
     )
     hits = structured["result"]
     assert len(hits) == 2
@@ -674,7 +637,7 @@ def test_search_messages_falls_back_to_all_projects(tmp_db_dir, fake_index_query
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(server.mcp.call_tool("search_messages", {"query": "provider-x"}))
+    _, structured = call_tool(server.mcp, "search_messages", {"query": "provider-x"})
     rows = structured["result"]
     assert rows and "_meta" in rows[0]
     assert rows[0]["scope_used"] == "all_projects"
@@ -687,9 +650,7 @@ def test_find_failed_attempts_falls_back_when_cwd_empty(tmp_db_dir, fake_index_q
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool("find_failed_attempts", {"pattern": "provider-x"})
-    )
+    _, structured = call_tool(server.mcp, "find_failed_attempts", {"pattern": "provider-x"})
     hits = structured["result"]
     assert hits and "_meta" in hits[0]
     assert hits[0]["scope_used"] == "all_projects"
@@ -704,8 +665,8 @@ def test_find_user_preferences_falls_back_when_this_cwd_empty(
     monkeypatch.setenv("PWD", "/home/operator/proj-not-in-index")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    _, structured = asyncio.run(
-        server.mcp.call_tool("find_user_preferences", {"scope": "this_cwd", "domain": "provider-x"})
+    _, structured = call_tool(
+        server.mcp, "find_user_preferences", {"scope": "this_cwd", "domain": "provider-x"}
     )
     hits = structured["result"]
     assert hits and "_meta" in hits[0]
@@ -740,9 +701,7 @@ def test_session_digest_returns_populated_meta(tmp_db_dir, fake_index_query, mon
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
 
-    result = asyncio.run(server.mcp.call_tool("get_session_digest", {"session_id": "s1"}))
-    content = result[0] if isinstance(result, (list, tuple)) else result
-    digest = json.loads(content.text) if hasattr(content, "text") else content
+    _, digest = call_tool(server.mcp, "get_session_digest", {"session_id": "s1"})
     assert isinstance(digest, dict)
     # All five canonical meta keys populated from F5's get_session_meta.
     assert digest["ai_title"] == "F5-supplied title"
@@ -761,11 +720,7 @@ def test_session_digest_returns_error_when_session_unknown(tmp_db_dir, fake_inde
     _seed_corpus(tmp_db_dir / "index.db")
     _clear_mcp_modules()
     server = importlib.import_module("mcp_server.server")
-    result = asyncio.run(
-        server.mcp.call_tool("get_session_digest", {"session_id": "no-such-session-id"})
-    )
-    content = result[0] if isinstance(result, (list, tuple)) else result
-    digest = json.loads(content.text) if hasattr(content, "text") else content
+    _, digest = call_tool(server.mcp, "get_session_digest", {"session_id": "no-such-session-id"})
     assert isinstance(digest, dict)
     assert "error" in digest
     assert "not in index" in digest["error"]
