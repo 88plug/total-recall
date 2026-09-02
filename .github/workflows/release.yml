@@ -106,7 +106,7 @@ jobs:
           cat release-notes.md
 
       - name: create GitHub release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: dist/*
           body_path: release-notes.md
