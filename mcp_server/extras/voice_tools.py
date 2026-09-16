@@ -18,6 +18,7 @@ from typing import Any
 
 from mcp.types import ToolAnnotations
 
+from mcp_server.bounds import bound_mapping
 from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
@@ -67,7 +68,10 @@ def get_voice_profile() -> dict:
                 "db_path": str(DB_PATH),
             }
 
-        return profile
+        # Profiles accumulate a field per measured signal plus its
+        # provenance map, so an aged index pushes this past the client's
+        # token ceiling and the caller gets an error instead of an answer.
+        return bound_mapping(profile)
     finally:
         with contextlib.suppress(Exception):
             conn.close()

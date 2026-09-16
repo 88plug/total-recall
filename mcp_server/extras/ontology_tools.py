@@ -24,6 +24,7 @@ from typing import Any
 
 from mcp.types import ToolAnnotations
 
+from mcp_server.bounds import bound_keyed_collection, bound_response
 from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
@@ -78,6 +79,23 @@ def _row_to_dict(row: Any) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _bounded_graph(graph: dict) -> dict:
+    """Shape the project graph, trimming to the transport budget.
+
+    ``count`` always reports the true total, so a trimmed graph still tells
+    the caller how many projects exist.
+    """
+    kept, dropped = bound_keyed_collection(graph, sort_key="last_active_ts")
+    out: dict = {"projects": kept, "count": len(graph)}
+    if dropped:
+        out["_meta"] = {
+            "truncated": True,
+            "omitted": dropped,
+            "reason": "least-recently-active projects omitted to fit the response budget",
+        }
+    return out
+
+
 @mcp.tool(title="Get Project Graph", annotations=ToolAnnotations(readOnlyHint=True))
 def get_project_graph() -> dict:
     """
@@ -120,7 +138,7 @@ def get_project_graph() -> dict:
                     "last_active_ts": d.get("last_active_ts"),
                     "message_count": d.get("message_count"),
                 }
-            return {"projects": graph, "count": len(graph)}
+            return _bounded_graph(graph)
 
         projects = ontology_mod.list_projects(conn)
         graph = {
@@ -133,7 +151,7 @@ def get_project_graph() -> dict:
             }
             for p in projects
         }
-        return {"projects": graph, "count": len(graph)}
+        return _bounded_graph(graph)
     except Exception as e:
         log.exception("get_project_graph() failed")
         return {"error": f"get_project_graph failed: {e!r}"}
@@ -171,20 +189,22 @@ def get_machine_inventory(name_pattern: str | None = None) -> list[dict]:
         else:
             machines = ontology_mod.list_machines(conn, name_pattern=name_pattern)
         # Shape: keep the documented "shorthand" fields up front.
-        return [
-            {
-                "hostname": m.get("hostname"),
-                "role": m.get("role") or "",
-                "lan_ip": m.get("lan_ip") or "",
-                "tailscale_ip": m.get("tailscale_ip") or "",
-                "public_ip": m.get("public_ip") or "",
-                "gpu": m.get("gpu") or "",
-                "os": m.get("os") or "",
-                "notes": m.get("notes") or "",
-                "last_seen_ts": m.get("last_seen_ts"),
-            }
-            for m in machines
-        ]
+        return bound_response(
+            [
+                {
+                    "hostname": m.get("hostname"),
+                    "role": m.get("role") or "",
+                    "lan_ip": m.get("lan_ip") or "",
+                    "tailscale_ip": m.get("tailscale_ip") or "",
+                    "public_ip": m.get("public_ip") or "",
+                    "gpu": m.get("gpu") or "",
+                    "os": m.get("os") or "",
+                    "notes": m.get("notes") or "",
+                    "last_seen_ts": m.get("last_seen_ts"),
+                }
+                for m in machines
+            ]
+        )
     except Exception as e:
         log.exception("get_machine_inventory() failed")
         return [{"error": f"get_machine_inventory failed: {e!r}"}]

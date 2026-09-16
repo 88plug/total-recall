@@ -27,6 +27,7 @@ from typing import Any
 
 from mcp.types import ToolAnnotations
 
+from mcp_server.bounds import bound_response, bound_text_fields, clamp_limit
 from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
@@ -97,12 +98,15 @@ def _table_exists(conn: sqlite3.Connection) -> bool:
 def list_standing_decisions(
     topic: str | None = None,
     scope: str | None = None,
+    limit: int = 25,
 ) -> list[dict]:
     """
     Return standing decisions the operator has made (e.g. provider-a > provider-b,
     billing-provider-a > billing-provider-b). Use BEFORE suggesting any default — if a
     decision exists, honor it. Filter by topic ('cloud_provider', 'billing_rail', etc.) or
-    scope ('global' or cwd).
+    scope ('global' or cwd). Highest-asserted decisions come first; `limit` (default 25,
+    max 50) caps the sweep. A trailing `_meta` row means the response was trimmed to fit
+    the transport — filter by topic/scope to see the rest.
     """
     conn = get_conn()
     if conn is None:
@@ -118,6 +122,7 @@ def list_standing_decisions(
                 }
             ]
 
+        capped = clamp_limit(limit, default=25)
         clauses: list[str] = []
         params: list[Any] = []
         if topic is not None:
@@ -134,14 +139,16 @@ def list_standing_decisions(
                 {where}
                 ORDER BY assertion_count DESC,
                          COALESCE(last_reasserted_ts, 0) DESC
-                LIMIT 200
+                LIMIT ?
                 """,
-                params,
+                [*params, capped],
             ).fetchall()
         except sqlite3.Error as e:
             log.exception("list_standing_decisions sql failure")
             return [{"error": f"list_standing_decisions failed: {e!r}"}]
-        return [_row_to_dict(r) for r in rows]
+        # Each row carries the operator's verbatim rationale, so 200 rows
+        # ran past the client's token ceiling and the whole call failed.
+        return bound_response([bound_text_fields(_row_to_dict(r)) for r in rows])
     finally:
         with contextlib.suppress(Exception):
             conn.close()

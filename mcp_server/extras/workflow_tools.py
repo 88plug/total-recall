@@ -21,6 +21,7 @@ from typing import Any
 
 from mcp.types import ToolAnnotations
 
+from mcp_server.bounds import bound_mapping
 from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ def get_workflow_profile() -> dict:
                 "db_path": str(DB_PATH),
             }
 
-        return profile
+        return bound_mapping(profile)
     finally:
         with contextlib.suppress(Exception):
             conn.close()

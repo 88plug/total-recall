@@ -46,78 +46,26 @@ log = logging.getLogger(__name__)
 # tool is documented to return a "snippet", so truncation is the contract, not
 # a regression. Short extraction summaries fall well under this and are
 # untouched.
-_MAX_HIT_TEXT_CHARS = 1500
-
-# Free-text keys that can carry an unbounded blob and must be capped per row.
-_TEXT_KEYS = frozenset({"text", "content", "value", "preview", "body", "snippet"})
-
-# Hard ceiling on any tool's ``limit`` — a caller cannot request 10k rows.
-_MAX_TOOL_LIMIT = 50
-
-# Backstop cap on total serialized response size (bytes). Even many bounded
-# rows are trimmed to stay under this so the wire is never overwhelmed.
-_MAX_RESPONSE_BYTES = 256_000
-
-
-def _clamp_limit(limit: int, default: int = 10) -> int:
-    """Coerce a caller-supplied ``limit`` into ``[1, _MAX_TOOL_LIMIT]``."""
-    try:
-        n = int(limit)
-    except (TypeError, ValueError):
-        return default
-    return max(1, min(n, _MAX_TOOL_LIMIT))
-
-
-def _bound_hit_text(d: dict[str, Any]) -> dict[str, Any]:
-    """Truncate bulky free-text fields in a hit dict in place.
-
-    For any oversized text field, keep the first ``_MAX_HIT_TEXT_CHARS`` chars
-    and add ``<key>_truncated=True`` + ``<key>_full_chars=<n>`` so the caller
-    knows the value was clipped and how much was dropped.
-    """
-    for key in _TEXT_KEYS:
-        v = d.get(key)
-        if isinstance(v, str) and len(v) > _MAX_HIT_TEXT_CHARS:
-            full = len(v)
-            d[key] = v[:_MAX_HIT_TEXT_CHARS]
-            d[f"{key}_truncated"] = True
-            d[f"{key}_full_chars"] = full
-    return d
-
-
-def _bound_response(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Trim a hit list so its serialized size stays under ``_MAX_RESPONSE_BYTES``.
-
-    Rows are already per-field-capped by :func:`_row_to_hit`; this is the
-    aggregate backstop for the case of many rows. If any rows are dropped, a
-    trailing ``_meta`` marker records how many, so truncation is never silent.
-    """
-    import json
-
-    out: list[dict[str, Any]] = []
-    budget = _MAX_RESPONSE_BYTES
-    for i, row in enumerate(rows):
-        try:
-            size = len(json.dumps(row, default=str))
-        except Exception:
-            size = _MAX_HIT_TEXT_CHARS
-        if budget - size < 0 and out:
-            dropped = len(rows) - i
-            out.append(
-                {
-                    "_meta": (
-                        f"response truncated to stay under "
-                        f"{_MAX_RESPONSE_BYTES} bytes; {dropped} more hit(s) omitted"
-                    ),
-                    "truncated": True,
-                    "omitted": dropped,
-                }
-            )
-            break
-        budget -= size
-        out.append(row)
-    return out
-
+# Payload bounds live in mcp_server.bounds so the extras modules can share
+# them without closing an import cycle (server.py imports extras). The private
+# aliases are kept for the existing call sites and tests.
+# Re-exported under the historical private names: call sites and
+# tests/test_mcp_payload_bounds.py reference them as ``tools._MAX_*``.
+from mcp_server.bounds import (  # noqa: E402,F401
+    MAX_HIT_TEXT_CHARS as _MAX_HIT_TEXT_CHARS,
+)
+from mcp_server.bounds import (  # noqa: E402,F401
+    MAX_RESPONSE_BYTES as _MAX_RESPONSE_BYTES,
+)
+from mcp_server.bounds import (  # noqa: E402,F401
+    MAX_TOOL_LIMIT as _MAX_TOOL_LIMIT,
+)
+from mcp_server.bounds import (  # noqa: E402,F401
+    TEXT_KEYS as _TEXT_KEYS,
+)
+from mcp_server.bounds import bound_response as _bound_response  # noqa: E402,F401
+from mcp_server.bounds import bound_text_fields as _bound_hit_text  # noqa: E402,F401
+from mcp_server.bounds import clamp_limit as _clamp_limit  # noqa: E402,F401
 
 # ---------------------------------------------------------------------------
 # Observability — emit one NDJSON event per MCP tool call so
@@ -545,7 +493,12 @@ def find_user_preferences(
             if qtext and rrf_mod is not None and embedder is not None:
                 try:
                     chunk = rrf_mod.hybrid_search(
-                        conn, qtext, embedder, limit=limit, cwd=cwd_filter, kind=k,
+                        conn,
+                        qtext,
+                        embedder,
+                        limit=limit,
+                        cwd=cwd_filter,
+                        kind=k,
                     )
                     out.extend(chunk)
                     continue
