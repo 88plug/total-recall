@@ -116,7 +116,15 @@ def _to_unix(ts: Any) -> int:
 
 
 def _normalize_thing(thing: str) -> str:
-    return (thing or "").strip().lower()
+    """Canonical dedup key for a banned thing.
+
+    Strips case, surrounding whitespace and *trailing* sentence punctuation.
+    The extractors lift ``banned_thing`` straight out of operator prose, so
+    the same rule arrives as both ``claude`` and ``claude.`` depending on
+    where the sentence ended. Without the trim those land as two rows and
+    :func:`check_banned` misses whichever spelling the caller did not use.
+    """
+    return (thing or "").strip().lower().rstrip(".,;:!?").strip()
 
 
 # ---------------------------------------------------------------------------

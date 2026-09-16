@@ -760,6 +760,227 @@ def _new_rows_since(conn: sqlite3.Connection, table: str, before_id: int) -> int
     return int(row[0] or 0) if row else 0
 
 
+# ---------------------------------------------------------------------------
+# Structured projections (extractions -> lookup tables)
+# ---------------------------------------------------------------------------
+
+# Extraction kinds that have a structured destination table. Anything else
+# stays searchable in ``extractions`` only.
+_PROJECTED_KINDS = (
+    "ban",
+    "standing_decision",
+    "failed_attempt",
+    "goal",
+    "goal_progress",
+)
+
+
+class _ProjectedExtraction:
+    """Duck-typed view of an ``extractions`` row for the goal folder.
+
+    :func:`index.goals.upsert_from_extractions` reads attributes off whatever
+    it is handed (``Extraction`` dataclasses in the live pipeline,
+    ``SimpleNamespace`` in its own tests). This gives the DB rows the same
+    shape without dragging the extractor dataclass into the commit path.
+    """
+
+    __slots__ = ("kind", "content", "session_id", "cwd", "ts", "context")
+
+    def __init__(self, row: sqlite3.Row, context: dict) -> None:
+        self.kind = row["kind"]
+        self.content = row["content"]
+        self.session_id = row["session_id"]
+        self.cwd = row["cwd"]
+        self.ts = row["ts"]
+        self.context = context
+
+
+def _project_structured(conn: sqlite3.Connection, before_id: int) -> None:
+    """Fold extractions newer than ``before_id`` into their lookup tables.
+
+    The extractors already emit a fully-structured ``context_json`` whose
+    keys match each writer's kwargs one-for-one, so this is a dispatch, not
+    a parser. Every writer is idempotent on its own natural key, which keeps
+    re-ingest of a rotated file safe.
+
+    Each kind is isolated: a malformed payload skips that row, and a writer
+    blowing up skips that kind, without touching the others.
+    """
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT id, kind, content, session_id, cwd, ts, context_json
+              FROM extractions
+             WHERE id > ? AND kind IN ({",".join("?" * len(_PROJECTED_KINDS))})
+             ORDER BY id
+            """,
+            (before_id, *_PROJECTED_KINDS),
+        ).fetchall()
+    except sqlite3.OperationalError as exc:
+        log.warning("structured projection query failed: %s", exc)
+        return
+    if not rows:
+        return
+
+    by_kind: dict[str, list[tuple[sqlite3.Row, dict]]] = {}
+    for row in rows:
+        raw = row["context_json"]
+        if not raw:
+            continue
+        try:
+            ctx = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(ctx, dict):
+            continue
+        by_kind.setdefault(row["kind"], []).append((row, ctx))
+
+    if by_kind.get("ban"):
+        try:
+            from index.bans import upsert_ban
+
+            for row, ctx in by_kind["ban"]:
+                thing = (ctx.get("banned_thing") or "").strip()
+                if not thing:
+                    # Nothing to key the row on — the ban text alone is not
+                    # a lookup key, and a blank thing would collapse every
+                    # unparsed ban into one meaningless row.
+                    continue
+                upsert_ban(
+                    conn,
+                    banned_thing=thing,
+                    ban_strength=(ctx.get("ban_strength") or "context"),
+                    ban_text=(ctx.get("ban_text") or row["content"] or ""),
+                    category=ctx.get("category"),
+                    context_clause=ctx.get("context_clause"),
+                    ts=row["ts"],
+                    source_session=row["session_id"],
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ban projection failed: %s", exc)
+
+    if by_kind.get("standing_decision"):
+        try:
+            from index.decisions import mark_reversed, upsert_decision
+
+            for row, ctx in by_kind["standing_decision"]:
+                topic = (ctx.get("topic") or "").strip()
+                chose = (ctx.get("chose") or "").strip()
+                if not topic or not chose:
+                    continue
+                upsert_decision(
+                    conn,
+                    topic=topic,
+                    chose=chose,
+                    scope=(ctx.get("scope") or row["cwd"] or "global"),
+                    over=ctx.get("over"),
+                    rationale=ctx.get("rationale"),
+                    ts=row["ts"],
+                    source_session=row["session_id"],
+                )
+                # A decision the operator later reversed is recorded as the
+                # original choice plus a reversal marker, so the audit trail
+                # survives instead of the row silently flipping.
+                if ctx.get("is_reversed"):
+                    try:
+                        mark_reversed(
+                            conn,
+                            topic=topic,
+                            chose=chose,
+                            scope=(ctx.get("scope") or row["cwd"] or "global"),
+                            reversed_to=ctx.get("reversed_to"),
+                            ts=row["ts"],
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        log.debug("decision reversal marker skipped: %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("standing_decision projection failed: %s", exc)
+
+    if by_kind.get("failed_attempt"):
+        try:
+            from index.bans import upsert_failed_attempt
+
+            for row, ctx in by_kind["failed_attempt"]:
+                attempt = (ctx.get("attempt") or "").strip()
+                if not attempt:
+                    continue
+                upsert_failed_attempt(
+                    conn,
+                    attempt=attempt,
+                    replaced_by=ctx.get("replaced_by"),
+                    reason=ctx.get("reason") or row["content"],
+                    cwd=row["cwd"],
+                    attempted_ts=row["ts"],
+                    abandoned_ts=ctx.get("abandoned_ts"),
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("failed_attempt projection failed: %s", exc)
+
+    goal_rows = by_kind.get("goal", []) + by_kind.get("goal_progress", [])
+    if goal_rows:
+        try:
+            from index.goals import recompute_statuses, upsert_from_extractions
+
+            upsert_from_extractions(
+                conn,
+                [_ProjectedExtraction(row, ctx) for row, ctx in goal_rows],
+            )
+            # Status transitions (active -> paused / abandoned) are time-based,
+            # so they are recomputed whenever the stack changes rather than
+            # being derived at read time on every query.
+            recompute_statuses(conn)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("goal projection failed: %s", exc)
+
+    conn.commit()
+
+
+_BACKFILL_FLAG = "structured_projection_backfilled"
+
+
+def backfill_structured(conn: sqlite3.Connection, *, force: bool = False) -> bool:
+    """One-time projection of *pre-existing* extractions into lookup tables.
+
+    :func:`_project_structured` only sees rows a commit just wrote, so an
+    index built before the projection existed keeps its structured tables
+    empty forever — every ``check_banned`` / ``get_active_goal`` call would
+    keep returning a false negative until the operator ran a destructive
+    full rebuild.
+
+    This folds the whole ``extractions`` table once and records a sentinel
+    in ``schema_meta`` so the sweep does not repeat on every ingest tick.
+    The writers are idempotent, so a forced re-run is safe, just wasted
+    work. Returns True when a sweep ran.
+    """
+    try:
+        row = conn.execute(
+            "SELECT value FROM schema_meta WHERE key = ?", (_BACKFILL_FLAG,)
+        ).fetchone()
+    except sqlite3.OperationalError:
+        # No schema_meta (fresh/partial DB) — nothing to backfill against.
+        return False
+    if row is not None and not force:
+        return False
+
+    try:
+        _project_structured(conn, -1)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("structured backfill failed (non-fatal): %s", exc)
+        return False
+
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ?)",
+            (_BACKFILL_FLAG, str(int(time.time()))),
+        )
+        conn.commit()
+    except sqlite3.OperationalError as exc:
+        # Read-only handle (the MCP server opens mode=ro) — the projection
+        # itself would already have failed above, so this is belt-and-braces.
+        log.debug("could not record backfill sentinel: %s", exc)
+    return True
+
+
 def _commit_parsed(
     conn: sqlite3.Connection,
     parsed: _ParsedFile,
@@ -790,6 +1011,10 @@ def _commit_parsed(
     new_compactions = 0
     turn_durations_linked = 0
     errors = parsed.errors
+    # Watermark for the post-commit structured projection. Set inside the
+    # transaction, read after COMMIT so we only project rows that actually
+    # landed (INSERT OR IGNORE silently drops cross-source duplicates).
+    before_e = -1
 
     state = _read_state(conn, source_file)
 
@@ -908,7 +1133,7 @@ def _commit_parsed(
                 new_compactions = 0
 
         if parsed.extraction_rows:
-            before_e = _max_rowid(conn, "extractions")
+            before_e = _max_rowid(conn, "extractions")  # noqa: F841 - read post-COMMIT
             try:
                 conn.executemany(
                     """
@@ -998,6 +1223,26 @@ def _commit_parsed(
     except Exception:
         conn.execute("ROLLBACK")
         raise
+
+    # Structured projections — fold the extractions we just wrote into the
+    # lookup tables the MCP tools read (bans / standing_decisions /
+    # failed_attempts / goal_stack). Runs *after* COMMIT against the real
+    # rows so INSERT OR IGNORE dedup is already applied. Best-effort: a
+    # projection failure must never fail an ingest.
+    # Rebuild bulk_load skips this — cmd_rebuild does one cold consolidation.
+    if update_profiles:
+        # Self-heal an index built before the projection existed. No-ops
+        # after the first sweep (sentinel in schema_meta).
+        try:
+            backfill_structured(conn)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("structured backfill skipped: %s", exc)
+
+    if update_profiles and before_e >= 0 and new_extractions:
+        try:
+            _project_structured(conn, before_e)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("structured projection failed (non-fatal): %s", exc)
 
     # Incremental profile updates (cheap hot path per R2 research).
     # Wrapped in try/except — these are best-effort and must never fail
@@ -1720,9 +1965,7 @@ def ingest_all(
                             last_session_id=last_sid,
                         )
                         reports.append(
-                            _commit_parsed(
-                                conn, parsed, update_profiles=update_profiles
-                            )
+                            _commit_parsed(conn, parsed, update_profiles=update_profiles)
                         )
                     except Exception as exc:  # noqa: BLE001
                         log.warning("ingest_all: %s failed: %s", path, exc)
@@ -1766,9 +2009,7 @@ def ingest_all(
                             continue
                         try:
                             reports.append(
-                                _commit_parsed(
-                                    conn, parsed, update_profiles=update_profiles
-                                )
+                                _commit_parsed(conn, parsed, update_profiles=update_profiles)
                             )
                         except Exception as exc:  # noqa: BLE001
                             log.warning(
