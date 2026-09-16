@@ -20,6 +20,7 @@ from typing import Any, Literal
 
 from mcp.types import ToolAnnotations
 
+from mcp_server.bounds import bound_response, bound_text_fields
 from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
@@ -139,7 +140,11 @@ def recall_corrections_about(
                 from vec.rrf import try_hybrid_search
 
                 hits = try_hybrid_search(
-                    conn, topic, limit=limit, cwd=cwd_filter, kind="model_correction",
+                    conn,
+                    topic,
+                    limit=limit,
+                    cwd=cwd_filter,
+                    kind="model_correction",
                 )
             except Exception:
                 hits = None
@@ -182,7 +187,7 @@ def recall_corrections_about(
         ),
         reverse=True,
     )
-    return out[:limit]
+    return bound_response([bound_text_fields(r) for r in out[:limit]])
 
 
 @mcp.tool(title="Get Recent Corrections", annotations=ToolAnnotations(readOnlyHint=True))
@@ -253,7 +258,7 @@ def get_recent_corrections(
         out.append(row)
 
     out.sort(key=lambda r: r.get("ts") or "", reverse=True)
-    return out[:limit]
+    return bound_response([bound_text_fields(r) for r in out[:limit]])
 
 
 __all__ = [

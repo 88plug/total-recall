@@ -24,6 +24,7 @@ from typing import Any
 
 from mcp.types import ToolAnnotations
 
+from mcp_server.bounds import bound_response, bound_text_fields
 from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
@@ -151,7 +152,10 @@ def get_past_truth_assertions(
                 from vec.rrf import try_hybrid_search
 
                 hits = try_hybrid_search(
-                    conn, qtext, limit=fetch_limit, kind="truth_assertion",
+                    conn,
+                    qtext,
+                    limit=fetch_limit,
+                    kind="truth_assertion",
                 )
             except Exception:
                 hits = None
@@ -196,7 +200,7 @@ def get_past_truth_assertions(
         ),
         reverse=True,
     )
-    return out[:limit]
+    return bound_response([bound_text_fields(r) for r in out[:limit]])
 
 
 __all__ = ["get_past_truth_assertions"]

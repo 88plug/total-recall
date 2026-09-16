@@ -18,6 +18,7 @@ import sqlite3
 
 from mcp.types import ToolAnnotations
 
+from mcp_server.bounds import bound_response, bound_text_fields
 from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
@@ -148,7 +149,7 @@ def list_goals(
         with contextlib.suppress(Exception):
             conn.close()
 
-    return [r.to_dict() for r in rows]
+    return bound_response([bound_text_fields(r.to_dict()) for r in rows])
 
 
 __all__ = ["get_active_goal", "list_goals"]

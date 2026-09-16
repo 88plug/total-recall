@@ -273,7 +273,11 @@ def _route_checking_past_correction(
                 from vec.rrf import try_hybrid_search
 
                 hits = try_hybrid_search(
-                    conn, subject, limit=5, cwd=cwd_filter, kind="model_correction",
+                    conn,
+                    subject,
+                    limit=5,
+                    cwd=cwd_filter,
+                    kind="model_correction",
                 )
             except Exception:
                 hits = None

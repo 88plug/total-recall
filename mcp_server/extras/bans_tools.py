@@ -27,6 +27,7 @@ from typing import Any
 
 from mcp.types import ToolAnnotations
 
+from mcp_server.bounds import bound_response, bound_text_fields
 from mcp_server.server import DB_PATH, get_conn, mcp
 
 log = logging.getLogger(__name__)
@@ -138,7 +139,7 @@ def list_failed_attempts(topic: str | None = None, limit: int = 10) -> list[dict
                 "abandoned_ts": r.get("abandoned_ts"),
             }
         )
-    return out
+    return bound_response([bound_text_fields(r) for r in out])
 
 
 __all__ = ["check_banned", "list_failed_attempts"]
