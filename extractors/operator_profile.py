@@ -144,6 +144,159 @@ _HOSTNAME_CONTEXT_RE = re.compile(
 _HOSTNAME_TOKEN_RE = re.compile(r"\b([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})\b")
 
 
+# Common English words and shell/log vocabulary that the free-text capture
+# regexes pick up as if they were product names, banned vendors or hostnames.
+# Kept deliberately small and generic: real identity terms are proper nouns,
+# so anything here is noise by construction.
+_NOISE_TOKENS: frozenset[str] = frozenset(
+    {
+        # articles / pronouns / prepositions
+        "a",
+        "an",
+        "the",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "to",
+        "on",
+        "in",
+        "at",
+        "of",
+        "for",
+        "and",
+        "or",
+        "but",
+        "any",
+        "all",
+        "we",
+        "you",
+        "our",
+        "your",
+        "my",
+        "me",
+        "us",
+        "i",
+        # generic nouns that show up in prose about the work
+        "word",
+        "words",
+        "generic",
+        "metrics",
+        "metric",
+        "line",
+        "lines",
+        "file",
+        "files",
+        "code",
+        "test",
+        "tests",
+        "thing",
+        "things",
+        "stuff",
+        "item",
+        "items",
+        "value",
+        "values",
+        "name",
+        "names",
+        "data",
+        "log",
+        "logs",
+        "error",
+        "errors",
+        "output",
+        "input",
+        "connection",
+        "connections",
+        "reachable",
+        "launched",
+        "returned",
+        "running",
+        "started",
+        "stopped",
+        "failed",
+        "success",
+        "status",
+        # shell / tooling verbs and nouns
+        "bash",
+        "sh",
+        "zsh",
+        "shell",
+        "echo",
+        "grep",
+        "sed",
+        "awk",
+        "cat",
+        "edited",
+        "reconstructed",
+        "fork",
+        "super",
+        "compose",
+    }
+)
+
+# GitHub accounts that are never the operator.
+_GITHUB_USER_STOPLIST: frozenset[str] = frozenset({"anthropics", "anthropic", "claude-code"})
+
+
+def _is_noise_token(s: str) -> bool:
+    """True when a captured token is common vocabulary rather than a name."""
+    t = (s or "").strip().lower()
+    if not t or t in _NOISE_TOKENS:
+        return True
+    # Bare integers ("361") are never a vendor or a product.
+    return t.isdigit()
+
+
+def _identity_tokens_from_email(email: str | None) -> set[str]:
+    """Tokens that corroborate a candidate as the operator's own.
+
+    From ``andrew@88plug.com``: ``andrew`` (local part, plus each
+    dot/dash component) and ``88plug`` (second-level domain label).
+    """
+    tokens: set[str] = set()
+    if not email or "@" not in email:
+        return tokens
+    local, domain = email.split("@", 1)
+    tokens.add(local.lower())
+    for tok in re.split(r"[._+\-]", local):
+        if tok:
+            tokens.add(tok.lower())
+    domain_parts = domain.rstrip(".").split(".")
+    if len(domain_parts) >= 2:
+        tokens.add(domain_parts[-2].lower())
+    return tokens
+
+
+def _shares_identity_token(candidate: str, identity_tokens: set[str]) -> bool:
+    """True when any word of ``candidate`` is a known identity token."""
+    if not candidate or not identity_tokens:
+        return False
+    lowered = candidate.lower()
+    if lowered in identity_tokens:
+        return True
+    return any(tok in identity_tokens for tok in lowered.split() if len(tok) >= 2)
+
+
+def _ranked_by_corroboration(
+    counts: Counter[str], identity_tokens: set[str]
+) -> list[tuple[str, int]]:
+    """Order candidates by (corroborated, frequency), both descending."""
+    return sorted(
+        counts.items(),
+        key=lambda kv: (_shares_identity_token(kv[0], identity_tokens), kv[1]),
+        reverse=True,
+    )
+
+
+def _best_corroborated(counts: Counter[str], identity_tokens: set[str]) -> tuple[str, int]:
+    """Highest-ranked candidate under :func:`_ranked_by_corroboration`."""
+    ranked = _ranked_by_corroboration(counts, identity_tokens)
+    return ranked[0] if ranked else ("", 0)
+
+
 def _looks_like_person_name(s: str) -> bool:
     """Reject free-text two-cap matches that are obviously product/service
     names, not people. ``Claude Code`` / ``Sidecar Network`` / ``Cloudflare
@@ -650,6 +803,7 @@ def _extract_from_text_stream(
     timezones: Counter[str] = Counter()
     billing: Counter[str] = Counter()
     uplinks: Counter[str] = Counter()
+    uplink_display: dict[str, str] = {}
     own_prods: Counter[str] = Counter()
     philosophy_hits: Counter[str] = Counter()
 
@@ -714,7 +868,10 @@ def _extract_from_text_stream(
             )
             if not looks_like_host:
                 continue
-            if host in _HOSTNAME_COMMON_WORDS:
+            if host in _HOSTNAME_COMMON_WORDS or _is_noise_token(host):
+                # _HOSTNAME_COMMON_WORDS misses ordinary prose that happens to
+                # sit in hostname position ("connections", "reachable",
+                # "launched"), which is how 177 "hosts" were recorded.
                 continue
             # Strip a trailing dot (the regex captures one) — already done above.
             slot = machine_hits.setdefault(host, {"role": "", "ip": "", "tailscale": "", "hits": 0})
@@ -730,7 +887,7 @@ def _extract_from_text_stream(
 
         for victim in _BANNED_RE.findall(text):
             v = victim.lower().strip()
-            if v and v not in {"to", "the", "any", "all", "it"}:
+            if v and not _is_noise_token(v):
                 banned[v] += 1
                 _cite("banned_providers", source, line_no)
 
@@ -839,20 +996,29 @@ def _extract_from_text_stream(
             _cite("billing_rail", source, line_no)
 
         for u in _UPLINK_RE.findall(text):
-            # Normalise whitespace for multi-word names.
+            # Count case-insensitively but keep a proper-noun display form:
+            # the ISP list matched both "wave" and "Wave", which ranked as two
+            # separate uplinks. ISP names are proper nouns, so a capitalised
+            # sighting wins the display spelling.
             uk = re.sub(r"\s+", " ", u.strip())
-            uplinks[uk] += 1
+            if not uk:
+                continue
+            key = uk.lower()
+            uplinks[key] += 1
+            prev = uplink_display.get(key)
+            if prev is None or (uk[:1].isupper() and not prev[:1].isupper()):
+                uplink_display[key] = uk
             _cite("home_uplinks", source, line_no)
 
         # Own products: "our/my <name> project/tool/..." and git repo names.
         for prod in _OWN_PRODUCT_PHRASE_RE.findall(text):
             pk = prod.lower().strip()
-            if pk:
+            if pk and not _is_noise_token(pk):
                 own_prods[pk] += 1
                 _cite("own_products", source, line_no)
         for repo in _OWN_PRODUCT_GIT_REPO_RE.findall(text):
             rk = repo.lower().strip(".-")
-            if rk and len(rk) >= 3:
+            if rk and len(rk) >= 3 and not _is_noise_token(rk):
                 own_prods[rk] += 1
                 _cite("own_products", source, line_no)
 
@@ -868,17 +1034,36 @@ def _extract_from_text_stream(
         profile.email_primary = primary_email
         profile.emails_alt = [e for e, _ in email_counts.most_common()[1:6]]
         profile.confidence["email_primary"] = min(1.0, 0.5 + 0.1 * primary_count)
+    # Identity tokens corroborate a candidate against what we already know
+    # for certain — the operator's own email. Frequency alone is not evidence
+    # of identity: a corpus about Intel Gaudi mentions "Intel Gaudi" (438x)
+    # more often than the operator's own name (341x), and cites upstream
+    # github orgs far more than the operator's own account.
+    identity_tokens = _identity_tokens_from_email(profile.email_primary)
+
     if explicit_name_counts:
-        # Authoritative source wins outright.
-        best_name, n = explicit_name_counts.most_common(1)[0]
+        # An explicit declaration outranks free text, but "explicit" only means
+        # the *pattern* was authoritative — `author = "..."` also matches inside
+        # a code snippet the operator pasted, which is how `author="Intel..."`
+        # from a quoted diff tied with the operator's real name at 1 hit each
+        # and won on insertion order. Corroborate here too.
+        best_name, n = _best_corroborated(explicit_name_counts, identity_tokens)
         profile.name = best_name
-        profile.confidence["name"] = min(1.0, 0.7 + 0.1 * n)
+        corroborated = _shares_identity_token(best_name, identity_tokens)
+        profile.confidence["name"] = min(
+            1.0 if corroborated else 0.7, (0.7 if corroborated else 0.5) + 0.1 * n
+        )
     elif name_counts:
         # Filtered free-text wins over email-derived: real "First Last"
         # mentions are better signal than capitalizing an email local part.
-        best_name, n = name_counts.most_common(1)[0]
+        # Ranked by corroboration first so a product name cannot out-shout
+        # the operator simply by being the subject of the work.
+        best_name, n = _best_corroborated(name_counts, identity_tokens)
         profile.name = best_name
-        profile.confidence["name"] = min(0.7, 0.4 + 0.05 * n)
+        corroborated = _shares_identity_token(best_name, identity_tokens)
+        profile.confidence["name"] = min(
+            0.8 if corroborated else 0.6, (0.5 if corroborated else 0.4) + 0.05 * n
+        )
     elif profile.email_primary and "@" in profile.email_primary:
         # Last-resort: derive a candidate from the email local part.
         # ``dana@example.com`` → ``Dana``. Honest when the corpus has
@@ -895,18 +1080,8 @@ def _extract_from_text_stream(
         # beats unrelated high-frequency tokens (e.g. a frequently-mentioned
         # project like ``opnsense`` can't outrank ``dana`` when the email is
         # ``dana@example.com``).
-        identity_tokens: set[str] = set()
-        if profile.email_primary and "@" in profile.email_primary:
-            local, domain = profile.email_primary.split("@", 1)
-            # Local part and each dot/dash component (e.g. "dana.m" → "dana").
-            identity_tokens.add(local.lower())
-            for tok in re.split(r"[._+\-]", local):
-                if tok:
-                    identity_tokens.add(tok.lower())
-            # Second-level domain label (e.g. "88plug.com" → "88plug").
-            domain_parts = domain.rstrip(".").split(".")
-            if len(domain_parts) >= 2:
-                identity_tokens.add(domain_parts[-2].lower())
+        # Built above from the email; fold in the resolved name now that it
+        # is known, so "andrew" corroborates a handle as well as an address.
         if profile.name:
             for tok in profile.name.lower().split():
                 if len(tok) >= 2:
@@ -923,12 +1098,25 @@ def _extract_from_text_stream(
         profile.org, n = orgs.most_common(1)[0]
         profile.confidence["org"] = min(1.0, 0.5 + 0.1 * n)
     if github_users:
-        # Drop the literal org/repo we recognise as not personal.
-        for gh, _n in github_users.most_common():
-            if gh not in {"anthropics", "anthropic", "claude-code"}:
-                profile.github_user = gh
-                profile.confidence["github_user"] = min(1.0, 0.5 + 0.05 * _n)
-                break
+        # A transcript cites upstream repos far more than the operator's own
+        # account (vllm-project 260x vs 88plug 39x here), so raw frequency
+        # picks a stranger. Rank by identity corroboration first — the email
+        # SLD, the resolved handle, and name tokens all point at the real
+        # account — and keep frequency only as the tiebreak.
+        gh_tokens = set(identity_tokens)
+        if profile.handle:
+            gh_tokens.add(profile.handle.lower())
+        if profile.org:
+            gh_tokens.add(profile.org.lower())
+        for gh, _n in _ranked_by_corroboration(github_users, gh_tokens):
+            if gh.lower() in _GITHUB_USER_STOPLIST:
+                continue
+            profile.github_user = gh
+            corroborated = gh.lower() in gh_tokens
+            profile.confidence["github_user"] = min(
+                1.0 if corroborated else 0.5, (0.6 if corroborated else 0.3) + 0.05 * _n
+            )
+            break
     if gitlab_hosts:
         profile.gitlab_host, n = gitlab_hosts.most_common(1)[0]
         profile.confidence["gitlab_host"] = min(1.0, 0.5 + 0.1 * n)
@@ -953,7 +1141,7 @@ def _extract_from_text_stream(
         profile.billing_rail, n = billing.most_common(1)[0]
         profile.confidence["billing_rail"] = min(1.0, 0.5 + 0.1 * n)
     if uplinks:
-        profile.home_uplinks = [u for u, _ in uplinks.most_common()]
+        profile.home_uplinks = [uplink_display.get(u, u) for u, _ in uplinks.most_common()]
         profile.confidence["home_uplinks"] = min(1.0, 0.4 + 0.1 * sum(uplinks.values()))
     if banned:
         profile.banned_providers = [b for b, _ in banned.most_common()]
