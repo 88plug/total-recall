@@ -981,6 +981,95 @@ def backfill_structured(conn: sqlite3.Connection, *, force: bool = False) -> boo
     return True
 
 
+# Bump when the operator-profile extraction *rules* change, so an index
+# built under the old rules re-mines itself instead of serving stale values.
+# v2: identity corroboration + hostname/product shape rules.
+_PROFILE_RULES_VERSION = 2
+_PROFILE_REMINE_FLAG = "operator_profile_rules_version"
+
+
+def remine_profile(conn: sqlite3.Connection, *, force: bool = False) -> bool:
+    """Re-extract the operator profile when the extraction rules have changed.
+
+    The profile is a *cached* row. Incremental updates merge new records into
+    whatever is already stored, so a value the old rules got wrong survives
+    every subsequent tick — an index built before identity corroboration kept
+    reporting ``name = "The Monitor"`` (an assistant sentence) with the fixed
+    code installed, because nothing ever recomputed it.
+
+    Keyed on a rules version rather than a done/not-done flag: the next rule
+    change bumps the constant and every existing index re-mines once, instead
+    of needing a destructive rebuild or a hand-written migration each time.
+
+    Best-effort and never fatal. Returns True when a re-mine ran.
+    """
+    try:
+        row = conn.execute(
+            "SELECT value FROM schema_meta WHERE key = ?", (_PROFILE_REMINE_FLAG,)
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return False
+    if not force:
+        try:
+            if row is not None and int(str(row[0])) >= _PROFILE_RULES_VERSION:
+                return False
+        except (TypeError, ValueError):
+            pass  # unparseable sentinel — treat as stale and re-mine
+
+    # A fresh index has nothing stale to repair: the incremental updater will
+    # build the profile under the current rules from its first tick. Re-mining
+    # here would instead mine the single file this commit just wrote, persist
+    # that as authoritative, and stamp the version so it never re-ran. Stamp
+    # and skip.
+    try:
+        has_profile = conn.execute("SELECT 1 FROM operator_profile LIMIT 1").fetchone() is not None
+    except sqlite3.OperationalError:
+        has_profile = False
+    if not has_profile and not force:
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(
+                "INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ?)",
+                (_PROFILE_REMINE_FLAG, str(_PROFILE_RULES_VERSION)),
+            )
+            conn.commit()
+        return False
+
+    try:
+        from extractors.operator_profile import (  # type: ignore[import-not-found]
+            _extract_from_text_stream,
+            persist_profile,
+        )
+    except ImportError as exc:
+        log.debug("operator_profile unavailable, skipping re-mine: %s", exc)
+        return False
+
+    try:
+        # Re-mine from the indexed messages rather than re-walking the JSONL
+        # corpus: the rows are already parsed, and the extractor only needs
+        # text. One pass, no second ingest.
+        def _stream():
+            cur = conn.execute("SELECT text FROM messages WHERE text IS NOT NULL AND text != ''")
+            for i, (text,) in enumerate(cur):
+                yield text, "<remine>", i
+
+        profile = _extract_from_text_stream(_stream())
+        # Replace rather than merge — the point is to discard values the old
+        # rules produced, which a merge would preserve.
+        conn.execute("DELETE FROM operator_profile")
+        persist_profile(conn, profile)
+        conn.execute(
+            "INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ?)",
+            (_PROFILE_REMINE_FLAG, str(_PROFILE_RULES_VERSION)),
+        )
+        conn.commit()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("operator profile re-mine failed (non-fatal): %s", exc)
+        with contextlib.suppress(Exception):
+            conn.rollback()
+        return False
+    return True
+
+
 def _commit_parsed(
     conn: sqlite3.Connection,
     parsed: _ParsedFile,
@@ -1237,6 +1326,13 @@ def _commit_parsed(
             backfill_structured(conn)
         except Exception as exc:  # noqa: BLE001
             log.warning("structured backfill skipped: %s", exc)
+
+        # Same shape of problem for the cached profile: the fix ships in the
+        # code, but the stored row keeps the old answer until recomputed.
+        try:
+            remine_profile(conn)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("profile re-mine skipped: %s", exc)
 
     if update_profiles and before_e >= 0 and new_extractions:
         try:

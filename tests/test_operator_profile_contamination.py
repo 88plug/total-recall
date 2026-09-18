@@ -27,8 +27,10 @@ if str(REPO_ROOT) not in sys.path:
 
 from extractors.operator_profile import (  # noqa: E402
     _extract_from_text_stream,
+    _host_is_english_compound,
     _identity_tokens_from_email,
     _is_noise_token,
+    _looks_like_product_name,
     _shares_identity_token,
     extract_operator_profile_from_records,
 )
@@ -145,3 +147,109 @@ def test_home_uplinks_collapse_case_variants() -> None:
     )
     uplinks = profile.home_uplinks
     assert len(uplinks) == len({u.lower() for u in uplinks})
+
+
+# ---------------------------------------------------------------------------
+# Hostname shape rules
+# ---------------------------------------------------------------------------
+
+
+def test_english_prose_in_host_position_is_rejected() -> None:
+    """`ssh connections` / `deploying to production` were recorded as machines.
+
+    The old rule admitted any bare word >= 8 chars that a hand-written list
+    did not happen to contain, so open-ended English always leaked through.
+    """
+    profile = _extract_from_text_stream(
+        _stream(
+            "ssh connections were dropping all morning",
+            "deploying to production later today",
+            "hostname: reachability is the open question",
+            "check the credentials and infrastructure",
+        )
+    )
+    assert profile.machines == {}
+
+
+def test_host_shaped_tokens_are_kept() -> None:
+    profile = _extract_from_text_stream(
+        _stream(
+            "ssh gaudi-1 and check the fans",
+            "deploying to edge-01 now",
+            "hostname: gw.example.com",
+            "ssh host01 for the logs",
+        )
+    )
+    assert set(profile.machines) == {"gaudi-1", "edge-01", "gw.example.com", "host01"}
+
+
+def test_bare_name_kept_when_corpus_has_a_shaped_sibling() -> None:
+    """`yuzu` is a real host; the old rule dropped it for being short.
+
+    It is admitted because the same corpus contains `yuzu01`, so the family
+    is evidenced rather than guessed.
+    """
+    profile = _extract_from_text_stream(
+        _stream("ssh yuzu for the model dir", "ssh yuzu01 to compare")
+    )
+    assert "yuzu" in profile.machines
+    assert "yuzu01" in profile.machines
+
+
+def test_bare_name_dropped_without_a_shaped_sibling() -> None:
+    profile = _extract_from_text_stream(_stream(*(["ssh operator to fix it"] * 3)))
+    assert "operator" not in profile.machines
+
+
+def test_hyphenated_english_phrases_are_not_hosts() -> None:
+    """`read-only`, `key-based` and `off-subnet` have hostname punctuation."""
+    profile = _extract_from_text_stream(
+        _stream(
+            "deploying to read-only mode",
+            "ssh key-based auth is on",
+            "hostname: off-subnet traffic",
+        )
+    )
+    assert profile.machines == {}
+
+
+def test_host_english_compound_helper() -> None:
+    assert _host_is_english_compound("read-only") is True
+    assert _host_is_english_compound("key-based") is True
+    assert _host_is_english_compound("gaudi-1") is False, "has a digit"
+    assert _host_is_english_compound("harvest-edge-01") is False
+    assert _host_is_english_compound("yuzu") is False, "no hyphen"
+
+
+# ---------------------------------------------------------------------------
+# Product-name shape rules
+# ---------------------------------------------------------------------------
+
+
+def test_modifiers_are_not_product_names() -> None:
+    for junk in ("own", "new", "existing", "current", "entire", "local", "active"):
+        assert _looks_like_product_name(junk) is False, junk
+
+
+def test_participles_are_not_product_names() -> None:
+    """ "our edited compose project" named the edit, not the product."""
+    for junk in ("edited", "reconstructed", "converted", "generated"):
+        assert _looks_like_product_name(junk) is False, junk
+
+
+def test_real_product_names_survive() -> None:
+    for real in ("harvest-intel", "fgpu_ansible", "nixl", "sglang", "total-recall"):
+        assert _looks_like_product_name(real) is True, real
+
+
+def test_own_products_drops_the_captured_modifier() -> None:
+    profile = _extract_from_text_stream(
+        _stream(
+            "our new project is shaping up",
+            "my existing tool needs work",
+            "our harvest-intel project ships today",
+        )
+    )
+    assert "harvest-intel" in profile.own_products
+    for junk in ("new", "existing"):
+        assert junk not in profile.own_products
