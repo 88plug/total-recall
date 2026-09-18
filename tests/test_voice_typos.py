@@ -49,15 +49,42 @@ def test_hunspell_entries_drop_affix_flags() -> None:
     assert vp._normalize_wordlist_entry("") == ""
 
 
-def test_loaded_wordlist_knows_ordinary_words() -> None:
-    """The seed failure: these five were reported as signature typos."""
+def test_loaded_wordlist_knows_ordinary_base_words() -> None:
+    """A real dictionary carries everyday lemmas.
+
+    Base forms only. Which *inflections* a wordlist carries varies — a lemma
+    dictionary lists ``crash`` and leaves ``crashed`` to affix rules, while
+    cracklib-small happens to spell both out — so asserting on an inflected
+    form tests the host's dictionary, not this code.
+    """
     if not vp.english_wordlist_is_usable():
         import pytest
 
         pytest.skip("no system dictionary on this host")
     words = vp._get_english_words()
-    for ordinary in ("node", "crashed", "running", "fleet", "report"):
+    for ordinary in ("node", "crash", "run", "fleet", "report"):
         assert ordinary in words, ordinary
+
+
+def test_inflections_are_not_typos_even_when_absent_from_the_dictionary() -> None:
+    """The guarantee that actually matters, and it must not need the dictionary.
+
+    ``crashed`` and ``running`` were the seed failure. On a lemma-only
+    dictionary they are still missing, so membership alone can never fix
+    this — the frequency rules have to carry it. Words used thousands of
+    times are vocabulary whatever the wordlist says.
+    """
+    lemma_only = frozenset({"crash", "run", "node", "report", "fleet", "task"})
+    counts = {"crashed": 2168, "crash": 50, "running": 1250, "run": 300}
+    for inflected in ("crashed", "running"):
+        assert inflected not in lemma_only, "precondition: absent from the dictionary"
+        assert vp._looks_like_typo(inflected, counts[inflected], lemma_only, counts) is False, (
+            inflected
+        )
+
+    # ...while a real slip is still caught on the same thin dictionary.
+    slips = {"task": 3204, "taks": 5}
+    assert vp._looks_like_typo("taks", 5, lemma_only, slips) is True
 
 
 # ---------------------------------------------------------------------------
