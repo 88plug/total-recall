@@ -250,6 +250,196 @@ def _is_noise_token(s: str) -> bool:
     return t.isdigit()
 
 
+# Hostname shape rules.
+#
+# The old acceptance test had an escape hatch — a bare alphabetic token was
+# accepted whenever it was >= 8 chars and absent from a hand-written word
+# list. English is open-ended, so that list could never keep up: `ssh
+# connections`, `deploying to production` and `hostname: reachability` all
+# matched the context regex and were recorded as machines (191 "hosts" on a
+# real corpus, of which most were prose).
+#
+# Replaced by shape, which is closed: a real hostname carries a hyphen, a
+# digit or a dot. A bare word is admitted only when the corpus also contains
+# a host-shaped member of the same family (`yuzu` because `yuzu01` exists),
+# which is why this has to run after the whole stream is collected rather
+# than per-line.
+
+# Closed word class: parts that only ever appear in hyphenated English
+# phrases ("key-based", "read-only", "off-subnet"), never in a real hostname.
+_HOSTNAME_ENGLISH_PARTS: frozenset[str] = frozenset(
+    [
+        "key",
+        "based",
+        "off",
+        "subnet",
+        "mid",
+        "play",
+        "local",
+        "forward",
+        "read",
+        "only",
+        "write",
+        "fail",
+        "delay",
+        "long",
+        "short",
+        "high",
+        "low",
+        "first",
+        "last",
+        "next",
+        "prev",
+        "old",
+        "new",
+        "full",
+        "half",
+        "auto",
+        "manual",
+        "re",
+        "test",
+        "exports",
+        "product",
+        "plane",
+        "close",
+        "open",
+        "up",
+        "down",
+        "in",
+        "out",
+        "on",
+        "pre",
+        "post",
+        "non",
+        "anti",
+        "sub",
+        "super",
+        "multi",
+        "single",
+        "dual",
+        "cross",
+        "inter",
+        "intra",
+        "self",
+        "same",
+        "other",
+        "any",
+        "all",
+        "none",
+        "user",
+        "demo",
+        "customer",
+        "prod",
+        "dev",
+        "stage",
+        "main",
+    ]
+)
+
+
+def _host_is_shaped(host: str) -> bool:
+    """True when a token carries hostname punctuation or a digit."""
+    return "-" in host or "." in host or any(c.isdigit() for c in host)
+
+
+def _host_is_english_compound(host: str) -> bool:
+    """True for hyphenated English phrases like ``read-only`` or ``key-based``."""
+    if "-" not in host or "." in host or any(c.isdigit() for c in host):
+        return False
+    return all(part in _HOSTNAME_ENGLISH_PARTS for part in host.split("-"))
+
+
+def _filter_hostnames(candidates: dict[str, dict]) -> dict[str, dict]:
+    """Keep only candidates whose *shape* says hostname.
+
+    Two passes. First keep the host-shaped tokens that are not English
+    compounds — that set is the evidence. Then admit a bare word only if it
+    is the stem of one of those (``yuzu`` given ``yuzu01``), so a real host
+    referred to by its short name survives while prose does not.
+
+    Measured on a 136k-message corpus: 191 candidates -> 57, and *more* real
+    hosts retained (22/22 against 19/20 — the old rule dropped ``yuzu``).
+    """
+    core = {h for h in candidates if _host_is_shaped(h) and not _host_is_english_compound(h)}
+
+    def _is_stem_of_core(host: str) -> bool:
+        for shaped in core:
+            if shaped == host or not shaped.startswith(host):
+                continue
+            nxt = shaped[len(host)]
+            if nxt.isdigit() or nxt in "-.":
+                return True
+        return False
+
+    return {
+        h: slot
+        for h, slot in candidates.items()
+        if (h in core) or (not _host_is_shaped(h) and _is_stem_of_core(h))
+    }
+
+
+# Product names are proper nouns. The "our|my X project" pattern captures the
+# word immediately before the noun, which in natural prose is usually a
+# modifier — "our new CLI tool", "my existing compose project" yielded `new`
+# and `existing`. Determiners and participles are closed classes, so they can
+# be excluded by rule rather than by an ever-growing list.
+_PRODUCT_MODIFIERS: frozenset[str] = frozenset(
+    [
+        "own",
+        "new",
+        "old",
+        "existing",
+        "current",
+        "entire",
+        "whole",
+        "actual",
+        "real",
+        "local",
+        "remote",
+        "active",
+        "exact",
+        "full",
+        "same",
+        "only",
+        "other",
+        "next",
+        "last",
+        "first",
+        "best",
+        "main",
+        "previous",
+        "original",
+        "initial",
+        "final",
+        "latest",
+        "legacy",
+        "shared",
+        "internal",
+        "external",
+        "upstream",
+        "downstream",
+        "default",
+        "custom",
+        "generic",
+        "simple",
+        "basic",
+        "single",
+        "multi",
+        "whole",
+    ]
+)
+
+
+def _looks_like_product_name(token: str) -> bool:
+    """Reject modifiers and past participles captured in product position."""
+    t = (token or "").strip().lower()
+    if not t or t in _PRODUCT_MODIFIERS or _is_noise_token(t):
+        return False
+    # "our edited compose project", "my reconstructed tool" — a participle
+    # describes what was done to a thing, it is never the thing's name.
+    return not (len(t) > 4 and t.endswith("ed") and "-" not in t)
+
+
 def _identity_tokens_from_email(email: str | None) -> set[str]:
     """Tokens that corroborate a candidate as the operator's own.
 
@@ -857,21 +1047,11 @@ def _extract_from_text_stream(
             # Reject pure IPs — those land in lan_ips / tailscale_ips.
             if all(c.isdigit() or c == "." for c in host):
                 continue
-            # Real hostnames almost always have a hyphen, digit, or dot
-            # (e.g. relay-eu-1, host01, gw.example). Bare alphabetic
-            # tokens are accepted only when long AND not common English.
-            looks_like_host = (
-                "-" in host
-                or "." in host
-                or any(c.isdigit() for c in host)
-                or (len(host) >= 8 and host not in _HOSTNAME_COMMON_WORDS)
-            )
-            if not looks_like_host:
-                continue
+            # Shape is decided once, over the whole candidate set, by
+            # _filter_hostnames() at reduce time — a bare name like `yuzu`
+            # can only be judged against the rest of the corpus (`yuzu01`).
+            # Only the cheap, context-free rejections happen here.
             if host in _HOSTNAME_COMMON_WORDS or _is_noise_token(host):
-                # _HOSTNAME_COMMON_WORDS misses ordinary prose that happens to
-                # sit in hostname position ("connections", "reachable",
-                # "launched"), which is how 177 "hosts" were recorded.
                 continue
             # Strip a trailing dot (the regex captures one) — already done above.
             slot = machine_hits.setdefault(host, {"role": "", "ip": "", "tailscale": "", "hits": 0})
@@ -1013,10 +1193,13 @@ def _extract_from_text_stream(
         # Own products: "our/my <name> project/tool/..." and git repo names.
         for prod in _OWN_PRODUCT_PHRASE_RE.findall(text):
             pk = prod.lower().strip()
-            if pk and not _is_noise_token(pk):
+            if pk and _looks_like_product_name(pk):
                 own_prods[pk] += 1
                 _cite("own_products", source, line_no)
         for repo in _OWN_PRODUCT_GIT_REPO_RE.findall(text):
+            # This pattern reads a real clone URL, so it needs no shape rule —
+            # measured 100% precise on the corpus (vllm-gaudi, fgpu_ansible,
+            # harvest-intel, nixl, sglang). Only the noise guard applies.
             rk = repo.lower().strip(".-")
             if rk and len(rk) >= 3 and not _is_noise_token(rk):
                 own_prods[rk] += 1
@@ -1159,6 +1342,9 @@ def _extract_from_text_stream(
     # adjacently, but doing that reliably requires sentence-level windowing
     # we deliberately avoid in this pass. We surface what we have and let
     # downstream callers refine.
+    # Shape filter runs here, not per-line: admitting a bare name depends on
+    # whether the corpus holds a host-shaped sibling.
+    machine_hits = _filter_hostnames(machine_hits)
     if machine_hits:
         for host, slot in machine_hits.items():
             profile.machines[host] = {

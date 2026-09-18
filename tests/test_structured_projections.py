@@ -358,3 +358,130 @@ def test_commit_triggers_backfill_for_legacy_rows(tmp_db: sqlite3.Connection) ->
 
     things = {r[0] for r in tmp_db.execute("SELECT banned_thing FROM bans")}
     assert things == {"legacy", "fresh"}
+
+
+# ---------------------------------------------------------------------------
+# Versioned operator-profile re-mine
+# ---------------------------------------------------------------------------
+
+
+def _seed_stale_profile(conn: sqlite3.Connection) -> None:
+    """Store a profile the way the pre-corroboration rules would have.
+
+    Plus the operator text that lets a re-mine reach the right answer.
+    """
+    from index.operator import ensure_schema as _profile_schema
+
+    _profile_schema(conn)
+    conn.execute(
+        "INSERT OR REPLACE INTO operator_profile(key, value) VALUES ('name', ?)",
+        ('"The Monitor"',),
+    )
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO messages(
+            session_id, cwd, role, ts, byte_offset, source_file, message_uuid, text
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (SESSION, CWD, "user", TS, i, "/tmp/s.jsonl", f"u{i}", t)
+            for i, t in enumerate(
+                [
+                    "reach me at dana@example.com",
+                    "Dana Lopez owns this repo",
+                    "I'll wait on the Monitor for readiness",
+                ]
+            )
+        ],
+    )
+    conn.commit()
+
+
+def _profile_name(conn: sqlite3.Connection) -> str | None:
+    row = conn.execute("SELECT value FROM operator_profile WHERE key='name'").fetchone()
+    return row[0] if row else None
+
+
+def test_remine_replaces_a_profile_built_by_old_rules(tmp_db: sqlite3.Connection) -> None:
+    from index.ingest import remine_profile
+
+    _seed_stale_profile(tmp_db)
+    assert "The Monitor" in (_profile_name(tmp_db) or "")
+
+    assert remine_profile(tmp_db) is True
+    assert "The Monitor" not in (_profile_name(tmp_db) or "")
+    assert "Dana" in (_profile_name(tmp_db) or "")
+
+
+def test_remine_is_keyed_on_the_rules_version(tmp_db: sqlite3.Connection) -> None:
+    """Runs once per rules version, not once ever — the next fix self-heals."""
+    from index.ingest import (
+        _PROFILE_REMINE_FLAG,
+        _PROFILE_RULES_VERSION,
+        remine_profile,
+    )
+
+    _seed_stale_profile(tmp_db)
+    assert remine_profile(tmp_db) is True
+    assert remine_profile(tmp_db) is False, "same version must not re-run"
+
+    # Simulate shipping a newer ruleset.
+    tmp_db.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ?)",
+        (_PROFILE_REMINE_FLAG, str(_PROFILE_RULES_VERSION - 1)),
+    )
+    tmp_db.commit()
+    assert remine_profile(tmp_db) is True, "older stored version must re-mine"
+
+
+def test_remine_tolerates_a_corrupt_sentinel(tmp_db: sqlite3.Connection) -> None:
+    from index.ingest import _PROFILE_REMINE_FLAG, remine_profile
+
+    _seed_stale_profile(tmp_db)
+    tmp_db.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, 'not-a-number')",
+        (_PROFILE_REMINE_FLAG,),
+    )
+    tmp_db.commit()
+    assert remine_profile(tmp_db) is True
+
+
+def test_commit_triggers_the_remine(tmp_db: sqlite3.Connection) -> None:
+    """A normal ingest tick heals the profile without a rebuild."""
+    _seed_stale_profile(tmp_db)
+    _commit_parsed(
+        tmp_db,
+        _parsed(
+            _extraction_row(
+                "ban",
+                "no junk",
+                {"banned_thing": "junk", "ban_strength": "absolute", "ban_text": "no junk"},
+                source_uuid="msg_remine_tick",
+            )
+        ),
+    )
+    assert "The Monitor" not in (_profile_name(tmp_db) or "")
+
+
+def test_remine_skips_a_fresh_index_but_stamps_the_version(
+    tmp_db: sqlite3.Connection,
+) -> None:
+    """A fresh index has no stale profile — re-mining would poison it.
+
+    Without this guard the first commit mines the one file it just wrote,
+    persists that as the authoritative profile, and stamps the version so the
+    real sweep never runs.
+    """
+    from index.ingest import _PROFILE_REMINE_FLAG, _PROFILE_RULES_VERSION, remine_profile
+    from index.operator import ensure_schema
+
+    ensure_schema(tmp_db)
+    assert tmp_db.execute("SELECT count(*) FROM operator_profile").fetchone()[0] == 0
+
+    assert remine_profile(tmp_db) is False, "nothing to repair on a fresh index"
+    assert tmp_db.execute("SELECT count(*) FROM operator_profile").fetchone()[0] == 0
+
+    row = tmp_db.execute(
+        "SELECT value FROM schema_meta WHERE key = ?", (_PROFILE_REMINE_FLAG,)
+    ).fetchone()
+    assert row is not None and int(row[0]) == _PROFILE_RULES_VERSION
