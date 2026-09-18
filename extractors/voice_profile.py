@@ -268,27 +268,73 @@ _SKIP_TOKEN = re.compile(r"[0-9_/\\@#$%^*+=<>|]|https?:|\.{2,}")
 _TYPO_MIN_LEN = 3
 
 
+# Probed in order; the first list with enough entries wins.
+#   words / american-english / british-english  Debian, Fedora, macOS
+#   cracklib-small                              Arch, Manjaro
+#   web2                                        macOS / BSD
+#   *.dic                                       hunspell / myspell
+_SYSTEM_WORDLIST_PATHS: tuple[str, ...] = (
+    "/usr/share/dict/words",
+    "/usr/share/dict/american-english",
+    "/usr/share/dict/british-english",
+    "/usr/share/dict/web2",
+    "/usr/share/dict/cracklib-small",
+    "/usr/share/cracklib/cracklib-small",
+    "/usr/share/hunspell/en_US.dic",
+    "/usr/share/myspell/en_US.dic",
+    "/usr/share/myspell/dicts/en_US.dic",
+)
+
+# A list smaller than this cannot tell a typo from ordinary vocabulary, so
+# the typo feature reports nothing rather than guessing (see _learn_typos).
+_MIN_USABLE_WORDLIST = 5_000
+
+
+def _normalize_wordlist_entry(line: str) -> str:
+    """Lowercase one wordlist line, dropping hunspell affix flags.
+
+    hunspell/myspell ``.dic`` entries look like ``running/AG`` and the first
+    line is an entry count, so the affix suffix has to come off or the word
+    never matches.
+    """
+    word = line.strip()
+    if not word:
+        return ""
+    word = word.split("/", 1)[0].split("\t", 1)[0]
+    return word.lower() if word.isalpha() else ""
+
+
+def english_wordlist_is_usable() -> bool:
+    """True when a real system dictionary backs the typo filter.
+
+    False means only the embedded fallback was found, which is too small to
+    separate typos from vocabulary.
+    """
+    return len(_get_english_words()) >= _MIN_USABLE_WORDLIST
+
+
 def _load_english_wordlist() -> frozenset[str]:
     """Return a frozenset of lowercase English words for the typo filter.
 
-    Strategy (offline, dependency-free, KISS):
-    1. Try the system wordlist at /usr/share/dict/words — present on most
-       Linux/macOS installs. Contains ~100k+ entries and handles obscure
-       technical vocabulary well.
-    2. Fall back to an embedded set of ~600 high-frequency English words
-       that covers the common vocabulary of engineering chat (verbs, nouns,
-       pronouns, conjunctions, prepositions, common adj/adv).  The embedded
-       set is intentionally large enough that normal words almost never pass
-       through as "typos" even without the system list.
+    Offline and dependency-free: probe the well-known system wordlists in
+    turn, then fall back to the embedded set.
+
+    Only ``/usr/share/dict/words`` used to be tried. That path does not exist
+    on Arch/Manjaro (which ship ``dict/cracklib-small``) or on a Debian box
+    without ``wordlist`` installed, so those hosts silently dropped to the
+    embedded list — 239 words, not the ~600 the docstring claimed — and every
+    ordinary word the operator typed came back as one of their "signature
+    typos": ``node``, ``crashed``, ``running``, ``fleet``.
     """
-    system_path = "/usr/share/dict/words"
-    try:
-        with open(system_path, encoding="utf-8", errors="ignore") as fh:
-            words = frozenset(w.strip().lower() for w in fh if w.strip())
-        if len(words) > 1000:  # sanity check — file must be non-trivial
+    for path in _SYSTEM_WORDLIST_PATHS:
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as fh:
+                words = frozenset(_normalize_wordlist_entry(line) for line in fh)
+        except OSError:
+            continue
+        words = frozenset(w for w in words if w)
+        if len(words) >= _MIN_USABLE_WORDLIST:
             return words
-    except OSError:
-        pass
 
     # Embedded fallback: common English words + contractions + tech terms.
     # Not exhaustive — just broad enough to suppress normal vocabulary.
@@ -551,6 +597,79 @@ def _get_english_words() -> frozenset[str]:
     return _ENGLISH_WORDS
 
 
+_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
+
+# Shorter than this and a token is an acronym, not a slip.
+_TYPO_MIN_NEAR_LEN = 4
+
+# How much commoner the intended word must be. Calibrated on a 3.3M-char
+# operator corpus: below ~200x the list fills with technical abbreviations
+# (perf/repo/auth/toml), at 200x it is dominated by real slips.
+_TYPO_DOMINANCE_RATIO = 200
+
+# Cap when the intended word is absent from the corpus and cannot vouch for
+# the candidate. Deliberately tight: vocabulary recurs, a slip does not.
+_TYPO_MAX_UNCORROBORATED = 5
+
+
+def _english_neighbours(token: str, english: frozenset[str]) -> set[str]:
+    """Real words one edit from ``token`` — deletion, swap, substitution, insertion."""
+    out: set[str] = set()
+    for i in range(len(token)):
+        out.add(token[:i] + token[i + 1 :])
+    for i in range(len(token) - 1):
+        out.add(token[:i] + token[i + 1] + token[i] + token[i + 2 :])
+    for i in range(len(token)):
+        for ch in _ALPHABET:
+            out.add(token[:i] + ch + token[i + 1 :])
+    for i in range(len(token) + 1):
+        for ch in _ALPHABET:
+            out.add(token[:i] + ch + token[i:])
+    out.discard(token)
+    return {w for w in out if w in english}
+
+
+def _looks_like_typo(
+    token: str, count: int, english: frozenset[str], corpus_counts: Counter[str]
+) -> bool:
+    """True when ``token`` reads as a slip rather than vocabulary.
+
+    Two conditions, both needed:
+
+    * one edit from a real word — that is what a typo *is*; and
+    * the word it misses is *far* commoner in the same corpus.
+
+    The second is what separates a slip from jargon, and neither test alone
+    does. Absence from the dictionary catches nothing on its own (``gaudi``,
+    ``nixl``, ``vllm`` are vocabulary, not misspellings), and nearness is
+    almost free for short tokens — ``gaudi`` is one substitution from
+    ``gaudy``, ``hpu`` one from ``cpu``. But nobody mistypes the same word
+    ten thousand times: measured here ``gaudi`` outnumbers ``gaudy`` and
+    ``harvestd`` runs at a third of ``harvest``, while a true slip like
+    ``waht`` or ``taks`` is hundreds of times rarer than the word meant.
+    """
+    if len(token) < _TYPO_MIN_NEAR_LEN:
+        # Short tokens are acronyms far more often than slips, and they sit
+        # one edit from half the dictionary.
+        return False
+    neighbours = _english_neighbours(token, english)
+    if not neighbours:
+        return False
+    # Either signal is enough on its own.
+    #
+    # Dominance handles a token used often enough to look like vocabulary:
+    # it is still a slip if the word it misses is hundreds of times commoner.
+    # Rarity handles the rest, including the case where the intended word is
+    # absent or barely present, so dominance has nothing to weigh — a writer
+    # who only ever gets a word wrong still made a typo. Vocabulary recurs
+    # and so fails both: `gaudi` ran to ten thousand uses here, `harvestd`
+    # to hundreds, while a slip stays in single figures.
+    best = max(corpus_counts.get(w, 0) for w in neighbours)
+    if count <= _TYPO_MAX_UNCORROBORATED:
+        return True
+    return best >= _TYPO_DOMINANCE_RATIO * count
+
+
 def _learn_typos(
     corpus_lc: str,
     top_n: int = _TYPO_TOP_N,
@@ -573,6 +692,12 @@ def _learn_typos(
     """
     english = _get_english_words()
 
+    # No real dictionary on this host: the embedded fallback cannot tell a
+    # typo from ordinary vocabulary, so every word the operator wrote would
+    # be reported as their typo. Report nothing instead of nonsense.
+    if len(english) < _MIN_USABLE_WORDLIST:
+        return []
+
     # Tokenise: split on anything that's not alpha, keep length >= min_len.
     raw_tokens = re.findall(rf"[a-z]{{{_TYPO_MIN_LEN},}}", corpus_lc)
 
@@ -584,9 +709,18 @@ def _learn_typos(
             continue
         token_counts[tok] += 1
 
-    # Build learned list: must recur >= min_freq.
+    # Build learned list: must recur >= min_freq *and* be one edit from a
+    # real word. Frequency alone promotes domain jargon (gaudi, vllm, nixl)
+    # that is simply absent from the dictionary, not misspelled.
+    # Every alphabetic token, including dictionary words — needed as the
+    # denominator when judging whether a candidate is a slip off one of them.
+    corpus_counts: Counter[str] = Counter(raw_tokens)
     learned: Counter[str] = Counter(
-        {tok: cnt for tok, cnt in token_counts.items() if cnt >= min_freq}
+        {
+            tok: cnt
+            for tok, cnt in token_counts.items()
+            if cnt >= min_freq and _looks_like_typo(tok, cnt, english, corpus_counts)
+        }
     )
 
     # Always fold in the universal seed (SIGNATURE_TYPO_CANDIDATES) at
