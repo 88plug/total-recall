@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — uv shim kept a deleted plugin path
+
+`recall::python` writes `bin/uv-python-shim` once in the data dir. After a plugin update that path still pointed at a removed cache, so `python -m total_recall` failed and the pre-compact ingest no-oped. The shim is rewritten when its `--project` path is not the current plugin root.
+
 ### Added — ingest before compaction, recall on the way out
 
 PreCompact now ingests the live transcript (`total-recall index --file`) before the continuation packet is built. The ingest is synchronous and watermarked, and a failure stays exit 0. It never exits 2 and never sends `continue: false`, because blocking a proactive auto-compact skips the compaction.
