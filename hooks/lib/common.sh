@@ -374,12 +374,17 @@ recall::python() {
   local root; root="$(recall::_plugin_root)"
   local shim="${RECALL_DATA_ROOT}/bin/uv-python-shim"
   mkdir -p "$(dirname "$shim")" 2>/dev/null || return 1
-  if [ ! -x "$shim" ]; then
-    cat > "$shim" <<EOF
+  # The shim outlives plugin updates (it lives in the data dir). Rewrite it
+  # when it still points at a previous cache, or uv run imports nothing.
+  local stamp="--project \"$root\""
+  if [ ! -x "$shim" ] || ! grep -F -q -- "$stamp" "$shim"; then
+    local tmp="${shim}.tmp.$$"
+    cat > "$tmp" <<EOF
 #!/usr/bin/env bash
 exec "$uv" run --project "$root" --python ">=3.10" python "\$@"
 EOF
-    chmod +x "$shim"
+    chmod +x "$tmp"
+    mv -f "$tmp" "$shim"
   fi
   RECALL_PY_CACHED="$shim"
   printf '%s' "$RECALL_PY_CACHED"
