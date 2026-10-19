@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — post-compact recall was killed at 4s
+
+`compact-recall` on a full index takes about 6s. SessionStart gave it 4s, so the hook emitted only the continuation packet. The recall command now gets 12s, and the compact SessionStart hook timeout is 30s.
+
 ### Fixed — uv shim kept a deleted plugin path
 
 `recall::python` writes `bin/uv-python-shim` once in the data dir. After a plugin update that path still pointed at a removed cache, so `python -m total_recall` failed and the pre-compact ingest no-oped. The shim is rewritten when its `--project` path is not the current plugin root.

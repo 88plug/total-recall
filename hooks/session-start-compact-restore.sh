@@ -66,7 +66,8 @@ RECALL_TEXT=""
 DB_PATH="${RECALL_DATA_ROOT}/index.db"
 if [ -f "$DB_PATH" ]; then
   if command -v timeout >/dev/null 2>&1; then
-    RECALL_TEXT="$(timeout 4s "$RECALL_PY" -m total_recall --db "$DB_PATH" compact-recall \
+    # A warm recall on the full index is about 6s. 4s killed it before stdout.
+    RECALL_TEXT="$(timeout 12s "$RECALL_PY" -m total_recall --db "$DB_PATH" compact-recall \
       --cwd "$CWD" --session "$SESSION_ID" --max-chars 2500 \
       2>/dev/null || true)"
   else
