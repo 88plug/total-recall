@@ -670,6 +670,26 @@ def test_iter_records_corrupt_content_json_skipped(tmp_path: Path) -> None:
     assert len(recs) == 4
 
 
+def test_find_session_returns_only_the_named_session(tmp_path: Path) -> None:
+    data_dir = tmp_path / "goose"
+    db_path = data_dir / "sessions" / "sessions.db"
+    db_path.parent.mkdir(parents=True)
+    conn = sqlite3.connect(db_path)
+    conn.executescript(_SCHEMA)
+    _insert_session(conn, "keep-me", "/proj/keep")
+    _insert_message(conn, "keep-me", "user", [{"type": "text", "text": "keep"}], _TS_USER)
+    _insert_session(conn, "other", "/proj/other")
+    _insert_message(conn, "other", "user", [{"type": "text", "text": "other"}], _TS_USER)
+    conn.commit()
+    conn.close()
+    src = GooseSource(db_path=db_path)
+    found = src.find_session("keep-me")
+    assert found is not None
+    assert found.session_id == "keep-me"
+    assert found.cwd == "/proj/keep"
+    assert src.find_session("missing") is None
+
+
 def test_iter_records_unreadable_db_does_not_raise(tmp_path: Path) -> None:
     data_dir = tmp_path / "goose"
     (data_dir / "sessions").mkdir(parents=True)

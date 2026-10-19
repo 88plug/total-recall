@@ -1,0 +1,27 @@
+{
+  "description": "total-recall ingests the Goose session on Stop and SessionEnd. Goose has no compaction hook and no additionalContext, so this cannot seed a summary or inject a recall after compaction.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${PLUGIN_ROOT}/ingest-on-stop.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${PLUGIN_ROOT}/ingest-on-stop.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

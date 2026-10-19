@@ -62,6 +62,7 @@ SOURCE_PRIORITY: tuple[str, ...] = (
     "aider",
     "goose",
     "grok",
+    "pi",
 )
 
 

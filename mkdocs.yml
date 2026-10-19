@@ -20,6 +20,7 @@ nav:
     - Cline: install/cline.md
     - Aider: install/aider.md
     - Goose: install/goose.md
+    - Pi: install/pi.md
     - Grok: install/grok.md
   - Architecture: architecture.md
   - Local-LLM refinement: llm-refinement.md

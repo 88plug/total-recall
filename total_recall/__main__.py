@@ -62,6 +62,7 @@ def cli(ctx: click.Context, db_path: str | None, verbose: bool, as_json: bool) -
 # Imports are deferred to function scope inside each cmd_* module, not here,
 # so registering the group is essentially free.
 from .cmd_adaptive import adaptive_cmd  # noqa: E402
+from .cmd_compact_recall import compact_recall_cmd  # noqa: E402
 from .cmd_consolidate import consolidate_cmd  # noqa: E402
 from .cmd_dump import dump_cmd  # noqa: E402
 from .cmd_index import index_cmd  # noqa: E402
@@ -75,6 +76,7 @@ from .cmd_stats import stats_cmd  # noqa: E402
 from .cmd_tail import tail_cmd  # noqa: E402
 
 cli.add_command(index_cmd, name="index")
+cli.add_command(compact_recall_cmd, name="compact-recall")
 cli.add_command(query_cmd, name="query")
 cli.add_command(stats_cmd, name="stats")
 cli.add_command(inspect_cmd, name="inspect")

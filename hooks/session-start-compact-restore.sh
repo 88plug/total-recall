@@ -53,21 +53,53 @@ export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${REPO_ROOT}"
 BODY=""
 if command -v timeout >/dev/null 2>&1; then
   BODY="$(timeout 4s "$RECALL_PY" "$HOOK_DIR/lib/compact_restore.py" \
-    --session "$SESSION_ID" --cwd "$CWD" --max-chars 8000 2>/dev/null || true)"
+    --session "$SESSION_ID" --cwd "$CWD" --max-chars 6000 2>/dev/null || true)"
 else
   BODY="$("$RECALL_PY" "$HOOK_DIR/lib/compact_restore.py" \
-    --session "$SESSION_ID" --cwd "$CWD" --max-chars 8000 2>/dev/null || true)"
+    --session "$SESSION_ID" --cwd "$CWD" --max-chars 6000 2>/dev/null || true)"
 fi
 
-if [ -z "${BODY// }" ]; then
+# Real recall (operator context + indexed hits), not only the packet.
+# SessionStart source=compact is the inject channel on Claude Code and Codex.
+# The next UserPromptSubmit reinject stays as a backup.
+RECALL_TEXT=""
+DB_PATH="${RECALL_DATA_ROOT}/index.db"
+if [ -f "$DB_PATH" ]; then
+  if command -v timeout >/dev/null 2>&1; then
+    RECALL_TEXT="$(timeout 4s "$RECALL_PY" -m total_recall --db "$DB_PATH" compact-recall \
+      --cwd "$CWD" --session "$SESSION_ID" --max-chars 2500 \
+      2>/dev/null || true)"
+  else
+    RECALL_TEXT="$("$RECALL_PY" -m total_recall --db "$DB_PATH" compact-recall \
+      --cwd "$CWD" --session "$SESSION_ID" --max-chars 2500 \
+      2>/dev/null || true)"
+  fi
+fi
+
+CTX=""
+if [ -n "${RECALL_TEXT// }" ]; then
+  CTX="$RECALL_TEXT"
+fi
+if [ -n "${BODY// }" ]; then
+  PACKET_BLOCK="$(printf '%s\n%s' \
+    '[total-recall] POST-COMPACTION CONTINUATION — where we were:' \
+    "$BODY")"
+  if [ -n "$CTX" ]; then
+    CTX="${CTX}"$'\n\n'"${PACKET_BLOCK}"
+  else
+    CTX="$PACKET_BLOCK"
+  fi
+fi
+
+if [ -z "${CTX// }" ]; then
   recall::log "session-start-compact-restore: nothing to restore (cwd=$CWD session=$SESSION_ID)"
   recall::log_json hook.session_start_compact elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="$EMITTED"
   exit 0
 fi
 
-CTX="$(printf '%s\n%s\n' \
-  '[total-recall] POST-COMPACTION CONTINUATION — where we were:' \
-  "$BODY")"
+if [ "${#CTX}" -gt 9000 ]; then
+  CTX="${CTX:0:9000}"
+fi
 
 recall::emit_context "$CTX" "SessionStart" || {
   recall::log "session-start-compact-restore: emit failed (cwd=$CWD)"

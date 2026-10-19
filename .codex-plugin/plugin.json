@@ -1,0 +1,4 @@
+{
+  "name": "total-recall",
+  "hooks": "./hooks/hooks.json"
+}

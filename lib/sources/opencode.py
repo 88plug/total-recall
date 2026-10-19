@@ -357,6 +357,64 @@ class OpenCodeSource(SessionSource):
     def is_available(self) -> bool:
         return bool(self.db_paths) or bool(self.legacy_dirs)
 
+    def find_session(self, session_id: str, db_path: Path | None = None) -> SessionFile | None:
+        """One SQLite session, without grouping every message in the database."""
+        if not session_id:
+            return None
+        candidates = [Path(db_path)] if db_path is not None else list(self.db_paths)
+        for db in candidates:
+            if not db.is_file():
+                continue
+            found = self._find_sqlite_session(db, session_id)
+            if found is not None:
+                return found
+        for session in self.discover_sessions():
+            if session.session_id == session_id:
+                return session
+        return None
+
+    def _find_sqlite_session(self, db_path: Path, session_id: str) -> SessionFile | None:
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        except sqlite3.Error:
+            return None
+        try:
+            cwd = None
+            try:
+                cwd = self._session_cwds_sqlite(conn).get(session_id)
+            except Exception:  # noqa: BLE001 — cwd is optional
+                cwd = None
+            exists = False
+            for sql in (
+                "SELECT 1 FROM session WHERE id = ? LIMIT 1",
+                "SELECT 1 FROM message WHERE session_id = ? LIMIT 1",
+                "SELECT 1 FROM MessageTable WHERE sessionID = ? LIMIT 1",
+            ):
+                try:
+                    row = conn.execute(sql, (session_id,)).fetchone()
+                except sqlite3.Error:
+                    continue
+                if row:
+                    exists = True
+                    break
+            if not exists:
+                return None
+            try:
+                last_modified = db_path.stat().st_mtime
+            except OSError:
+                last_modified = 0.0
+            return SessionFile(
+                source=self.name,
+                path=db_path,
+                cwd=cwd,
+                session_id=session_id,
+                started_at=None,
+                last_modified=last_modified,
+                extra={"storage": "sqlite", "db_path": str(db_path)},
+            )
+        finally:
+            conn.close()
+
     # -- session discovery --------------------------------------------------
 
     def discover_sessions(self) -> Iterator[SessionFile]:

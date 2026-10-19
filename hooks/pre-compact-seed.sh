@@ -48,8 +48,16 @@ if ! RECALL_PY="$(recall::python)"; then
   exit 0
 fi
 
+# Scoped ingest of THIS transcript before the summarizer runs. One file,
+# synchronous, watermarked. Never exit 2 and never emit continue:false —
+# blocking a proactive auto-compact skips it. Failure is a log line.
+if [ -n "${TRANSCRIPT:-}" ] && [ -e "$TRANSCRIPT" ]; then
+  recall::ingest_transcript "$TRANSCRIPT" "" "$SESSION_ID" "$RECALL_PY" || true
+fi
+
 # Fresh-install path: no DB → nothing to seed. Don't kick a bootstrap here;
-# compaction is the wrong moment to start a heavy backfill.
+# compaction is the wrong moment to start a heavy backfill. The single-file
+# ingest above is the exception: it is not a corpus backfill.
 if recall::is_fresh_install; then
   recall::log "pre-compact-seed: fresh install, nothing to seed"
   recall::log_json hook.pre_compact elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="$EMITTED" trigger="$TRIGGER" skipped="fresh"
@@ -194,6 +202,18 @@ if [ -z "${SEED_TEXT// }" ]; then
   recall::log_json hook.pre_compact elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="$EMITTED" trigger="$TRIGGER"
   exit 0
 fi
+
+# Codex PreCompact reads only continue/systemMessage. additionalContext is not
+# in that output schema, and continue:false aborts compaction. The ingest and
+# the persisted packet already happened; SessionStart source=compact injects
+# the recall. Claude Code does consume this additionalContext.
+case "${TRANSCRIPT:-}" in
+  */.codex/*)
+    recall::log "pre-compact-seed: codex transcript, packet persisted, additionalContext not emitted"
+    recall::log_json hook.pre_compact elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="false" trigger="$TRIGGER" skipped="codex_precompact"
+    exit 0
+    ;;
+esac
 
 recall::emit_context "$SEED_TEXT" "PreCompact" || {
   recall::log "pre-compact-seed: emit failed (cwd=$CWD)"

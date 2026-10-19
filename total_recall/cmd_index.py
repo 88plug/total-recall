@@ -8,6 +8,7 @@ is essentially an alias for "do the normal incremental thing".
 
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 from pathlib import Path
@@ -50,6 +51,26 @@ from .util import resolve_db_path
     help="Walk the files and report counts without writing to the index.",
 )
 @click.option(
+    "--file",
+    "only_file",
+    type=click.Path(dir_okay=False, path_type=str),
+    default=None,
+    help="Ingest this one transcript and nothing else. Resumes from its watermark.",
+)
+@click.option(
+    "--source",
+    type=str,
+    default=None,
+    help="Adapter name for --file / --session. Guessed from the path when omitted.",
+)
+@click.option(
+    "--session",
+    "session_id",
+    type=str,
+    default=None,
+    help="Session id. Required for SQLite sources (opencode, goose, cursor).",
+)
+@click.option(
     "--jobs",
     "-j",
     type=int,
@@ -71,6 +92,9 @@ def index_cmd(
     cwd_filter: str | None,
     projects_root: str | None,
     dry_run: bool,
+    only_file: str | None,
+    source: str | None,
+    session_id: str | None,
     jobs: int | None,
 ) -> None:
     db_path = resolve_db_path(ctx.obj.get("db_path"))
@@ -96,9 +120,23 @@ def index_cmd(
     if verbose:
         click.echo(
             f"[index] db={db_path} full={full} cwd={cwd_filter} "
-            f"projects_root={projects_root} dry_run={dry_run} jobs={jobs}",
+            f"projects_root={projects_root} dry_run={dry_run} jobs={jobs} "
+            f"file={only_file} source={source} session={session_id}",
             err=True,
         )
+
+    if only_file or (source and session_id):
+        _index_one(
+            ctx,
+            db_path=db_path,
+            only_file=only_file,
+            source=source,
+            session_id=session_id,
+            dry_run=dry_run,
+            full=full,
+            started_hint=time.monotonic(),
+        )
+        return
 
     # `--since-last-tick` is the default incremental mode — the flag exists
     # purely so hook scripts can be self-documenting. Touch it to keep the
@@ -159,6 +197,76 @@ def index_cmd(
         click.echo(
             f"Ingested {files} files, {messages} messages, {extractions} extractions, "
             f"{elapsed:.2f}s elapsed."
+        )
+
+
+def _index_one(
+    ctx: click.Context,
+    *,
+    db_path: Path,
+    only_file: str | None,
+    source: str | None,
+    session_id: str | None,
+    dry_run: bool,
+    full: bool,
+    started_hint: float,
+) -> None:
+    """Scoped ingest. No corpus walk and no vector backfill (hot path)."""
+    from index.db import connect
+    from index.ingest import ingest_targeted
+
+    owns = None
+    try:
+        target = Path(":memory:") if dry_run else Path(db_path).expanduser()
+        owns = connect(target)
+        report = ingest_targeted(
+            owns,
+            path=Path(only_file).expanduser() if only_file else None,
+            source=source,
+            session_id=session_id,
+            force_full=full,
+        )
+    except Exception as exc:  # noqa: BLE001 — compaction hooks must see a clean failure
+        click.echo(f"total-recall: scoped ingest failed ({exc})", err=True)
+        raise click.Abort from exc
+    finally:
+        if owns is not None:
+            with contextlib.suppress(Exception):
+                owns.close()
+        try:
+            lock = Path(db_path).parent / ".bootstrapping"
+            if lock.exists():
+                lock.unlink()
+        except OSError:
+            pass
+
+    elapsed = time.monotonic() - started_hint
+    files = 0 if report.errors else 1
+    if ctx.obj.get("json"):
+        import json
+
+        click.echo(
+            json.dumps(
+                {
+                    "files": files,
+                    "messages": report.new_messages,
+                    "extractions": report.new_extractions,
+                    "errors": report.errors,
+                    "elapsed_seconds": round(elapsed, 3),
+                    "db_path": str(db_path),
+                    "dry_run": dry_run,
+                    "full": full,
+                    "file": only_file,
+                    "source": source,
+                    "session": session_id,
+                },
+                default=str,
+            )
+        )
+    else:
+        click.echo(
+            f"Ingested {files} files, {report.new_messages} messages, "
+            f"{report.new_extractions} extractions, {elapsed:.2f}s elapsed."
         )
 
 
