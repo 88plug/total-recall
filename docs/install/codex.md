@@ -2,7 +2,7 @@
 
 ## Status
 - MCP support: yes (stdio, configured via `~/.codex/config.toml`)
-- Hook support: no
+- Hook support: yes, via the plugin `hooks/hooks.json` (trust it with `/hooks`)
 - Session storage: `${CODEX_HOME:-~/.codex}/sessions/<rollout>.jsonl`
 - Adapter complexity: ~570 LOC (replay state machine + token-block normalisation)
 
@@ -28,7 +28,11 @@
 
 ## What you get
 - 26 MCP tools (recall, get_operator_context, check_banned, ...).
-- No hooks — Codex CLI does not expose lifecycle hooks.
+- Compaction: `PreCompact` ingests the rollout file before the summary. Codex does not accept `additionalContext` on `PreCompact`, and `continue: false` aborts compaction, so the hook does not emit either. After compaction, `SessionStart` with `source=compact` injects operator context plus a recall (`total-recall compact-recall`) before the next model request, including a mid-turn auto-compact. The next `UserPromptSubmit` reinject stays as a backup.
+
+## Hooks
+
+Codex loads `.codex-plugin/plugin.json`, which points at `hooks/hooks.json`. Codex sets `PLUGIN_ROOT` and the `CLAUDE_PLUGIN_ROOT` alias, so the same scripts run. New or changed hooks stay skipped until you trust them with `/hooks` (or pass `--dangerously-bypass-hook-trust` for a vetted one-off).
 
 ## Session ingest
 

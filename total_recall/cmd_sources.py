@@ -80,6 +80,7 @@ KNOWN_SOURCES: tuple[str, ...] = (
     "aider",
     "goose",
     "grok",
+    "pi",
 )
 
 
@@ -185,6 +186,7 @@ def _load_sources() -> dict[str, Any]:
         "lib.sources.cline",
         "lib.sources.goose",
         "lib.sources.grok",
+        "lib.sources.pi",
     ):
         try:
             __import__(modname)

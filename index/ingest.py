@@ -1517,6 +1517,145 @@ def ingest_file(
     return _commit_parsed(conn, parsed)
 
 
+_SQLITE_SOURCES = frozenset({"opencode", "goose", "cursor"})
+
+
+def guess_transcript_source(path: Path) -> str:
+    """Pick an adapter from a transcript path. Claude Code is the default."""
+    text = str(path)
+    name = path.name
+    if name == "sessions.db" or "/goose/" in text:
+        return "goose"
+    if name == "opencode.db":
+        return "opencode"
+    if "/.codex/" in text or name.startswith("rollout-"):
+        return "codex"
+    if "/.pi/" in text or name.endswith(".pi.jsonl"):
+        return "pi"
+    if "/.grok/" in text:
+        return "grok"
+    return "claude_code"
+
+
+def _session_for_file(source_name: str, path: Path, session_id: str | None) -> Any:
+    from lib.sources.base import SessionFile
+
+    stat = path.stat()
+    return SessionFile(
+        source=source_name,
+        path=path,
+        cwd=None,
+        session_id=session_id or path.stem,
+        started_at=None,
+        last_modified=stat.st_mtime,
+        extra={},
+    )
+
+
+def _find_sqlite_session(src: Any, session_id: str, path: Path | None) -> Any:
+    finder = getattr(src, "find_session", None)
+    session = None
+    if callable(finder):
+        try:
+            session = finder(session_id, path)
+        except TypeError:
+            session = finder(session_id)
+    if session is not None:
+        return session
+    try:
+        discovered = src.discover_sessions()
+    except Exception:  # noqa: BLE001
+        return None
+    for candidate in discovered:
+        if getattr(candidate, "session_id", None) != session_id:
+            continue
+        if path is not None and Path(getattr(candidate, "path", "")) != Path(path):
+            continue
+        return candidate
+    return None
+
+
+def ingest_targeted(
+    conn: sqlite3.Connection,
+    *,
+    path: Path | None = None,
+    source: str | None = None,
+    session_id: str | None = None,
+    force_full: bool = False,
+) -> IngestReport:
+    """Ingest one transcript, resuming from its own ``ingest_state`` cursor.
+
+    File-backed sources (Claude Code, Codex, Pi, Grok, ...) are addressed by
+    ``path`` and do not walk the rest of the corpus. SQLite-backed sources
+    (OpenCode, Goose, Cursor) need ``session_id`` and read that session only.
+
+    Failures become ``IngestReport.errors == 1``. Callers on a compaction
+    hook must ignore that and continue.
+    """
+    from lib.sources import source_by_name
+
+    file_path = Path(path).expanduser() if path is not None else None
+    source_name = source or (guess_transcript_source(file_path) if file_path else None)
+    label = str(file_path or source_name or "")
+    if not source_name:
+        return IngestReport(label, 0, 0, 1, 0, 0)
+    src = source_by_name(source_name)
+    if src is None:
+        log.warning("ingest_targeted: unknown source %s", source_name)
+        return IngestReport(label, 0, 0, 1, 0, 0)
+
+    if source_name in _SQLITE_SOURCES:
+        if not session_id:
+            log.warning("ingest_targeted: %s needs a session id", source_name)
+            return IngestReport(label, 0, 0, 1, 0, 0)
+        session = _find_sqlite_session(src, session_id, file_path)
+        if session is None:
+            log.warning("ingest_targeted: %s session %s not found", source_name, session_id)
+            return IngestReport(label, 0, 0, 1, 0, 0)
+    else:
+        if file_path is None or not file_path.is_file():
+            log.warning("ingest_targeted: missing file %s", file_path)
+            return IngestReport(label, 0, 0, 1, 0, 0)
+        session = _session_for_file(source_name, file_path, session_id)
+
+    source_file_key = _source_file_key_for_session(session)
+    storage = (getattr(session, "extra", None) or {}).get("storage")
+    if storage == "sqlite":
+        state = _read_state(conn, source_file_key)
+        if state is None or force_full:
+            start_offset = 0
+            rotated = bool(force_full)
+            last_sid = state["last_session_id"] if state else None
+        else:
+            start_offset = int(state["last_offset"] or 0)
+            rotated = False
+            last_sid = state["last_session_id"]
+    else:
+        start_offset, rotated, last_sid = _resolve_cursor(
+            conn, Path(session.path), force_full=force_full
+        )
+
+    try:
+        record_iter = src.iter_records(session, start_offset=0 if rotated else start_offset)
+        parsed = _parse_file_pure(
+            Path(session.path),
+            start_offset=start_offset,
+            rotated=rotated,
+            last_session_id=last_sid,
+            source=source_name,
+            source_file_key=source_file_key,
+            record_iter=record_iter,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ingest_targeted: %s failed: %s", source_file_key, exc)
+        return IngestReport(source_file_key, 0, 0, 1, 0, 0)
+    try:
+        return _commit_parsed(conn, parsed, update_profiles=False)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ingest_targeted: commit %s failed: %s", source_file_key, exc)
+        return IngestReport(source_file_key, 0, 0, 1, 0, 0)
+
+
 def _discover_jsonl_files(projects_root: Path, cwd_filter: str | None) -> list[Path]:
     """Walk projects_root and return the top-level .jsonl files to ingest.
 

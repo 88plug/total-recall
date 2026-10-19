@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — ingest before compaction, recall on the way out
+
+PreCompact now ingests the live transcript (`total-recall index --file`) before the continuation packet is built. The ingest is synchronous and watermarked, and a failure stays exit 0. It never exits 2 and never sends `continue: false`, because blocking a proactive auto-compact skips the compaction.
+
+On the way out, `SessionStart` matcher `compact` emits a real recall (operator context plus indexed hits) ahead of the continuation packet. Claude Code and Codex both inject that `additionalContext` before the next model request. Codex `PreCompact` does not accept `additionalContext`, so that hook only ingests and persists the packet when the transcript is under `.codex/`.
+
+- **OpenCode** — `adapters/opencode/total-recall-compact.js` appends the recall on `experimental.session.compacting` and does not set `output.prompt`. There is no post-summary inject.
+- **Pi** — `adapters/pi/total-recall-compact.ts` ingests on `session_before_compact` without replacing Pi's summary, then injects the recall from the next `before_agent_start`. New `pi` source adapter.
+- **Goose** — `adapters/goose/` ingests the session on `Stop` and `SessionEnd`. Goose has no compaction hook and no context inject, so a recall after compaction is not claimed.
+- **Codex plugin** — `.codex-plugin/plugin.json` points at the shared `hooks/hooks.json`. Trust the hooks with `/hooks`.
+
 ### Changed — port to mcp 2.0, lift the `<2` cap
 
 `mcp` 2.0 moved the server entrypoint `mcp.server.fastmcp.FastMCP` →

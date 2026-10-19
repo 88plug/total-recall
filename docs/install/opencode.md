@@ -2,7 +2,7 @@
 
 ## Status
 - MCP support: yes (`local` MCP type, stdio transport)
-- Hook support: no (OpenCode has no hook system at the time of writing)
+- Hook support: local plugin, not a `hooks.json` lifecycle
 - Session storage: `${OPENCODE_DATA_DIR:-~/.local/share/opencode}/opencode.db` (SQLite) or `.../storage/` (legacy JSON)
 - Adapter complexity: ~640 LOC (two storage backends to translate)
 
@@ -37,7 +37,9 @@
 
 ## What you get
 - 26 MCP tools (recall, get_operator_context, check_banned, ...).
-- No hook integration — OpenCode does not expose lifecycle hooks. Use the MCP tools manually or wire them into instructions.
+- Compaction plugin at `adapters/opencode/total-recall-compact.js`. Copy it to `~/.config/opencode/plugins/` or `.opencode/plugins/`. On `experimental.session.compacting` it ingests that session, then `output.context.push`s a recall. It does not set `output.prompt` (that replaces the prompt and drops `context`). `session.compacted` is observation only: OpenCode has no post-summary inject, and `session.prompt` would start a new turn.
+
+The plugin runs `uv run --project` against the newest marketplace checkout when `python3 -m total_recall` is not installed. `TOTAL_RECALL_PY` overrides that. `TOTAL_RECALL_DB` or `TOTAL_RECALL_DB_DIR` selects the index. With neither set, the CLI discovers the existing plugin index.
 
 ## Session ingest
 

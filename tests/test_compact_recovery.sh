@@ -24,8 +24,11 @@ ok()   { printf "  ok  %s\n" "$1"; PASS=$((PASS+1)); }
 fail() { printf "  FAIL %s — %s\n" "$1" "$2"; FAIL=$((FAIL+1)); }
 
 # Isolate plugin-data writes so we don't pollute real state.
+# data_root prefers TOTAL_RECALL_DB_DIR and GROK_PLUGIN_DATA over
+# CLAUDE_PLUGIN_DATA. A developer shell often has the first set.
 TMPDATA="$(mktemp -d)"
 trap 'rm -rf "$TMPDATA"' EXIT
+unset TOTAL_RECALL_DB_DIR GROK_PLUGIN_DATA
 export CLAUDE_PLUGIN_DATA="$TMPDATA"
 
 RECALL_DATA_ROOT="$TMPDATA/total-recall"
@@ -482,6 +485,51 @@ if [ -x "$HOOK_DIR/session-start-compact-restore.sh" ]; then
   ok "static: session-start-compact-restore.sh executable"
 else
   fail "static" "session-start-compact-restore.sh not executable"
+fi
+
+# ---------------------------------------------------------------------------
+# 12. pre-compact ingest is invoked, and a failure there still exits 0.
+# ---------------------------------------------------------------------------
+echo "[12] pre-compact-seed: scoped ingest then continue"
+
+SHIM12="$TMPDATA/shim12"
+mkdir -p "$SHIM12/total_recall"
+cat > "$SHIM12/total_recall/__init__.py" <<'PY'
+PY
+cat > "$SHIM12/total_recall/__main__.py" <<'PY'
+import os, sys
+path = os.environ.get("TR_INGEST_LOG", "")
+if path:
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(" ".join(sys.argv) + "\n")
+raise SystemExit(0)
+PY
+INGEST_LOG="$TMPDATA/ingest-argv.txt"
+export TR_INGEST_LOG="$INGEST_LOG"
+export PYTHONPATH="$SHIM12${PYTHONPATH:+:$PYTHONPATH}"
+export CLAUDE_PLUGIN_ROOT="$REPO_ROOT"
+TR12="$TMPDATA/synth12.jsonl"
+printf '%s\n' '{"type":"user","message":{"role":"user","content":"hello"}}' > "$TR12"
+INPUT12="$(jq -nc --arg tr "$TR12" '{session_id:"synth-12",cwd:"/home/op/proj",hook_event_name:"PreCompact",trigger:"auto",transcript_path:$tr}')"
+set +e
+OUT12="$(cd "$TMPDATA" && printf '%s' "$INPUT12" | "$HOOK_DIR/pre-compact-seed.sh" 2>/dev/null)"
+RC=$?
+set -e
+unset PYTHONPATH TR_INGEST_LOG CLAUDE_PLUGIN_ROOT
+if [ "$RC" -eq 0 ]; then
+  ok "pre-compact ingest shim: exit 0"
+else
+  fail "pre-compact ingest shim" "exit $RC"
+fi
+if [ -f "$INGEST_LOG" ] && grep -q -- "--file" "$INGEST_LOG" && grep -q "synth12.jsonl" "$INGEST_LOG"; then
+  ok "pre-compact ingest shim: index --file saw the transcript"
+else
+  fail "pre-compact ingest shim" "argv log missing --file: $(cat "$INGEST_LOG" 2>/dev/null || echo none)"
+fi
+if printf '%s' "$OUT12" | grep -q 'continue'; then
+  fail "pre-compact ingest shim" "stdout mentioned continue: $OUT12"
+else
+  ok "pre-compact ingest shim: stdout did not block compaction"
 fi
 
 # ---------------------------------------------------------------------------

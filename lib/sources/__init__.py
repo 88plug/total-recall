@@ -74,6 +74,10 @@ try:
     from lib.sources.grok import GrokSource  # noqa: F401
 except Exception:  # pragma: no cover
     GrokSource = None  # type: ignore[assignment]
+try:
+    from lib.sources.pi import PiSource  # noqa: F401
+except Exception:  # pragma: no cover
+    PiSource = None  # type: ignore[assignment]
 
 __all__ = [
     "SessionFile",
@@ -91,4 +95,5 @@ __all__ = [
     "AiderSource",
     "GooseSource",
     "GrokSource",
+    "PiSource",
 ]

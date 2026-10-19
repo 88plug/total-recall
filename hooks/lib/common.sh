@@ -536,6 +536,47 @@ recall::start_incremental_index() {
   recall::log "start_incremental_index: detached tick (hook=${evt}, lock=${lock})"
 }
 
+# Ingest one transcript before compaction. Synchronous, watermarked, scoped
+# to that file. Stdout stays empty so it cannot corrupt a hook envelope.
+# A failure, timeout, or missing python is logged and ignored: exit 2 or
+# continue:false would skip the compaction instead of delaying it.
+#
+#   $1 transcript path
+#   $2 source name, or empty to let the CLI guess
+#   $3 session id, or empty
+#   $4 python shim from recall::python
+recall::ingest_transcript() {
+  local path="${1:-}"
+  local source="${2:-}"
+  local session="${3:-}"
+  local py="${4:-}"
+  [ -n "$path" ] || return 0
+  [ -e "$path" ] || return 0
+  [ -n "$py" ] || return 0
+  mkdir -p "$RECALL_LOG_DIR" 2>/dev/null || true
+  local -a args
+  # --db is a group option and must precede the subcommand. Pin the same
+  # data root the rest of the hooks use; do not let resolution pick another index.
+  args=(-m total_recall --db "${RECALL_DATA_ROOT}/index.db" index --file "$path")
+  if [ -n "$source" ]; then
+    args+=(--source "$source")
+  fi
+  if [ -n "$session" ]; then
+    args+=(--session "$session")
+  fi
+  recall::log "ingest_transcript: file=$path source=${source:-auto} session=${session:-}"
+  local rc=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 12s "$py" "${args[@]}" >>"$RECALL_LOG_FILE" 2>&1 || rc=$?
+  else
+    "$py" "${args[@]}" >>"$RECALL_LOG_FILE" 2>&1 || rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then
+    recall::log "ingest_transcript: failed rc=$rc file=$path"
+  fi
+  return 0
+}
+
 # === ollama resolver + LLM provision (v0.9.1) =================================
 # Mirrors the recall::uv pattern exactly: resolve, then auto-fetch if absent.
 # Every function is safe to call repeatedly (idempotent). Any failure logs +

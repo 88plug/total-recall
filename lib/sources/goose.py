@@ -417,6 +417,21 @@ class GooseSource(SessionSource):
                 extra=extra,
             )
 
+    def find_session(self, session_id: str, db_path: Path | None = None) -> SessionFile | None:
+        """Return one session handle, or ``None``. Does not read message bodies."""
+        if not session_id:
+            return None
+        previous = self.db_path
+        if db_path is not None:
+            self.db_path = Path(db_path)
+        try:
+            for session in self.discover_sessions():
+                if session.session_id == session_id:
+                    return session
+        finally:
+            self.db_path = previous
+        return None
+
     # ------------------------------------------------------------------
     # iter_records
     # ------------------------------------------------------------------
