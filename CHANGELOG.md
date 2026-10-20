@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — PreCompact seed was rejected
+
+Claude Code 2.1 rejects `hookSpecificOutput.hookEventName` `PreCompact` and discards `systemMessage`. The seed is now plain stdout. A successful hook's stdout is the compact custom instruction, so it is baked into the summary.
+
 ### Fixed — post-compact recall was killed at 4s
 
 `compact-recall` on a full index takes about 6s. SessionStart gave it 4s, so the hook emitted only the continuation packet. The recall command now gets 12s, and the compact SessionStart hook timeout is 30s.

@@ -2,10 +2,10 @@
 # PreCompact hook — survive-compaction seed.
 #
 # The summarizer agent that builds the post-compact summary IS what we have to
-# influence. Anything we feed via additionalContext on PreCompact is mixed into
-# the summarizer's input, so persistent operator context (identity, active goal,
-# standing decisions, bans) gets *baked into* the new summary rather than
-# evaporating with the rest of the transcript.
+# influence. Claude Code 2.1 rejects hookSpecificOutput.hookEventName PreCompact
+# and discards systemMessage. A successful hook's plain stdout (not starting
+# with "{") is passed in as the compact custom instructions, so operator
+# context gets baked into the summary.
 #
 # Companion: post-compact-recovery.sh flips a session-state flag so the very
 # next UserPromptSubmit re-injects on top of the summary — belt-and-suspenders.
@@ -203,23 +203,19 @@ if [ -z "${SEED_TEXT// }" ]; then
   exit 0
 fi
 
-# Codex PreCompact reads only continue/systemMessage. additionalContext is not
-# in that output schema, and continue:false aborts compaction. The ingest and
-# the persisted packet already happened; SessionStart source=compact injects
-# the recall. Claude Code does consume this additionalContext.
+# Codex PreCompact does not take this stdout as compact instructions. The
+# ingest and the persisted packet already happened; SessionStart source=compact
+# injects the recall. continue:false aborts compaction, so do not emit it.
 case "${TRANSCRIPT:-}" in
   */.codex/*)
-    recall::log "pre-compact-seed: codex transcript, packet persisted, additionalContext not emitted"
+    recall::log "pre-compact-seed: codex transcript, packet persisted, stdout not emitted"
     recall::log_json hook.pre_compact elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="false" trigger="$TRIGGER" skipped="codex_precompact"
     exit 0
     ;;
 esac
 
-recall::emit_context "$SEED_TEXT" "PreCompact" || {
-  recall::log "pre-compact-seed: emit failed (cwd=$CWD)"
-  recall::log_json hook.pre_compact elapsed_ms="$(recall::elapsed_ms)" cwd="$CWD" session_id="$SESSION_ID" emitted="$EMITTED" trigger="$TRIGGER" error="emit_failed"
-  exit 0
-}
+# Plain text. A leading "{" is parsed as hook JSON and rejected.
+printf '%s\n' "$SEED_TEXT"
 
 EMITTED="true"
 recall::log "pre-compact-seed: seeded ${#SEED_TEXT} chars (cwd=$CWD trigger=$TRIGGER)"
