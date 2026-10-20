@@ -12,6 +12,10 @@ Compaction keeps the recent task and drops who the operator is, what is banned, 
 
 Claude Code 2.1 rejects `hookSpecificOutput.hookEventName` `PreCompact` and discards `systemMessage`. The seed is now plain stdout. A successful hook's stdout is the compact custom instruction, so it is baked into the summary.
 
+### Fixed — pre-compact ingest was killed at 12s
+
+The scoped ingest of a live transcript ran under `timeout 12s`. A 69 MB session hit that cap, the writer was killed, and that tick committed nothing. The ingest now runs to completion in its own session. Goose, Pi, and OpenCode no longer put a 12s limit on the same write. The PreCompact hook budget is 600s so the harness does not kill the script while it waits.
+
 ### Fixed — post-compact recall was killed at 4s
 
 `compact-recall` on a full index takes about 6s. SessionStart gave it 4s, so the hook emitted only the continuation packet. The recall command now gets 12s, and the compact SessionStart hook timeout is 30s.

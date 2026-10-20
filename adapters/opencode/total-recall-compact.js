@@ -62,7 +62,7 @@ function run(args) {
     }
   }
   try {
-    const result = spawnSync(cmd, argv, { encoding: "utf8", timeout: 12000, env: process.env });
+    const result = spawnSync(cmd, argv, { encoding: "utf8", env: process.env });
     if (result.error || result.status) return "";
     return (result.stdout || "").trim();
   } catch {
