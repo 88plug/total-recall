@@ -67,7 +67,6 @@ function run(args: string[]): string {
   const spec = launch(args);
   const result = spawnSync(spec.cmd, spec.argv, {
     encoding: "utf8",
-    timeout: 12000,
     env: process.env,
   });
   if (result.error || result.status) return "";

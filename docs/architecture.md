@@ -327,7 +327,7 @@ Override with `-j N` on tiny-RAM boxes.
 | `session-start-signpost.sh` | `SessionStart` (`matcher: "startup\|clear"`) | sync | 15s | Defers `compact\|resume` events to amnesia plugin. |
 | `session-start-compact-restore.sh` | `SessionStart` (`matcher: "compact"`) | sync | 30s | Continuation packet plus a real recall. The recall command itself is allowed 12s. Claude Code and Codex inject this `additionalContext` before the next model request. |
 | `user-prompt-retrieve.sh` | `UserPromptSubmit` | async | 10s | Mid-prompt retrieval; backup reinject after compaction. |
-| `pre-compact-seed.sh` | `PreCompact` | sync | 30s | Ingests that transcript, then seeds the Claude summarizer. Never blocks compaction. |
+| `pre-compact-seed.sh` | `PreCompact` | sync | 600s | Ingests that transcript with no inner time limit, then seeds the summarizer. The ingest runs in its own session, so a hook deadline cannot abort the write. Never blocks compaction. |
 | `post-compact-recovery.sh` | `PostCompact` | sync | 15s | Sets `post_compact` for the next-prompt backup. |
 | `stop-index.sh` | `Stop` | async | 60s | Incremental reindex of the session that just ended. |
 | `post-compact-index.sh` | `PostCompact` | async | 60s | Detached corpus reindex after compaction. |

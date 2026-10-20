@@ -543,8 +543,10 @@ recall::start_incremental_index() {
 
 # Ingest one transcript before compaction. Synchronous, watermarked, scoped
 # to that file. Stdout stays empty so it cannot corrupt a hook envelope.
-# A failure, timeout, or missing python is logged and ignored: exit 2 or
-# continue:false would skip the compaction instead of delaying it.
+# No time limit: a short `timeout` kills the writer and the rows never commit.
+# The process is in its own session, so a hook deadline cannot abort it either.
+# A failure or missing python is logged and ignored: exit 2 or continue:false
+# would skip the compaction instead of delaying it.
 #
 #   $1 transcript path
 #   $2 source name, or empty to let the CLI guess
@@ -571,8 +573,9 @@ recall::ingest_transcript() {
   fi
   recall::log "ingest_transcript: file=$path source=${source:-auto} session=${session:-}"
   local rc=0
-  if command -v timeout >/dev/null 2>&1; then
-    timeout 12s "$py" "${args[@]}" >>"$RECALL_LOG_FILE" 2>&1 || rc=$?
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "$py" "${args[@]}" >>"$RECALL_LOG_FILE" 2>&1 &
+    wait "$!" || rc=$?
   else
     "$py" "${args[@]}" >>"$RECALL_LOG_FILE" 2>&1 || rc=$?
   fi

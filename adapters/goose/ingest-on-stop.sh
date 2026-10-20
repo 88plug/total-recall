@@ -60,11 +60,8 @@ run_index() {
       cmd=(python3 -m total_recall "${db_prefix[@]}" index --source goose --session "$sid")
     fi
   fi
-  if command -v timeout >/dev/null 2>&1; then
-    timeout 12s "${cmd[@]}" >/dev/null 2>&1 || true
-  else
-    "${cmd[@]}" >/dev/null 2>&1 || true
-  fi
+  # No timeout. Killing the indexer drops the rows.
+  "${cmd[@]}" >/dev/null 2>&1 || true
 }
 
 run_index
