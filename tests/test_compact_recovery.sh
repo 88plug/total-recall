@@ -2,9 +2,8 @@
 # Tests for pre-compact-seed.sh and post-compact-recovery.sh.
 #
 # Verifies the contract CW5 owes:
-#   - pre-compact-seed emits a hookSpecificOutput envelope with hookEventName
-#     "PreCompact" and an additionalContext string that wraps the operator
-#     context JSON (so the summarizer preserves it verbatim)
+#   - pre-compact-seed prints the operator seed as plain stdout so Claude Code
+#     passes it in as the compact custom instructions
 #   - post-compact-recovery writes ${RECALL_DATA_ROOT}/sessions/<sid>.json
 #     containing {"post_compact": true, ...}
 #   - both exit 0 on every error path, including missing DB
@@ -136,32 +135,24 @@ else
   fail "pre-compact-seed (shimmed)" "exit $RC"
 fi
 
-if command -v jq >/dev/null 2>&1; then
-  if printf '%s' "$OUT" | jq -e . >/dev/null 2>&1; then
-    EVT="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.hookEventName // empty')"
-    CTX="$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty')"
-    if [ "$EVT" = "PreCompact" ]; then
-      ok "pre-compact-seed: envelope hookEventName=PreCompact"
-    else
-      fail "pre-compact-seed" "expected PreCompact, got '$EVT'"
-    fi
-    if [ -n "$CTX" ] && printf '%s' "$CTX" | grep -q 'OPERATOR CONTEXT'; then
-      ok "pre-compact-seed: additionalContext wraps operator-context marker"
-    else
-      fail "pre-compact-seed" "additionalContext missing operator-context marker: $CTX"
-    fi
-    if printf '%s' "$CTX" | grep -q 'identity'; then
-      ok "pre-compact-seed: payload includes identity section"
-    else
-      fail "pre-compact-seed" "payload missing identity: $CTX"
-    fi
-  else
-    # No envelope (e.g. shim couldn't import) — still must exit 0, which we
-    # checked above. Treat as soft-skip rather than hard fail since the test
-    # depends on the shim resolving correctly.
-    ok "pre-compact-seed (shimmed): no envelope produced (shim likely shadowed; exit 0 still satisfied)"
-  fi
+if printf '%s' "$OUT" | grep -q 'OPERATOR CONTEXT'; then
+  ok "pre-compact-seed: stdout carries the operator-context marker"
+else
+  fail "pre-compact-seed" "stdout missing operator-context marker: $OUT"
 fi
+if printf '%s' "$OUT" | grep -q 'identity'; then
+  ok "pre-compact-seed: stdout includes identity"
+else
+  fail "pre-compact-seed" "stdout missing identity: $OUT"
+fi
+case "$OUT" in
+  '{'*)
+    fail "pre-compact-seed" "stdout must be plain text, got JSON: $OUT"
+    ;;
+  *)
+    ok "pre-compact-seed: stdout is plain text"
+    ;;
+esac
 
 rm -rf "$RECALL_DATA_ROOT"
 
@@ -359,13 +350,10 @@ if command -v jq >/dev/null 2>&1 && [ -f "$CONT8" ]; then
   fi
 fi
 
-if command -v jq >/dev/null 2>&1 && printf '%s' "$OUT8" | jq -e . >/dev/null 2>&1; then
-  CTX8="$(printf '%s' "$OUT8" | jq -r '.hookSpecificOutput.additionalContext // empty')"
-  if printf '%s' "$CTX8" | grep -q 'CONTINUATION'; then
-    ok "pre-compact-seed (packet): seed block includes CONTINUATION marker"
-  else
-    fail "pre-compact-seed (packet)" "seed block missing CONTINUATION marker: $CTX8"
-  fi
+if printf '%s' "$OUT8" | grep -q 'CONTINUATION'; then
+  ok "pre-compact-seed (packet): seed block includes CONTINUATION marker"
+else
+  fail "pre-compact-seed (packet)" "seed block missing CONTINUATION marker: $OUT8"
 fi
 
 unset CLAUDE_PLUGIN_ROOT
