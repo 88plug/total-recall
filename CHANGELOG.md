@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — post-compact recall is the memory the summary drops
+
+Compaction keeps the recent task and drops who the operator is, what is banned, what was decided, and what was corrected. The SessionStart inject now states those as still in force, plus indexed facts that are not already the active goal. The continuation packet remains the in-session handoff, so this works when amnesia is not installed.
+
 ### Fixed — PreCompact seed was rejected
 
 Claude Code 2.1 rejects `hookSpecificOutput.hookEventName` `PreCompact` and discards `systemMessage`. The seed is now plain stdout. A successful hook's stdout is the compact custom instruction, so it is baked into the summary.

@@ -41,12 +41,18 @@ def test_renders_operator_context_and_hit(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         operator_tools,
         "get_operator_context",
-        lambda cwd=None, max_chars=1800: {"identity": {"name": "Ada"}},
+        lambda cwd=None, max_chars=4000: {
+            "identity": {"name": "Ada", "handle": "ada"},
+            "bans": [{"target": "cloudflared", "reason": "never a tenant hostname"}],
+            "standing_decisions": [{"topic": "forge", "chose": "refs", "over": "gitlab"}],
+        },
     )
     text = render_compact_recall(db_path=db, cwd=cwd, topic="parser")
     assert "POST-COMPACTION RECALL" in text
     assert "END RECALL" in text
-    assert "Ada" in text
+    assert "Operator: Ada @ada" in text
+    assert "Ban: cloudflared" in text
+    assert "Decision: forge = refs, not gitlab" in text
     assert "ship the parser fix" in text
 
 
